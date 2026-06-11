@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { loadData, saveData } from "./firebase.js";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend,
@@ -428,8 +429,8 @@ export default function App() {
     (async () => {
       let d = null;
       try {
-        const r = await store().get(STORE_KEY);
-        if (r?.value) d = JSON.parse(r.value);
+        const json = await loadData();
+        if (json) d = JSON.parse(json);
       } catch (e) { /* 初回 */ }
       const init = d || {
         team: { name: "府中六小ミニバス", logo: "", homeCourt: "府中第六小学校 体育館" },
@@ -451,7 +452,7 @@ export default function App() {
       return;
     }
     try {
-      await store().set(STORE_KEY, str);
+      await saveData(JSON.parse(str));
       pending.current = null; retried.current = false;
       setSaveState("");
     } catch (e) {
