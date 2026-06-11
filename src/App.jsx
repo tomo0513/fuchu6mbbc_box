@@ -557,12 +557,15 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const avgPF = n ? results.reduce((a, r) => a + r.own, 0) / n : 0;
   const avgPA = n ? results.reduce((a, r) => a + r.opp, 0) / n : 0;
   const star = useMemo(() => {
+    // 直近3試合の平均EFFが最高の選手をピックアップ
+    const recent3 = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 3);
+    if (recent3.length === 0) return null;
     let best = null;
     for (const p of data.players) {
-      const c = careerStats(data.games, p.id);
-      if (c.n === 0) continue;
-      const avg = c.tot.pts / c.n;
-      if (!best || avg > best.avg) best = { p, avg };
+      const per = recent3.map((g) => aggStats(g.events, "own", p.id, "all", g)).filter((s) => hasStats(s));
+      if (per.length === 0) continue;
+      const avgEff = per.reduce((a, s) => a + s.eff, 0) / per.length;
+      if (!best || avgEff > best.avgEff) best = { p, avgEff, n: per.length };
     }
     return best;
   }, [data]);
@@ -595,11 +598,11 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
             <Avatar p={star.p} size={52} />
             <div className="flex-1">
               <div className="font-bold text-lg">{star.p.codename || star.p.name}</div>
-              <div className="text-xs" style={{ color: C.sub }}>#{star.p.number}・{star.p.grade}年</div>
+              <div className="text-xs" style={{ color: C.sub }}>#{star.p.number}・{star.p.grade}年・直近{star.n}試合</div>
             </div>
             <div className="text-right">
-              <div className="text-4xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(star.avg)}</div>
-              <div className="text-xs" style={{ color: C.sub }}>平均得点</div>
+              <div className="text-4xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(star.avgEff)}</div>
+              <div className="text-xs" style={{ color: C.sub }}>平均EFF</div>
             </div>
           </button>
         </Card>
@@ -1093,15 +1096,24 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp }) {
 
 /* ============ Play by Play 入力 ============ */
 function PlayByPlay({ data, save, game, oppName }) {
+  const periods = periodsOf(game);
   const [q, setQ] = useState(1);
   const [time, setTime] = useState("");
   const [side, setSide] = useState("own");
+  // 相手側はデフォルトでチームを選択
   const [sel, setSel] = useState(null);
   const [insertAfter, setInsertAfter] = useState(null);
   const [showLineup, setShowLineup] = useState(false);
+  const [qLocked, setQLocked] = useState(false); // Q固定モード
+
+  // side変更時: 相手ならTEAM_KEYをデフォルト選択
+  const changeSide = (k) => {
+    setSide(k);
+    setSel(k === "opp" ? TEAM_KEY : null);
+  };
+
   const opponent = data.opponents.find((o) => o.id === game.opponentId);
   const oppNums = (opponent?.numbers || "").split(/[,、\s]+/).filter(Boolean);
-  const periods = periodsOf(game);
   const lineup = game.lineups?.[q] || [];
   const players = [...data.players].sort((a, b) => {
     const ai = lineup.includes(a.id) ? 0 : 1, bi = lineup.includes(b.id) ? 0 : 1;
@@ -1152,16 +1164,28 @@ function PlayByPlay({ data, save, game, oppName }) {
     return p ? `#${p.number} ${p.codename || p.name}` : "?";
   };
   const events = game.events || [];
+  // ログは降順(新しい順)表示
+  const logEvents = [...events].reverse();
   return (
     <div className="space-y-3">
       <Card>
-        <div className="flex gap-1.5 mb-3 overflow-x-auto">
-          {Array.from({ length: periods }, (_, i) => i + 1).map((n) => (
-            <button key={n} className="flex-1 min-w-14 py-2.5 rounded-lg font-bold"
-              style={q === n ? { background: C.orange, color: "#fff" } : { background: C.card2, color: C.sub }}
-              onClick={() => setQ(n)}>{periodLabel(n)}</button>
-          ))}
+        {/* Q選択 + 固定トグル */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex gap-1.5 flex-1 overflow-x-auto">
+            {Array.from({ length: periods }, (_, i) => i + 1).map((n) => (
+              <button key={n} className="flex-1 min-w-14 py-2.5 rounded-lg font-bold"
+                style={q === n ? { background: C.orange, color: "#fff" } : { background: C.card2, color: C.sub }}
+                onClick={() => setQ(n)}>{periodLabel(n)}</button>
+            ))}
+          </div>
+          <button className="shrink-0 px-3 py-2.5 rounded-lg text-xs font-bold"
+            style={qLocked ? { background: C.win, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+            onClick={() => setQLocked(!qLocked)}
+            title="Q固定: ONにするとQ選択ボタンが無効になります">
+            {qLocked ? "🔒固定中" : "固定"}
+          </button>
         </div>
+        {qLocked && <div className="text-xs mb-2 px-1" style={{ color: C.win }}>Q固定ON: {periodLabel(q)}のプレイとして記録されます</div>}
         <button className="w-full flex items-center gap-2 mb-3 text-sm font-bold rounded-xl px-3 py-2.5"
           style={{ background: C.card2, color: lineup.length ? C.win : C.sub }}
           onClick={() => setShowLineup(!showLineup)}>
@@ -1195,7 +1219,7 @@ function PlayByPlay({ data, save, game, oppName }) {
         </div>
         <div className="mb-3">
           <Seg items={[["own", "自チーム"], ["opp", `相手(${oppName(game.opponentId)})`]]} value={side}
-            onChange={(k) => { setSide(k); setSel(null); }} />
+            onChange={changeSide} />
         </div>
         {side === "own" ? (
           data.players.length === 0 ? <div className="text-sm mb-3" style={{ color: C.sub }}>先に「選手」タブで選手を登録してください。</div> : (
@@ -1255,10 +1279,10 @@ function PlayByPlay({ data, save, game, oppName }) {
         </div>
       )}
       <Card>
-        <SectionTitle>プレイログ({events.length}・時系列)</SectionTitle>
+        <SectionTitle>プレイログ({events.length}・新しい順)</SectionTitle>
         {events.length === 0 ? <div className="text-sm" style={{ color: C.sub }}>記録されたプレイはまだありません。</div> : (
           <div className="space-y-1 max-h-96 overflow-y-auto">
-            {events.map((e) => (
+            {logEvents.map((e) => (
               <div key={e.id} className="flex items-center gap-1.5 text-sm py-1.5 rounded-lg px-1"
                 style={{ borderBottom: `1px solid ${C.border}44`, background: insertAfter === e.id ? "#3A2A1466" : "transparent" }}>
                 <span className="text-[10px] font-bold text-white rounded px-1.5 py-0.5" style={{ background: e.side === "own" ? C.orange : C.oppBlue }}>{periodLabel(e.q)}</span>
