@@ -11,13 +11,24 @@ import {
 } from "lucide-react";
 
 /* ============ デザイントークン ============ */
-const C = {
+const DARK = {
   bg: "#0C1220", card: "#161F33", card2: "#1E2A45", border: "#2A3856",
   text: "#E9EEF8", sub: "#8FA0C0",
   orange: "#FF7A3D", led: "#FFB23E", win: "#3DBE7B", loss: "#E25C5C",
   board: "#070C16", nav: "#0A101E", oppBlue: "#5B74A8", oppText: "#7E94BC",
-  sidebar: "#0E1828",
+  sidebar: "#0E1828", inputBg: "#0F1830",
 };
+const LIGHT = {
+  bg: "#F0F4F8", card: "#FFFFFF", card2: "#EAF0F8", border: "#C8D8EC",
+  text: "#1A2A44", sub: "#5A7A9F",
+  orange: "#E8602A", led: "#C87A00", win: "#1E8A50", loss: "#C03030",
+  board: "#1A2A44", nav: "#FFFFFF", oppBlue: "#3A60A0", oppText: "#2A508A",
+  sidebar: "#F8FAFE", inputBg: "#F0F4F8",
+};
+const ThemeCtx = React.createContext(DARK);
+const useC = () => React.useContext(ThemeCtx);
+// グローバル参照用(関数外で使う箇所の互換)
+let C = DARK;
 const MAX_OPPONENTS = 100;
 const MAX_PLAYERS = 30;
 const MAX_GAMES = 200;
@@ -336,34 +347,47 @@ function flowAnalysis(data, game) {
 }
 
 /* ============ 共通UI ============ */
-const Card = ({ children, className = "", style }) => (
-  <div className={`rounded-2xl p-4 ${className}`} style={{ background: C.card, border: `1px solid ${C.border}`, ...style }}>{children}</div>
-);
-const SectionTitle = ({ children }) => (
-  <div className="text-xs font-bold tracking-widest mb-2" style={{ color: C.orange }}>{children}</div>
-);
-const Field = ({ label, children }) => (
-  <label className="block mb-3">
-    <div className="text-xs mb-1" style={{ color: C.sub }}>{label}</div>
-    {children}
-  </label>
-);
-const inputStyle = { background: "#0F1830", border: `1px solid ${C.border}`, color: C.text };
+const Card = ({ children, className = "", style }) => {
+  const C = useC();
+  return <div className={`rounded-2xl p-4 ${className}`} style={{ background: C.card, border: `1px solid ${C.border}`, ...style }}>{children}</div>;
+};
+const SectionTitle = ({ children }) => {
+  const C = useC();
+  return <div className="text-xs font-bold tracking-widest mb-2" style={{ color: C.orange }}>{children}</div>;
+};
+const Field = ({ label, children }) => {
+  const C = useC();
+  return (
+    <label className="block mb-3">
+      <div className="text-xs mb-1" style={{ color: C.sub }}>{label}</div>
+      {children}
+    </label>
+  );
+};
+const getInputStyle = (C) => ({ background: C.inputBg, border: `1px solid ${C.border}`, color: C.text });
+const inputStyle = getInputStyle(DARK);
 const inputCls = "w-full rounded-xl px-3 py-2.5 text-base";
-const PrimaryBtn = ({ children, ...props }) => (
-  <button {...props} className="w-full text-white font-bold py-3 rounded-xl active:opacity-80 disabled:opacity-40"
-    style={{ background: C.orange }}>{children}</button>
-);
-const Seg = ({ items, value, onChange }) => (
-  <div className="flex rounded-xl overflow-hidden text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
-    {items.map(([k, l]) => (
-      <button key={k} className="flex-1 py-2.5" onClick={() => onChange(k)}
-        style={value === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
-    ))}
-  </div>
-);
+const PrimaryBtn = ({ children, ...props }) => {
+  const C = useC();
+  return (
+    <button {...props} className="w-full text-white font-bold py-3 rounded-xl active:opacity-80 disabled:opacity-40"
+      style={{ background: C.orange }}>{children}</button>
+  );
+};
+const Seg = ({ items, value, onChange }) => {
+  const C = useC();
+  return (
+    <div className="flex rounded-xl overflow-hidden text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
+      {items.map(([k, l]) => (
+        <button key={k} className="flex-1 py-2.5" onClick={() => onChange(k)}
+          style={value === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
+      ))}
+    </div>
+  );
+};
 
 function ScoreBoard({ own, opp, oppName, oppLogo, date, small }) {
+  const C = useC();
   const win = own > opp, draw = own === opp;
   return (
     <div className="rounded-xl px-4 py-3 flex items-center justify-between"
@@ -418,8 +442,18 @@ export default function App() {
   const timer = useRef(null);
   const pending = useRef(null);
   const retried = useRef(false);
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem("minibasket_theme") || "dark"; } catch { return "dark"; }
+  });
+  const CT = theme === "dark" ? DARK : LIGHT;
+  C = CT;
   const isPC = useIsPC();
   const { isAdmin, login, logout } = useAdminMode();
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    try { localStorage.setItem("minibasket_theme", next); } catch {}
+  };
   const [showLogin, setShowLogin] = useState(false);
   const [loginInput, setLoginInput] = useState("");
   const [loginErr, setLoginErr] = useState(false);
@@ -473,7 +507,7 @@ export default function App() {
 
   const getOpp = (id) => data.opponents.find((o) => o.id === id);
   const oppName = (id) => getOpp(id)?.name || "対戦相手";
-  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin };
+  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme };
 
   const NAV_ITEMS = [
     { t: "home", icon: Home, label: "ホーム" },
@@ -519,11 +553,12 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen" style={{ background: C.bg, color: C.text }}>
+    <ThemeCtx.Provider value={CT}>
+    <div className="min-h-screen" style={{ background: CT.bg, color: CT.text }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
-        input::placeholder, textarea::placeholder { color: #5A6B8F; }
-        select option { background: #0F1830; }
+        input::placeholder, textarea::placeholder { color: ${CT.sub}88; }
+        select option { background: ${CT.inputBg}; color: ${CT.text}; }
         @media print {
           body * { visibility: hidden; }
           .report-root, .report-root * { visibility: visible; }
@@ -562,9 +597,11 @@ export default function App() {
                 </button>
               ))}
             </nav>
-            {/* 保存状態 */}
-            <div className="px-4 py-3 text-xs" style={{ color: saveState.startsWith("error") ? C.loss : C.sub, borderTop: `1px solid ${C.border}` }}>
-              {saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : "データ同期済み"}
+            {/* 保存状態 + テーマ切替 */}
+            <div className="px-4 py-3 text-xs flex items-center justify-between" style={{ color: saveState.startsWith("error") ? CT.loss : CT.sub, borderTop: `1px solid ${CT.border}` }}>
+              <span>{saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : "データ同期済み"}</span>
+              <button onClick={toggleTheme} className="ml-2 px-2 py-1 rounded-lg text-xs font-bold"
+                style={{ background: CT.card2, color: CT.sub }}>{theme === "dark" ? "☀️ ライト" : "🌙 ダーク"}</button>
             </div>
           </aside>
           <MainContent />
@@ -573,16 +610,17 @@ export default function App() {
         /* ============ スマホレイアウト ============ */
         <>
           <header className="sticky top-0 z-20 px-4 py-3 flex items-center gap-2.5 shadow-lg"
-            style={{ background: C.nav, borderBottom: `1px solid ${C.border}` }}>
+            style={{ background: CT.nav, borderBottom: `1px solid ${CT.border}` }}>
             {data.team.logo
               ? <img src={data.team.logo} alt="" className="w-8 h-8 rounded-full object-cover" />
               : <span className="text-xl">🏀</span>}
             <div className="font-bold truncate">{data.team.name}</div>
-            <button className="text-xs ml-auto" style={{ color: isAdmin ? C.win : C.sub }}
+            <button onClick={toggleTheme} className="ml-auto text-lg px-1">{theme === "dark" ? "☀️" : "🌙"}</button>
+            <button className="text-xs" style={{ color: isAdmin ? CT.win : CT.sub }}
               onClick={() => isAdmin ? logout() : setShowLogin(true)}>
               {isAdmin ? "管理者" : "閲覧"}
             </button>
-            <span className="text-xs" style={{ color: saveState.startsWith("error") ? C.loss : C.sub }}>
+            <span className="text-xs" style={{ color: saveState.startsWith("error") ? CT.loss : CT.sub }}>
               {saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : ""}
             </span>
           </header>
@@ -600,6 +638,7 @@ export default function App() {
         </>
       )}
     </div>
+    </ThemeCtx.Provider>
   );
 }
 
@@ -675,7 +714,8 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
         ) : (
           <div className="space-y-2">
             {recentGames.map(({ g, own, opp }) => (
-              <button key={g.id} className="w-full" onClick={() => { setTab("games"); setNav({ gameId: g.id }); }}>
+              <button key={g.id} className="w-full text-left" onClick={() => { setTab("games"); setNav({ gameId: g.id }); }}>
+                <div className="mb-1 px-1 text-xs" style={{ color: C.sub }}>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}` : ""}</div>
                 <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} />
               </button>
             ))}
@@ -983,13 +1023,16 @@ function GameForm({ data, initial, onSave, onCancel }) {
 }
 
 /* ============ 試合一覧 ============ */
-function GameRow({ g, setNav }) {
+function GameRow({ g, setNav, showOpp, oppName }) {
+  const C = useC();
   const { own, opp } = gamePts(g);
   return (
     <button className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
       style={{ background: C.card2 }} onClick={() => setNav({ gameId: g.id })}>
-      <span className="text-xs w-20 text-left" style={{ color: C.sub }}>{g.date}</span>
-      <span className="flex-1 text-left text-xs truncate" style={{ color: C.sub }}>{g.tournament || "練習試合"}</span>
+      <span className="text-xs w-20 text-left shrink-0" style={{ color: C.sub }}>{g.date}</span>
+      <span className="flex-1 text-left text-xs truncate" style={{ color: C.sub }}>
+        {showOpp && oppName ? oppName(g.opponentId) : (g.tournament || "練習試合")}
+      </span>
       <span className="font-bold text-lg" style={{ fontFamily: "'Bebas Neue', sans-serif", color: own > opp ? C.win : own < opp ? C.loss : C.sub }}>{own}-{opp}</span>
     </button>
   );
@@ -1062,7 +1105,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC }) {
                 <WL gs={gs} />
                 <ChevronDown size={18} style={{ color: C.sub, transform: openKey === t ? "rotate(180deg)" : "none" }} />
               </button>
-              {openKey === t && <div className="mt-3 space-y-2">{gs.map((g) => <GameRow key={g.id} g={g} setNav={setNav} />)}</div>}
+              {openKey === t && <div className="mt-3 space-y-2">{gs.map((g) => <GameRow key={g.id} g={g} setNav={setNav} showOpp oppName={oppName} />)}</div>}
             </Card>
           ))}
         </div>
