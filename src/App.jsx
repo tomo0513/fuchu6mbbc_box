@@ -24,6 +24,26 @@ const MAX_GAMES = 200;
 const STORE_KEY = "fuchu6-minibasket-v1";
 const STORAGE_LIMIT = 5 * 1024 * 1024;
 const TEAM_KEY = "TEAM";
+const ADMIN_PASS = "tomo0513"; // ← 管理者パスワード(変更可)
+
+/* ============ 管理者権限フック ============ */
+function useAdminMode() {
+  const [isAdmin, setIsAdmin] = useState(() => {
+    try { return sessionStorage.getItem("minibasket_admin") === "1"; } catch { return false; }
+  });
+  const login = (pass) => {
+    if (pass === ADMIN_PASS) {
+      try { sessionStorage.setItem("minibasket_admin", "1"); } catch {}
+      setIsAdmin(true); return true;
+    }
+    return false;
+  };
+  const logout = () => {
+    try { sessionStorage.removeItem("minibasket_admin"); } catch {}
+    setIsAdmin(false);
+  };
+  return { isAdmin, login, logout };
+}
 
 /* ============ レスポンシブフック ============ */
 function useIsPC() {
@@ -399,6 +419,10 @@ export default function App() {
   const pending = useRef(null);
   const retried = useRef(false);
   const isPC = useIsPC();
+  const { isAdmin, login, logout } = useAdminMode();
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginInput, setLoginInput] = useState("");
+  const [loginErr, setLoginErr] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -449,15 +473,36 @@ export default function App() {
 
   const getOpp = (id) => data.opponents.find((o) => o.id === id);
   const oppName = (id) => getOpp(id)?.name || "対戦相手";
-  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC };
+  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin };
 
   const NAV_ITEMS = [
     { t: "home", icon: Home, label: "ホーム" },
     { t: "games", icon: ClipboardList, label: "試合" },
     { t: "players", icon: Users, label: "選手" },
     { t: "ranking", icon: Trophy, label: "ランキング" },
-    { t: "settings", icon: Settings, label: "設定" },
+    ...(isAdmin ? [{ t: "settings", icon: Settings, label: "設定" }] : []),
   ];
+
+  // ログインモーダル
+  const LoginModal = () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0008" }}>
+      <div className="rounded-2xl p-6 w-72" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+        <div className="font-bold text-lg mb-1">管理者ログイン</div>
+        <div className="text-xs mb-4" style={{ color: C.sub }}>パスワードを入力してください</div>
+        <input className="w-full rounded-xl px-3 py-2.5 text-base mb-2" style={inputStyle}
+          type="password" placeholder="パスワード" value={loginInput}
+          onChange={(e) => { setLoginInput(e.target.value); setLoginErr(false); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { if (!login(loginInput)) setLoginErr(true); else { setShowLogin(false); setLoginInput(""); } } }} />
+        {loginErr && <div className="text-xs mb-2" style={{ color: C.loss }}>パスワードが違います</div>}
+        <div className="flex gap-2">
+          <button className="flex-1 py-2.5 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }}
+            onClick={() => { setShowLogin(false); setLoginInput(""); setLoginErr(false); }}>キャンセル</button>
+          <button className="flex-1 py-2.5 rounded-xl font-bold text-white" style={{ background: C.orange }}
+            onClick={() => { if (!login(loginInput)) setLoginErr(true); else { setShowLogin(false); setLoginInput(""); } }}>ログイン</button>
+        </div>
+      </div>
+    </div>
+  );
 
   const MainContent = () => (
     <main className={isPC ? "flex-1 overflow-y-auto p-6" : "max-w-md mx-auto px-3 pt-3 pb-24"}>
@@ -486,6 +531,7 @@ export default function App() {
           .no-print { display: none !important; }
         }
       `}</style>
+      {showLogin && <LoginModal />}
 
       {isPC ? (
         /* ============ PCレイアウト ============ */
@@ -497,7 +543,13 @@ export default function App() {
               {data.team.logo
                 ? <img src={data.team.logo} alt="" className="w-9 h-9 rounded-full object-cover" />
                 : <span className="text-2xl">🏀</span>}
-              <div className="font-bold text-sm leading-tight">{data.team.name}</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-sm leading-tight truncate">{data.team.name}</div>
+                <button className="text-[10px]" style={{ color: isAdmin ? C.win : C.sub }}
+                  onClick={() => isAdmin ? logout() : setShowLogin(true)}>
+                  {isAdmin ? "● 管理者" : "○ 閲覧モード"}
+                </button>
+              </div>
             </div>
             {/* ナビ */}
             <nav className="flex-1 py-3 space-y-1 px-2">
@@ -526,7 +578,11 @@ export default function App() {
               ? <img src={data.team.logo} alt="" className="w-8 h-8 rounded-full object-cover" />
               : <span className="text-xl">🏀</span>}
             <div className="font-bold truncate">{data.team.name}</div>
-            <span className="ml-auto text-xs" style={{ color: saveState.startsWith("error") ? C.loss : C.sub }}>
+            <button className="text-xs ml-auto" style={{ color: isAdmin ? C.win : C.sub }}
+              onClick={() => isAdmin ? logout() : setShowLogin(true)}>
+              {isAdmin ? "管理者" : "閲覧"}
+            </button>
+            <span className="text-xs" style={{ color: saveState.startsWith("error") ? C.loss : C.sub }}>
               {saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : ""}
             </span>
           </header>
@@ -1035,7 +1091,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC }) {
 }
 
 /* ============ 試合詳細 ============ */
-function GameDetail({ data, save, nav, setNav, oppName, getOpp }) {
+function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   const g = data.games.find((x) => x.id === nav.gameId);
   const [sub, setSub] = useState("entry");
   const [editing, setEditing] = useState(false);
@@ -1087,15 +1143,15 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp }) {
             style={sub === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
         ))}
       </div>
-      {sub === "entry" && <PlayByPlay data={data} save={save} game={g} oppName={oppName} />}
-      {sub === "analysis" && <GameAnalysis data={data} game={g} oppName={oppName} onReport={setReport} />}
+      {sub === "entry" && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
+      {sub === "analysis" && <GameAnalysis data={data} game={g} oppName={oppName} onReport={setReport} isAdmin={isAdmin} />}
       {sub === "media" && <GameMedia data={data} save={save} game={g} oppName={oppName} />}
     </div>
   );
 }
 
 /* ============ Play by Play 入力 ============ */
-function PlayByPlay({ data, save, game, oppName }) {
+function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const periods = periodsOf(game);
   const [q, setQ] = useState(1);
   const [time, setTime] = useState("");
@@ -1168,7 +1224,18 @@ function PlayByPlay({ data, save, game, oppName }) {
   const logEvents = [...events].reverse();
   return (
     <div className="space-y-3">
-      <Card>
+      {/* 管理者のみ入力UI表示 */}
+      {!isAdmin && (
+        <div className="text-center py-4 px-3 rounded-xl text-sm" style={{ background: C.card2, color: C.sub }}>
+          閲覧モードです。スタッツ入力は管理者のみ行えます。<br />
+          <button className="mt-2 text-xs font-bold underline" style={{ color: C.orange }}
+            onClick={() => {
+              const p = prompt("管理者パスワードを入力してください");
+              if (p !== null) { if (!window.__adminLogin) window.__adminLogin = () => {}; }
+            }}>管理者としてログイン</button>
+        </div>
+      )}
+      {isAdmin && <Card>
         {/* Q選択 + 固定トグル */}
         <div className="flex items-center gap-2 mb-3">
           <div className="flex gap-1.5 flex-1 overflow-x-auto">
@@ -1269,8 +1336,8 @@ function PlayByPlay({ data, save, game, oppName }) {
         <div className="text-xs mt-2 text-center" style={{ color: C.sub }}>
           {sel === TEAM_KEY ? "チーム全体のプレイとして記録します(24秒TOなど)" : sel ? "得点プレイはスコアボードに自動加算されます" : "選手(またはチーム)を選んでからアクションをタップ"}
         </div>
-      </Card>
-      {insertAfter && (
+      </Card>}
+      {isAdmin && insertAfter && (
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold"
           style={{ background: "#3A2A14", border: `1px solid ${C.led}`, color: C.led }}>
           <CornerDownRight size={16} />
@@ -1279,24 +1346,36 @@ function PlayByPlay({ data, save, game, oppName }) {
         </div>
       )}
       <Card>
-        <SectionTitle>プレイログ({events.length}・新しい順)</SectionTitle>
+        <SectionTitle>プレイログ({events.length})</SectionTitle>
         {events.length === 0 ? <div className="text-sm" style={{ color: C.sub }}>記録されたプレイはまだありません。</div> : (
-          <div className="space-y-1 max-h-96 overflow-y-auto">
-            {logEvents.map((e) => (
-              <div key={e.id} className="flex items-center gap-1.5 text-sm py-1.5 rounded-lg px-1"
-                style={{ borderBottom: `1px solid ${C.border}44`, background: insertAfter === e.id ? "#3A2A1466" : "transparent" }}>
-                <span className="text-[10px] font-bold text-white rounded px-1.5 py-0.5" style={{ background: e.side === "own" ? C.orange : C.oppBlue }}>{periodLabel(e.q)}</span>
-                <span className="text-xs w-9" style={{ color: C.sub }}>{e.time || "–"}</span>
-                <span className="flex-1 truncate">
-                  {e.side === "own" ? pName(e.playerId) : (e.oppNum === TEAM_KEY ? "相手チーム" : `相手 #${e.oppNum}`)}
-                  <span style={{ color: C.sub }}> – {ACTION_LABEL[e.action]}</span>
-                </span>
-                {PTS_OF[e.action] ? <span className="text-xs font-bold" style={{ color: C.led }}>+{PTS_OF[e.action]}</span> : null}
-                <button className="p-1" style={{ color: insertAfter === e.id ? C.led : C.sub }}
-                  onClick={() => setInsertAfter(insertAfter === e.id ? null : e.id)}><CornerDownRight size={14} /></button>
-                <button className="p-1" style={{ color: C.sub }} onClick={() => delEvent(e.id)}><Trash2 size={14} /></button>
-              </div>
-            ))}
+          <div className="space-y-3 max-h-[500px] overflow-y-auto">
+            {Array.from({ length: periods }, (_, i) => i + 1).map((qn) => {
+              const qEvents = [...events].filter((e) => e.q === qn).reverse();
+              if (qEvents.length === 0) return null;
+              return (
+                <div key={qn}>
+                  <div className="text-xs font-bold py-1 px-2 rounded-lg mb-1 inline-block" style={{ background: C.orange, color: "#fff" }}>{periodLabel(qn)}</div>
+                  <div className="space-y-1">
+                    {qEvents.map((e) => (
+                      <div key={e.id} className="flex items-center gap-1.5 text-sm py-1.5 rounded-lg px-1"
+                        style={{ borderBottom: `1px solid ${C.border}44`, background: insertAfter === e.id ? "#3A2A1466" : "transparent" }}>
+                        <span className="text-xs w-9" style={{ color: C.sub }}>{e.time || "–"}</span>
+                        <span className="flex-1 truncate">
+                          {e.side === "own" ? pName(e.playerId) : (e.oppNum === TEAM_KEY ? "相手チーム" : `相手 #${e.oppNum}`)}
+                          <span style={{ color: e.side === "own" ? C.sub : C.oppText }}> – {ACTION_LABEL[e.action]}</span>
+                        </span>
+                        {PTS_OF[e.action] ? <span className="text-xs font-bold" style={{ color: C.led }}>+{PTS_OF[e.action]}</span> : null}
+                        {isAdmin && <>
+                          <button className="p-1" style={{ color: insertAfter === e.id ? C.led : C.sub }}
+                            onClick={() => setInsertAfter(insertAfter === e.id ? null : e.id)}><CornerDownRight size={14} /></button>
+                          <button className="p-1" style={{ color: C.sub }} onClick={() => delEvent(e.id)}><Trash2 size={14} /></button>
+                        </>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
@@ -1461,7 +1540,7 @@ function ReportView({ data, game, mode, oppName, onClose }) {
 }
 
 /* ============ 試合分析(画面) ============ */
-function GameAnalysis({ data, game, oppName, onReport }) {
+function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
   const [scope, setScope] = useState("all");
   const a = analysisFor(data, game, scope);
   const mips = scope === "all" ? mipOf(game, data.players) : [];
@@ -1490,10 +1569,10 @@ function GameAnalysis({ data, game, oppName, onReport }) {
   );
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
+      {isAdmin && <div className="flex gap-2">
         <button className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.border}`, color: C.text }} onClick={() => onReport("simple")}><FileText size={15} /> レポート(簡易)</button>
         <button className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.orange}`, color: C.orange }} onClick={() => onReport("detail")}><FileText size={15} /> レポート(詳細)</button>
-      </div>
+      </div>}
       <div className="flex gap-1.5 overflow-x-auto">
         {[["all", "全体"], ...Array.from({ length: a.periods }, (_, i) => [i + 1, periodLabel(i + 1)])].map(([k, l]) => (
           <button key={k} className="flex-1 min-w-12 py-2 rounded-lg font-bold text-sm"
