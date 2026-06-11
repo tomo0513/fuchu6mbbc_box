@@ -1122,10 +1122,10 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
         <div className="flex items-center gap-3">
           {copied && <span className="text-xs" style={{ color: C.win }}>コピーしました</span>}
           <button style={{ color: C.sub }} onClick={copyLink}><Link2 size={18} /></button>
-          <button style={{ color: C.sub }} onClick={() => setEditing(true)}><Pencil size={18} /></button>
-          <button style={{ color: C.sub }} onClick={() => {
+          {isAdmin && <button style={{ color: C.sub }} onClick={() => setEditing(true)}><Pencil size={18} /></button>}
+          {isAdmin && <button style={{ color: C.sub }} onClick={() => {
             if (confirm("この試合を削除しますか?")) { save({ ...data, games: data.games.filter((x) => x.id !== g.id) }); setNav({}); }
-          }}><Trash2 size={18} /></button>
+          }}><Trash2 size={18} /></button>}
         </div>
       </div>
       <div className="px-1 text-xs" style={{ color: C.sub }}>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}(${g.otLen}分)` : ""}・Q{g.qLen}分</div>
@@ -1206,6 +1206,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
       } else { events = [...x.events, ev]; }
       return { ...x, events, qScores: pts ? applyScore(x.qScores, side, q - 1, pts) : x.qScores };
     });
+    // sel・side・timeは保持(前の入力を引き継ぐ)
     if (insertAfter) setInsertAfter(ev.id);
   };
   const delEvent = (id) => {
@@ -1241,18 +1242,24 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
           <div className="flex gap-1.5 flex-1 overflow-x-auto">
             {Array.from({ length: periods }, (_, i) => i + 1).map((n) => (
               <button key={n} className="flex-1 min-w-14 py-2.5 rounded-lg font-bold"
-                style={q === n ? { background: C.orange, color: "#fff" } : { background: C.card2, color: C.sub }}
-                onClick={() => setQ(n)}>{periodLabel(n)}</button>
+                style={q === n
+                  ? { background: C.orange, color: "#fff" }
+                  : qLocked
+                    ? { background: C.card2, color: C.border, cursor: "not-allowed" }
+                    : { background: C.card2, color: C.sub }}
+                onClick={() => { if (!qLocked) setQ(n); }}
+                disabled={qLocked && q !== n}
+              >{periodLabel(n)}</button>
             ))}
           </div>
           <button className="shrink-0 px-3 py-2.5 rounded-lg text-xs font-bold"
             style={qLocked ? { background: C.win, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
             onClick={() => setQLocked(!qLocked)}
-            title="Q固定: ONにするとQ選択ボタンが無効になります">
+            title={qLocked ? "クリックで固定解除" : "クリックでQ固定"}>
             {qLocked ? "🔒固定中" : "固定"}
           </button>
         </div>
-        {qLocked && <div className="text-xs mb-2 px-1" style={{ color: C.win }}>Q固定ON: {periodLabel(q)}のプレイとして記録されます</div>}
+        {qLocked && <div className="text-xs mb-2 px-2 py-1 rounded-lg" style={{ background: C.card2, color: C.win }}>🔒 {periodLabel(q)}に固定中。解除するには「固定中」ボタンをタップ</div>}
         <button className="w-full flex items-center gap-2 mb-3 text-sm font-bold rounded-xl px-3 py-2.5"
           style={{ background: C.card2, color: lineup.length ? C.win : C.sub }}
           onClick={() => setShowLineup(!showLineup)}>
