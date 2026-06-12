@@ -520,7 +520,7 @@ export default function App() {
   ];
 
   // ログインモーダル
-  const LoginModal = () => (
+  const loginModal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0008" }}>
       <div className="rounded-2xl p-6 w-72" style={{ background: C.card, border: `1px solid ${C.border}` }}>
         <div className="font-bold text-lg mb-1">管理者ログイン</div>
@@ -540,7 +540,7 @@ export default function App() {
     </div>
   );
 
-  const MainContent = () => (
+  const mainContent = (
     <main className={isPC ? "flex-1 overflow-y-auto p-6" : "max-w-md mx-auto px-3 pt-3 pb-24"}>
       <div className={isPC ? "max-w-4xl mx-auto" : ""}>
         {tab === "home" && <Dashboard {...props} />}
@@ -568,7 +568,7 @@ export default function App() {
           .no-print { display: none !important; }
         }
       `}</style>
-      {showLogin && <LoginModal />}
+      {showLogin && loginModal}
 
       {isPC ? (
         /* ============ PCレイアウト ============ */
@@ -606,7 +606,7 @@ export default function App() {
                 style={{ background: CT.card2, color: CT.sub }}>{theme === "dark" ? "☀️ ライト" : "🌙 ダーク"}</button>
             </div>
           </aside>
-          <MainContent />
+          {mainContent}
         </div>
       ) : (
         /* ============ スマホレイアウト ============ */
@@ -626,7 +626,7 @@ export default function App() {
               {saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : ""}
             </span>
           </header>
-          <MainContent />
+          {mainContent}
           <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-around py-1.5"
             style={{ background: C.nav, borderTop: `1px solid ${C.border}` }}>
             {NAV_ITEMS.map(({ t, icon: I, label }) => (
