@@ -22,7 +22,7 @@ const LIGHT = {
   bg: "#F0F4F8", card: "#FFFFFF", card2: "#EAF0F8", border: "#C8D8EC",
   text: "#1A2A44", sub: "#5A7A9F",
   orange: "#E8602A", led: "#C87A00", win: "#1E8A50", loss: "#C03030",
-  board: "#1A2A44", nav: "#FFFFFF", oppBlue: "#3A60A0", oppText: "#2A508A",
+  board: "#EDF2FA", nav: "#FFFFFF", oppBlue: "#3A60A0", oppText: "#2A508A",
   sidebar: "#F8FAFE", inputBg: "#F0F4F8",
 };
 const ThemeCtx = React.createContext(DARK);
@@ -415,6 +415,7 @@ function ScoreBoard({ own, opp, oppName, oppLogo, date, small }) {
 }
 
 function Avatar({ p, size = 40 }) {
+  const C = useC();
   return p?.photo ? (
     <img src={p.photo} alt="" className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />
   ) : (
@@ -425,6 +426,7 @@ function Avatar({ p, size = 40 }) {
   );
 }
 function OppLogo({ o, size = 36 }) {
+  const C = useC();
   return o?.logo ? (
     <img src={o.logo} alt="" className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />
   ) : (
@@ -523,7 +525,7 @@ export default function App() {
       <div className="rounded-2xl p-6 w-72" style={{ background: C.card, border: `1px solid ${C.border}` }}>
         <div className="font-bold text-lg mb-1">管理者ログイン</div>
         <div className="text-xs mb-4" style={{ color: C.sub }}>パスワードを入力してください</div>
-        <input className="w-full rounded-xl px-3 py-2.5 text-base mb-2" style={inputStyle}
+        <input className="w-full rounded-xl px-3 py-2.5 text-base mb-2" style={getInputStyle(C)}
           type="password" placeholder="パスワード" value={loginInput}
           onChange={(e) => { setLoginInput(e.target.value); setLoginErr(false); }}
           onKeyDown={(e) => { if (e.key === "Enter") { if (!login(loginInput)) setLoginErr(true); else { setShowLogin(false); setLoginInput(""); } } }} />
@@ -644,6 +646,7 @@ export default function App() {
 
 /* ============ ダッシュボード ============ */
 function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
+  const C = useC();
   const games = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const results = games.map((g) => ({ g, ...gamePts(g) }));
   const w = results.filter((r) => r.own > r.opp).length;
@@ -728,6 +731,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
 
 /* ============ 選手フォーム ============ */
 function PlayerForm({ initial, onSave, onCancel }) {
+  const C = useC();
   const [f, setF] = useState(initial || { name: "", codename: "", number: "", bibs: "", grade: "6", photo: "", goal: "", targets: [] });
   const set = (k, v) => setF({ ...f, [k]: v });
   const targets = f.targets || [];
@@ -743,13 +747,13 @@ function PlayerForm({ initial, onSave, onCancel }) {
             onChange={(e) => { const file = e.target.files?.[0]; if (file) shrinkSquare(file, 96, (d) => set("photo", d)); }} />
         </label>
       </div>
-      <Field label="名前(フルネーム)"><input className={inputCls} style={inputStyle} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="山田 太郎" /></Field>
-      <Field label="コードネーム(試合入力時の表示名)"><input className={inputCls} style={inputStyle} value={f.codename} onChange={(e) => set("codename", e.target.value)} placeholder="タロー" /></Field>
+      <Field label="名前(フルネーム)"><input className={inputCls} style={getInputStyle(C)} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="山田 太郎" /></Field>
+      <Field label="コードネーム(試合入力時の表示名)"><input className={inputCls} style={getInputStyle(C)} value={f.codename} onChange={(e) => set("codename", e.target.value)} placeholder="タロー" /></Field>
       <div className="grid grid-cols-3 gap-3">
-        <Field label="背番号"><input className={inputCls} style={inputStyle} inputMode="numeric" value={f.number} onChange={(e) => set("number", e.target.value)} placeholder="4" /></Field>
-        <Field label="ビブスNo."><input className={inputCls} style={inputStyle} inputMode="numeric" value={f.bibs || ""} onChange={(e) => set("bibs", e.target.value)} placeholder="12" /></Field>
+        <Field label="背番号"><input className={inputCls} style={getInputStyle(C)} inputMode="numeric" value={f.number} onChange={(e) => set("number", e.target.value)} placeholder="4" /></Field>
+        <Field label="ビブスNo."><input className={inputCls} style={getInputStyle(C)} inputMode="numeric" value={f.bibs || ""} onChange={(e) => set("bibs", e.target.value)} placeholder="12" /></Field>
         <Field label="学年">
-          <select className={inputCls} style={inputStyle} value={f.grade} onChange={(e) => set("grade", e.target.value)}>
+          <select className={inputCls} style={getInputStyle(C)} value={f.grade} onChange={(e) => set("grade", e.target.value)}>
             {[1,2,3,4,5,6].map((g) => <option key={g} value={g}>{g}年</option>)}
           </select>
         </Field>
@@ -758,11 +762,11 @@ function PlayerForm({ initial, onSave, onCancel }) {
       <div className="space-y-2 mb-2">
         {targets.map((t, i) => (
           <div key={i} className="flex gap-2 items-center">
-            <select className="flex-1 rounded-xl px-2 py-2 text-sm" style={inputStyle} value={t.stat}
+            <select className="flex-1 rounded-xl px-2 py-2 text-sm" style={getInputStyle(C)} value={t.stat}
               onChange={(e) => setTarget(i, "stat", e.target.value)}>
               {STAT_DEFS.map((d) => <option key={d.k} value={d.k}>{d.label}{INVERSE_STATS.has(d.k) ? "(以下)" : ""}</option>)}
             </select>
-            <input className="w-20 rounded-xl px-2 py-2 text-sm text-center" style={inputStyle} inputMode="decimal"
+            <input className="w-20 rounded-xl px-2 py-2 text-sm text-center" style={getInputStyle(C)} inputMode="decimal"
               value={t.value} onChange={(e) => setTarget(i, "value", e.target.value)} placeholder="10" />
             <button className="p-1.5" style={{ color: C.sub }} onClick={() => set("targets", targets.filter((_, j) => j !== i))}><Trash2 size={16} /></button>
           </div>
@@ -774,7 +778,7 @@ function PlayerForm({ initial, onSave, onCancel }) {
           <Plus size={14} /> 目標を追加
         </button>
       )}
-      <Field label="目標メモ(自由記入)"><textarea className={inputCls} style={inputStyle} rows={2} value={f.goal} onChange={(e) => set("goal", e.target.value)} placeholder="声を出してチームを引っ張る" /></Field>
+      <Field label="目標メモ(自由記入)"><textarea className={inputCls} style={getInputStyle(C)} rows={2} value={f.goal} onChange={(e) => set("goal", e.target.value)} placeholder="声を出してチームを引っ張る" /></Field>
       <div className="flex gap-2 mt-1">
         <button className="flex-1 py-3 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }} onClick={onCancel}>キャンセル</button>
         <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange }}
@@ -785,6 +789,7 @@ function PlayerForm({ initial, onSave, onCancel }) {
 }
 
 function PlayerList({ data, save, setNav, isPC }) {
+  const C = useC();
   const [adding, setAdding] = useState(false);
   const players = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
   if (adding) return (
@@ -826,6 +831,7 @@ function PlayerList({ data, save, setNav, isPC }) {
 }
 
 function PlayerKarte({ data, save, nav, setNav }) {
+  const C = useC();
   const p = data.players.find((x) => x.id === nav.playerId);
   const [editing, setEditing] = useState(false);
   if (!p) return null;
@@ -963,6 +969,7 @@ function PlayerKarte({ data, save, nav, setNav }) {
 
 /* ============ 試合フォーム ============ */
 function GameForm({ data, initial, onSave, onCancel }) {
+  const C = useC();
   const [f, setF] = useState(initial ? { ...normGame(initial), newOpp: "" } : {
     date: new Date().toISOString().slice(0, 10), tournament: "",
     opponentId: data.opponents[0]?.id || "", newOpp: "",
@@ -975,30 +982,30 @@ function GameForm({ data, initial, onSave, onCancel }) {
   return (
     <Card>
       <SectionTitle>{initial ? "試合情報を編集" : "試合を登録"}</SectionTitle>
-      <Field label="日付"><input type="date" className={inputCls} style={inputStyle} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
-      <Field label="大会名"><input className={inputCls} style={inputStyle} value={f.tournament} onChange={(e) => setF({ ...f, tournament: e.target.value })} placeholder="市民大会 予選リーグ" /></Field>
+      <Field label="日付"><input type="date" className={inputCls} style={getInputStyle(C)} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+      <Field label="大会名"><input className={inputCls} style={getInputStyle(C)} value={f.tournament} onChange={(e) => setF({ ...f, tournament: e.target.value })} placeholder="市民大会 予選リーグ" /></Field>
       <Field label="対戦相手">
-        <select className={inputCls} style={inputStyle} value={f.opponentId} onChange={(e) => setF({ ...f, opponentId: e.target.value })}>
+        <select className={inputCls} style={getInputStyle(C)} value={f.opponentId} onChange={(e) => setF({ ...f, opponentId: e.target.value })}>
           <option value="">(新しいチームを入力)</option>
           {data.opponents.map((o) => <option key={o.id} value={o.id}>{o.name}{o.area ? `(${o.area})` : ""}</option>)}
         </select>
       </Field>
       {!f.opponentId && (!oppFull
-        ? <Field label="新しい相手チーム名"><input className={inputCls} style={inputStyle} value={f.newOpp} onChange={(e) => setF({ ...f, newOpp: e.target.value })} placeholder="◯◯ミニバス" /></Field>
+        ? <Field label="新しい相手チーム名"><input className={inputCls} style={getInputStyle(C)} value={f.newOpp} onChange={(e) => setF({ ...f, newOpp: e.target.value })} placeholder="◯◯ミニバス" /></Field>
         : <div className="text-xs mb-3" style={{ color: C.loss }}>対戦相手の登録上限({MAX_OPPONENTS}チーム)に達しています。</div>)}
       <div className="grid grid-cols-3 gap-3">
         <Field label="Qの時間">
-          <select className={inputCls} style={inputStyle} value={f.qLen} onChange={(e) => setF({ ...f, qLen: +e.target.value })}>
+          <select className={inputCls} style={getInputStyle(C)} value={f.qLen} onChange={(e) => setF({ ...f, qLen: +e.target.value })}>
             <option value={5}>5分</option><option value={6}>6分</option>
           </select>
         </Field>
         <Field label="オーバータイム">
-          <select className={inputCls} style={inputStyle} value={f.ot} onChange={(e) => setF({ ...f, ot: +e.target.value })}>
+          <select className={inputCls} style={getInputStyle(C)} value={f.ot} onChange={(e) => setF({ ...f, ot: +e.target.value })}>
             <option value={0}>なし</option><option value={1}>OT1まで</option><option value={2}>OT2まで</option>
           </select>
         </Field>
         <Field label="OTの時間">
-          <select className={inputCls} style={inputStyle} value={f.otLen} disabled={!f.ot} onChange={(e) => setF({ ...f, otLen: +e.target.value })}>
+          <select className={inputCls} style={getInputStyle(C)} value={f.otLen} disabled={!f.ot} onChange={(e) => setF({ ...f, otLen: +e.target.value })}>
             <option value={2}>2分</option><option value={3}>3分</option>
           </select>
         </Field>
@@ -1008,9 +1015,9 @@ function GameForm({ data, initial, onSave, onCancel }) {
         <div className="grid items-center text-center text-sm mb-3 gap-1.5" style={{ gridTemplateColumns: `64px repeat(${periods}, 1fr)`, minWidth: periods > 4 ? 360 : 0 }}>
           <div></div>{Array.from({ length: periods }, (_, i) => <div key={i} className="text-xs" style={{ color: C.sub }}>{periodLabel(i + 1)}</div>)}
           <div className="text-xs font-bold">自チーム</div>
-          {Array.from({ length: periods }, (_, i) => <input key={i} inputMode="numeric" className="rounded-lg py-2 text-center w-full" style={inputStyle} value={f.qScores.own[i]} onChange={(e) => setQ("own", i, e.target.value)} />)}
+          {Array.from({ length: periods }, (_, i) => <input key={i} inputMode="numeric" className="rounded-lg py-2 text-center w-full" style={getInputStyle(C)} value={f.qScores.own[i]} onChange={(e) => setQ("own", i, e.target.value)} />)}
           <div className="text-xs font-bold">相手</div>
-          {Array.from({ length: periods }, (_, i) => <input key={i} inputMode="numeric" className="rounded-lg py-2 text-center w-full" style={inputStyle} value={f.qScores.opp[i]} onChange={(e) => setQ("opp", i, e.target.value)} />)}
+          {Array.from({ length: periods }, (_, i) => <input key={i} inputMode="numeric" className="rounded-lg py-2 text-center w-full" style={getInputStyle(C)} value={f.qScores.opp[i]} onChange={(e) => setQ("opp", i, e.target.value)} />)}
         </div>
       </div>
       <div className="flex gap-2">
@@ -1039,6 +1046,7 @@ function GameRow({ g, setNav, showOpp, oppName }) {
 }
 
 function GameList({ data, save, setNav, oppName, getOpp, isPC }) {
+  const C = useC();
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState("list");
   const [openKey, setOpenKey] = useState(null);
@@ -1135,6 +1143,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC }) {
 
 /* ============ 試合詳細 ============ */
 function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
+  const C = useC();
   const g = data.games.find((x) => x.id === nav.gameId);
   const [sub, setSub] = useState("entry");
   const [editing, setEditing] = useState(false);
@@ -1188,13 +1197,14 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
       </div>
       {sub === "entry" && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
       {sub === "analysis" && <GameAnalysis data={data} game={g} oppName={oppName} onReport={setReport} isAdmin={isAdmin} />}
-      {sub === "media" && <GameMedia data={data} save={save} game={g} oppName={oppName} />}
+      {sub === "media" && <GameMedia data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
     </div>
   );
 }
 
 /* ============ Play by Play 入力 ============ */
 function PlayByPlay({ data, save, game, oppName, isAdmin }) {
+  const C = useC();
   const periods = periodsOf(game);
   const [q, setQ] = useState(1);
   const [time, setTime] = useState("");
@@ -1214,10 +1224,8 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const opponent = data.opponents.find((o) => o.id === game.opponentId);
   const oppNums = (opponent?.numbers || "").split(/[,、\s]+/).filter(Boolean);
   const lineup = game.lineups?.[q] || [];
-  const players = [...data.players].sort((a, b) => {
-    const ai = lineup.includes(a.id) ? 0 : 1, bi = lineup.includes(b.id) ? 0 : 1;
-    return ai - bi || (+a.number || 0) - (+b.number || 0);
-  });
+  // 選手チップは常に背番号順で固定(入力のたびに並びが動かないように)
+  const players = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
   const updGame = (fn) => save({ ...data, games: data.games.map((x) => (x.id === game.id ? fn(x) : x)) });
   const toggleLineup = (pid) => {
     updGame((x) => {
@@ -1311,25 +1319,28 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
           <ChevronDown size={16} className="ml-auto" style={{ transform: showLineup ? "rotate(180deg)" : "none" }} />
         </button>
         {showLineup && (
-          <div className="mb-3 p-3 rounded-xl" style={{ background: C.board }}>
+          <div className="mb-3 p-3 rounded-xl" style={{ background: C.card2 }}>
+            <div className="text-[11px] mb-2 font-bold" style={{ color: lineup.length === 5 ? C.win : C.sub }}>
+              出場中 {lineup.length}人{lineup.length > 5 ? "(5人を超えています)" : lineup.length === 5 ? " ✓" : ` / あと${5 - lineup.length}人選べます`}
+            </div>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {[...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0)).map((p) => (
                 <button key={p.id} onClick={() => toggleLineup(p.id)}
-                  className="px-3 py-1.5 rounded-full text-xs font-bold"
+                  className="px-3 py-2 rounded-full text-xs font-bold"
                   style={lineup.includes(p.id) ? { background: C.win, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}>
-                  #{p.number}
+                  #{p.number} {p.codename || p.name}
                 </button>
               ))}
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[10px]" style={{ color: C.sub }}>登録した選手は{periodLabel(q)}フル出場として計算</span>
+              <span className="text-[10px]" style={{ color: C.sub }}>タップで追加/解除。複数選択できます({periodLabel(q)}フル出場として計算)</span>
               {q > 1 && <button className="text-xs font-bold shrink-0 ml-2" style={{ color: C.orange }} onClick={copyPrevLineup}>前と同じ</button>}
             </div>
           </div>
         )}
         <div className="flex items-center gap-2 mb-3">
           <Clock size={16} style={{ color: C.sub }} />
-          <input className="rounded-lg px-2 py-1.5 w-24 text-center" style={inputStyle}
+          <input className="rounded-lg px-2 py-1.5 w-24 text-center" style={getInputStyle(C)}
             placeholder={`残り ${Math.floor(periodLen(game, q) / 60)}:00`}
             value={time} onChange={(e) => setTime(e.target.value)} />
           <span className="text-xs" style={{ color: C.sub }}>任意</span>
@@ -1363,7 +1374,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                 className="px-3 py-2 rounded-full text-sm font-bold"
                 style={sel === n ? { background: C.oppBlue, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.text }}>#{n}</button>
             ))}
-            <input className="rounded-full px-3 py-2 w-20 text-sm" style={inputStyle} placeholder="#番号"
+            <input className="rounded-full px-3 py-2 w-20 text-sm" style={getInputStyle(C)} placeholder="#番号"
               onKeyDown={(e) => { if (e.key === "Enter" && e.target.value) { setSel(e.target.value.replace("#", "")); e.target.value = ""; } }}
               onBlur={(e) => { if (e.target.value) { setSel(e.target.value.replace("#", "")); e.target.value = ""; } }} />
           </div>
@@ -1434,7 +1445,8 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
 }
 
 /* ============ 資料 ============ */
-function GameMedia({ data, save, game, oppName }) {
+function GameMedia({ data, save, game, oppName, isAdmin }) {
+  const C = useC();
   const [copied, setCopied] = useState(false);
   const periods = periodsOf(game);
   const upd = (patch) => save({ ...data, games: data.games.map((x) => x.id === game.id ? { ...x, ...patch } : x) });
@@ -1476,19 +1488,31 @@ function GameMedia({ data, save, game, oppName }) {
           {vidKeys.map((k) => {
             const label = k === "all" ? "フル/その他" : periodLabel(+k);
             const id = ytId(videos[k]);
+            // 閲覧モードでリンクも動画もない場合はスキップ
+            if (!isAdmin && !id) return null;
             return (
               <div key={k}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold w-16" style={{ color: C.sub }}>{label}</span>
-                  <input className="flex-1 rounded-lg px-2 py-1.5 text-sm" style={inputStyle} placeholder="https://youtu.be/..."
-                    value={videos[k] || ""} onChange={(e) => upd({ videos: { ...videos, [k]: e.target.value } })} />
-                </div>
+                {isAdmin ? (
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-bold w-16" style={{ color: C.sub }}>{label}</span>
+                    <input className="flex-1 rounded-lg px-2 py-1.5 text-sm" style={getInputStyle(C)} placeholder="https://youtu.be/..."
+                      value={videos[k] || ""} onChange={(e) => upd({ videos: { ...videos, [k]: e.target.value } })} />
+                  </div>
+                ) : (
+                  <div className="text-xs font-bold mb-1" style={{ color: C.sub }}>{label}</div>
+                )}
                 {id && <div className="rounded-xl overflow-hidden" style={{ aspectRatio: "16/9" }}>
                   <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${id}`} title={`動画 ${label}`} frameBorder="0" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
                 </div>}
               </div>
             );
           })}
+          {!isAdmin && !vidKeys.some((k) => ytId(videos[k])) && (
+            <div className="text-sm text-center py-4" style={{ color: C.sub }}>まだ動画が登録されていません。</div>
+          )}
+          {isAdmin && periods > 4 && (
+            <div className="text-[10px] mt-1" style={{ color: C.sub }}>※OTのリンク欄も上に表示されています。</div>
+          )}
         </div>
       </Card>
       <Card>
@@ -1498,7 +1522,7 @@ function GameMedia({ data, save, game, oppName }) {
           <button className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.border}` }} onClick={copyText}>{copied ? "コピーしました!" : "テキストをコピー"}</button>
         </div>
         {(game.events || []).length > 0 && (
-          <pre className="mt-3 p-3 rounded-xl text-[10px] leading-relaxed overflow-x-auto max-h-48 overflow-y-auto" style={{ background: C.board, color: C.sub }}>{toText()}</pre>
+          <pre className="mt-3 p-3 rounded-xl text-[10px] leading-relaxed overflow-x-auto max-h-48 overflow-y-auto" style={{ background: C.card2, color: C.sub }}>{toText()}</pre>
         )}
       </Card>
     </div>
@@ -1591,6 +1615,7 @@ function ReportView({ data, game, mode, oppName, onClose }) {
 
 /* ============ 試合分析(画面) ============ */
 function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
+  const C = useC();
   const [scope, setScope] = useState("all");
   const a = analysisFor(data, game, scope);
   const mips = scope === "all" ? mipOf(game, data.players) : [];
@@ -1687,7 +1712,21 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
         </Card>
       )}
       {a.ownRows.length > 0 && (<Card><SectionTitle>自チーム 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.ownRows} accent={C.orange} /></Card>)}
-      {a.oppRows.length > 0 && (<Card><SectionTitle>相手 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.oppRows} accent={C.oppText} /></Card>)}
+      {a.oppRows.length > 0 && (
+        <Card>
+          <SectionTitle>相手 得点ランキング({a.scopeLabel}・上位5人)</SectionTitle>
+          <div className="space-y-1.5">
+            {[...a.oppRows].sort((x, y) => y.s.pts - x.s.pts).slice(0, 5).map(({ key, label, s }, i) => (
+              <div key={key} className="flex items-center gap-3 py-1.5" style={{ borderBottom: `1px solid ${C.border}44` }}>
+                <span className="w-6 text-center text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
+                <span className="flex-1 font-bold text-sm">{label}</span>
+                <span className="text-2xl font-bold" style={{ color: C.oppText, fontFamily: "'Bebas Neue', sans-serif" }}>{s.pts}</span>
+                <span className="text-xs" style={{ color: C.sub }}>点</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       {a.reviews.length > 0 && (
         <Card>
           <SectionTitle>選手別パフォーマンスレビュー</SectionTitle>
@@ -1717,6 +1756,7 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
 
 /* ============ ランキング ============ */
 function Ranking({ data, setTab, setNav }) {
+  const C = useC();
   const [stat, setStat] = useState("pts");
   const [mode, setMode] = useState("total");
   const rows = data.players.map((p) => {
@@ -1727,7 +1767,7 @@ function Ranking({ data, setTab, setNav }) {
   return (
     <Card>
       <div className="flex gap-2 mb-3">
-        <select className={inputCls} style={inputStyle} value={stat} onChange={(e) => setStat(e.target.value)}>
+        <select className={inputCls} style={getInputStyle(C)} value={stat} onChange={(e) => setStat(e.target.value)}>
           {STAT_DEFS.map((d) => <option key={d.k} value={d.k}>{d.label}</option>)}
         </select>
         <div className="flex rounded-xl overflow-hidden shrink-0 text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
@@ -1754,6 +1794,7 @@ function Ranking({ data, setTab, setNav }) {
 
 /* ============ 設定 ============ */
 function SettingsScreen({ data, save }) {
+  const C = useC();
   const [team, setTeam] = useState(data.team);
   const [oppForm, setOppForm] = useState({ name: "", area: "", numbers: "" });
   const [editOpp, setEditOpp] = useState(null);
@@ -1801,8 +1842,8 @@ function SettingsScreen({ data, save }) {
           </label>
           {team.logo && <button className="text-xs" style={{ color: C.loss }} onClick={() => setTeam({ ...team, logo: "" })}>削除</button>}
         </div>
-        <Field label="チーム名"><input className={inputCls} style={inputStyle} value={team.name} onChange={(e) => setTeam({ ...team, name: e.target.value })} /></Field>
-        <Field label="ホームコート"><input className={inputCls} style={inputStyle} value={team.homeCourt} onChange={(e) => setTeam({ ...team, homeCourt: e.target.value })} /></Field>
+        <Field label="チーム名"><input className={inputCls} style={getInputStyle(C)} value={team.name} onChange={(e) => setTeam({ ...team, name: e.target.value })} /></Field>
+        <Field label="ホームコート"><input className={inputCls} style={getInputStyle(C)} value={team.homeCourt} onChange={(e) => setTeam({ ...team, homeCourt: e.target.value })} /></Field>
         <PrimaryBtn onClick={() => save({ ...data, team })}>チーム情報を保存</PrimaryBtn>
       </Card>
       <Card>
@@ -1822,9 +1863,9 @@ function SettingsScreen({ data, save }) {
                   </label>
                   {oppDraft?.logo && <button className="text-xs" style={{ color: C.loss }} onClick={() => setOppDraft({ ...oppDraft, logo: "" })}>削除</button>}
                 </div>
-                <input className={inputCls + " mb-2"} style={inputStyle} placeholder="チーム名" value={oppDraft.name} onChange={(e) => setOppDraft({ ...oppDraft, name: e.target.value })} />
-                <input className={inputCls + " mb-2"} style={inputStyle} placeholder="地区(都内は区市町村名、他県は県名)" value={oppDraft.area || ""} onChange={(e) => setOppDraft({ ...oppDraft, area: e.target.value })} />
-                <input className={inputCls + " mb-2"} style={inputStyle} placeholder="背番号(カンマ区切り) 4,5,6,7" value={oppDraft.numbers || ""} onChange={(e) => setOppDraft({ ...oppDraft, numbers: e.target.value })} />
+                <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppDraft.name} onChange={(e) => setOppDraft({ ...oppDraft, name: e.target.value })} />
+                <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppDraft.area || ""} onChange={(e) => setOppDraft({ ...oppDraft, area: e.target.value })} />
+                <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り) 4,5,6,7" value={oppDraft.numbers || ""} onChange={(e) => setOppDraft({ ...oppDraft, numbers: e.target.value })} />
                 <div className="flex gap-3">
                   <button className="text-sm font-bold" style={{ color: C.orange }} onClick={commitEdit}>保存</button>
                   <button className="text-sm" style={{ color: C.sub }} onClick={() => { setEditOpp(null); setOppDraft(null); }}>キャンセル</button>
@@ -1848,9 +1889,9 @@ function SettingsScreen({ data, save }) {
             <div className="text-xs" style={{ color: C.loss }}>登録上限({MAX_OPPONENTS}チーム)に達しました。</div>
           ) : (
             <>
-              <input className={inputCls + " mb-2"} style={inputStyle} placeholder="チーム名" value={oppForm.name} onChange={(e) => setOppForm({ ...oppForm, name: e.target.value })} />
-              <input className={inputCls + " mb-2"} style={inputStyle} placeholder="地区(都内は区市町村名、他県は県名)" value={oppForm.area} onChange={(e) => setOppForm({ ...oppForm, area: e.target.value })} />
-              <input className={inputCls + " mb-2"} style={inputStyle} placeholder="背番号(カンマ区切り)" value={oppForm.numbers} onChange={(e) => setOppForm({ ...oppForm, numbers: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppForm.name} onChange={(e) => setOppForm({ ...oppForm, name: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppForm.area} onChange={(e) => setOppForm({ ...oppForm, area: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り)" value={oppForm.numbers} onChange={(e) => setOppForm({ ...oppForm, numbers: e.target.value })} />
               <PrimaryBtn disabled={!oppForm.name} onClick={() => { save({ ...data, opponents: [...data.opponents, { id: uid(), logo: "", ...oppForm }] }); setOppForm({ name: "", area: "", numbers: "" }); }}>対戦相手を追加</PrimaryBtn>
             </>
           )}
