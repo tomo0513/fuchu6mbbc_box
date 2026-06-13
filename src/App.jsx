@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { loadData, saveData } from "./firebase.js";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid, Legend,
+  ResponsiveContainer, CartesianGrid, Legend, ReferenceLine,
 } from "recharts";
 import {
   Home, ClipboardList, Users, Trophy, Settings, Plus, Trash2,
@@ -693,19 +693,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
 
   const recentGames = results.slice(0, isPC ? 5 : 3);
 
-  // 府中市内の勝敗・Tier別勝敗を集計
-  const wldOf = (rs) => ({
-    w: rs.filter((r) => r.own > r.opp).length,
-    l: rs.filter((r) => r.own < r.opp).length,
-    d: rs.filter((r) => r.own === r.opp).length,
-  });
-  const fuchuResults = results.filter((r) => (getOpp(r.g.opponentId)?.area || "").includes("府中"));
-  const fuchu = wldOf(fuchuResults);
-  const tierStats = TIERS.map((t) => {
-    const rs = results.filter((r) => getOpp(r.g.opponentId)?.tier === t.k);
-    return { t, ...wldOf(rs), n: rs.length };
-  });
-
   return (
     <div className={isPC ? "grid grid-cols-2 gap-5" : "space-y-3"}>
       {/* 成績カード */}
@@ -721,54 +708,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
           <div><div className="text-2xl font-bold">{fmt1(avgPA)}</div><div className="text-xs" style={{ color: C.sub }}>平均失点</div></div>
           <div><div className="text-2xl font-bold" style={{ color: avgPF - avgPA >= 0 ? C.win : C.loss }}>{(avgPF - avgPA >= 0 ? "+" : "") + fmt1(avgPF - avgPA)}</div><div className="text-xs" style={{ color: C.sub }}>得失点差</div></div>
         </div>
-      </Card>
-
-      {/* 府中市内・Tier別の勝敗 */}
-      <Card className={isPC ? "col-span-2" : ""}>
-        <SectionTitle>相手レベル別の成績</SectionTitle>
-        <div className="flex items-center gap-3 mb-3 pb-3" style={{ borderBottom: `1px solid ${C.border}` }}>
-          <div className="text-2xl">🏙️</div>
-          <div className="flex-1">
-            <div className="font-bold text-sm">府中市内のチーム</div>
-            <div className="text-[10px]" style={{ color: C.sub }}>地区に「府中」を含む相手との対戦</div>
-          </div>
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
-            <span className="text-3xl" style={{ color: C.win }}>{fuchu.w}</span>
-            <span className="text-sm mx-0.5" style={{ color: C.sub }}>勝</span>
-            <span className="text-3xl" style={{ color: C.loss }}>{fuchu.l}</span>
-            <span className="text-sm ml-0.5" style={{ color: C.sub }}>敗</span>
-            {fuchu.d > 0 && <span className="text-xs ml-1" style={{ color: C.sub, fontFamily: "sans-serif" }}>({fuchu.d}分)</span>}
-          </div>
-        </div>
-        <div className="space-y-2">
-          {tierStats.map(({ t, w, l, d, n }) => (
-            <div key={t.k} className="flex items-center gap-3">
-              <span className="text-xs font-bold px-2 py-1 rounded text-white shrink-0 w-7 text-center" style={{ background: t.color }}>{t.k}</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold">{t.desc}</div>
-                {n > 0 && (
-                  <div className="h-1.5 rounded-full overflow-hidden mt-1 flex" style={{ background: C.card2 }}>
-                    <div style={{ width: `${(w / n) * 100}%`, background: C.win }} />
-                    <div style={{ width: `${(d / n) * 100}%`, background: C.sub }} />
-                    <div style={{ width: `${(l / n) * 100}%`, background: C.loss }} />
-                  </div>
-                )}
-              </div>
-              <div className="shrink-0 text-right" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
-                {n === 0 ? <span className="text-xs" style={{ color: C.sub, fontFamily: "sans-serif" }}>対戦なし</span> : (
-                  <>
-                    <span className="text-xl" style={{ color: C.win }}>{w}</span>
-                    <span className="text-xs" style={{ color: C.sub }}>勝</span>
-                    <span className="text-xl ml-1" style={{ color: C.loss }}>{l}</span>
-                    <span className="text-xs" style={{ color: C.sub }}>敗</span>
-                    {d > 0 && <span className="text-[10px] ml-1" style={{ color: C.sub, fontFamily: "sans-serif" }}>({d}分)</span>}
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="text-[10px] mt-2" style={{ color: C.sub }}>Tierは設定タブの対戦相手登録で設定できます。</div>
       </Card>
 
       {/* 注目選手 */}
@@ -872,7 +811,7 @@ function PlayerForm({ initial, onSave, onCancel }) {
   );
 }
 
-function PlayerList({ data, save, setNav, isPC }) {
+function PlayerList({ data, save, setNav, isPC, isAdmin }) {
   const C = useC();
   const [adding, setAdding] = useState(false);
   const players = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
@@ -882,11 +821,11 @@ function PlayerList({ data, save, setNav, isPC }) {
   );
   return (
     <div className="space-y-3">
-      <button onClick={() => setAdding(true)}
+      {isAdmin && <button onClick={() => setAdding(true)}
         className="w-full flex items-center justify-center gap-1 py-3 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.orange }}
         disabled={players.length >= MAX_PLAYERS}>
         <Plus size={18} /> 選手を追加 {players.length >= MAX_PLAYERS ? `(上限${MAX_PLAYERS}人)` : ""}
-      </button>
+      </button>}
       {players.length === 0 && (
         <Card className="text-center text-sm py-8" style={{ color: C.sub }}>選手を登録すると、ここに一覧が表示されます。</Card>
       )}
@@ -914,14 +853,31 @@ function PlayerList({ data, save, setNav, isPC }) {
   );
 }
 
-function PlayerKarte({ data, save, nav, setNav }) {
+function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const C = useC();
   const p = data.players.find((x) => x.id === nav.playerId);
   const [editing, setEditing] = useState(false);
+  const [trendStat, setTrendStat] = useState("eff"); // 推移グラフの表示項目
   if (!p) return null;
   const games = [...data.games].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const { per, n, tot } = careerStats(games, p.id);
-  const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, 得点: x.s.pts, EFF: x.s.eff }));
+  const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
+  // 推移グラフ: EFF/得点/アシスト/リバウンドから選択
+  const TREND_OPTS = [
+    { k: "eff", label: "EFF", color: "#3DBE7B" },
+    { k: "pts", label: "得点", color: "#FF7A3D" },
+    { k: "ast", label: "アシスト", color: "#5B9BD5" },
+    { k: "reb", label: "リバウンド", color: "#FFB23E" },
+  ];
+  const trendOpt = TREND_OPTS.find((o) => o.k === trendStat);
+  const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, value: x.s[trendStat] }));
+  // キャリアハイ(1試合の最高記録)
+  const careerHigh = {};
+  ["pts", "reb", "ast", "stl", "blk", "eff"].forEach((k) => {
+    let best = null;
+    for (const x of per) { if (best === null || x.s[k] > best.v) best = { v: x.s[k], g: x.g }; }
+    careerHigh[k] = best;
+  });
   const targets = (p.targets || []).filter((t) => t.value !== "");
   if (editing) return (
     <PlayerForm initial={p} onCancel={() => setEditing(false)}
@@ -934,10 +890,10 @@ function PlayerKarte({ data, save, nav, setNav }) {
           <ChevronLeft size={16} /> 選手一覧
         </button>
         <div className="flex gap-3">
-          <button style={{ color: C.sub }} onClick={() => setEditing(true)}><Pencil size={18} /></button>
-          <button style={{ color: C.sub }} onClick={() => {
+          {isAdmin && <button style={{ color: C.sub }} onClick={() => setEditing(true)}><Pencil size={18} /></button>}
+          {isAdmin && <button style={{ color: C.sub }} onClick={() => {
             if (confirm(`「${p.name}」を削除しますか?`)) { save({ ...data, players: data.players.filter((x) => x.id !== p.id) }); setNav({}); }
-          }}><Trash2 size={18} /></button>
+          }}><Trash2 size={18} /></button>}
         </div>
       </div>
       <Card>
@@ -1004,37 +960,62 @@ function PlayerKarte({ data, save, nav, setNav }) {
               <div><span className="font-bold text-lg">{pct(tot.ftm, tot.fta)}</span><div className="text-[10px]" style={{ color: C.sub }}>FT%</div></div>
               <div><span className="font-bold text-lg">{fmt1(tot.min / n)}</span><div className="text-[10px]" style={{ color: C.sub }}>平均出場(分)</div></div>
             </div>
+            <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div className="text-[10px] font-bold mb-2" style={{ color: C.led }}>🏅 キャリアハイ(1試合最高)</div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[["得点", "pts"], ["リバウンド", "reb"], ["アシスト", "ast"], ["スティール", "stl"], ["ブロック", "blk"], ["EFF", "eff"]].map(([l, k]) => {
+                  const ch = careerHigh[k];
+                  return (
+                    <div key={k} className="rounded-xl py-2" style={{ background: C.card2 }}>
+                      <div className="text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: C.led }}>{ch ? ch.v : "–"}</div>
+                      <div className="text-[10px]" style={{ color: C.sub }}>{l}</div>
+                      {ch && <div className="text-[9px] truncate px-1" style={{ color: C.sub }}>vs {oppNm(ch.g)}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </>
         )}
       </Card>
       {n > 0 && (
         <Card>
           <SectionTitle>試合ごとの推移</SectionTitle>
+          <div className="flex gap-1.5 mb-3">
+            {TREND_OPTS.map((o) => (
+              <button key={o.k} onClick={() => setTrendStat(o.k)}
+                className="flex-1 py-2 rounded-lg text-xs font-bold"
+                style={trendStat === o.k ? { background: o.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}>
+                {o.label}
+              </button>
+            ))}
+          </div>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chart} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
               <XAxis dataKey="name" fontSize={10} stroke={C.sub} />
               <YAxis fontSize={10} allowDecimals={false} stroke={C.sub} />
               <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, color: C.text }} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="得点" stroke={C.orange} strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="EFF" stroke={C.win} strokeWidth={2} dot={{ r: 3 }} />
+              <ReferenceLine y={0} stroke={C.sub} strokeWidth={1.5} />
+              <Line type="monotone" dataKey="value" name={trendOpt?.label} stroke={trendOpt?.color} strokeWidth={2.5} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
+          <div className="text-[10px] text-center" style={{ color: C.sub }}>{trendOpt?.label}の試合ごとの推移</div>
         </Card>
       )}
       {n > 0 && (
         <Card>
           <SectionTitle>試合別スタッツ</SectionTitle>
           <div className="overflow-x-auto -mx-1">
-            <table className="text-xs w-full min-w-[520px]">
+            <table className="text-xs w-full min-w-[600px]">
               <thead><tr style={{ color: C.sub, borderBottom: `1px solid ${C.border}` }}>
-                {["日付","得点","REB","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
+                {["日付","対戦相手","得点","REB","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
               </tr></thead>
               <tbody>
                 {[...per].reverse().map(({ g, s }) => (
                   <tr key={g.id} style={{ borderBottom: `1px solid ${C.border}44` }}>
                     <td className="py-1.5 px-1 whitespace-nowrap">{g.date?.slice(5)}</td>
+                    <td className="px-1 whitespace-nowrap truncate" style={{ color: C.sub, maxWidth: 90 }}>{oppNm(g)}</td>
                     <td className="px-1 font-bold" style={{ color: C.orange }}>{s.pts}</td><td className="px-1">{s.reb}</td>
                     <td className="px-1">{s.ast}</td><td className="px-1">{s.stl}</td><td className="px-1">{s.blk}</td>
                     <td className="px-1">{s.to}</td><td className="px-1">{s.pf}</td><td className="px-1">{s.min}</td>
@@ -1129,12 +1110,13 @@ function GameRow({ g, setNav, showOpp, oppName }) {
   );
 }
 
-function GameList({ data, save, setNav, oppName, getOpp, isPC }) {
+function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   const C = useC();
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState("list");
   const [openKey, setOpenKey] = useState(null);
   const games = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const results = games.map((g) => ({ g, ...gamePts(g) }));
   if (adding) return (
     <GameForm data={data} onCancel={() => setAdding(false)}
       onSave={(f) => {
@@ -1163,11 +1145,89 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC }) {
   };
   return (
     <div className="space-y-3">
-      <button onClick={() => setAdding(true)}
+      {isAdmin && <button onClick={() => setAdding(true)}
         className="w-full flex items-center justify-center gap-1 py-3 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.orange }}
         disabled={games.length >= MAX_GAMES}>
         <Plus size={18} /> 試合を登録 {games.length >= MAX_GAMES ? `(上限${MAX_GAMES}試合)` : ""}
-      </button>
+      </button>}
+
+      {/* 相手レベル別・府中市内の成績 */}
+      {games.length > 0 && (() => {
+        const wldOf2 = (rs) => ({ w: rs.filter((r) => r.own > r.opp).length, l: rs.filter((r) => r.own < r.opp).length, d: rs.filter((r) => r.own === r.opp).length });
+        const fuchuRs = results.filter((r) => (getOpp(r.g.opponentId)?.area || "").includes("府中"));
+        const fuchu2 = wldOf2(fuchuRs);
+        const tierStats2 = TIERS.map((t) => {
+          const rs = results.filter((r) => getOpp(r.g.opponentId)?.tier === t.k);
+          return { t, ...wldOf2(rs), n: rs.length, rs };
+        });
+        return (
+          <Card>
+            <SectionTitle>相手レベル別の成績</SectionTitle>
+            {/* 府中市内 */}
+            <button className="w-full flex items-center gap-3 pb-3 text-left" style={{ borderBottom: `1px solid ${C.border}` }}
+              onClick={() => setOpenKey(openKey === "fuchu" ? null : "fuchu")}>
+              <div className="text-2xl">🏙️</div>
+              <div className="flex-1">
+                <div className="font-bold text-sm">府中市内のチーム</div>
+                <div className="text-[10px]" style={{ color: C.sub }}>{fuchuRs.length}試合</div>
+              </div>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
+                <span className="text-2xl" style={{ color: C.win }}>{fuchu2.w}</span>
+                <span className="text-xs mx-0.5" style={{ color: C.sub }}>勝</span>
+                <span className="text-2xl" style={{ color: C.loss }}>{fuchu2.l}</span>
+                <span className="text-xs ml-0.5" style={{ color: C.sub }}>敗</span>
+                {fuchu2.d > 0 && <span className="text-[10px] ml-1" style={{ color: C.sub, fontFamily: "sans-serif" }}>({fuchu2.d}分)</span>}
+              </div>
+              <ChevronDown size={16} style={{ color: C.sub, transform: openKey === "fuchu" ? "rotate(180deg)" : "none" }} />
+            </button>
+            {openKey === "fuchu" && (
+              <div className="py-2 space-y-2">
+                {fuchuRs.length === 0 ? <div className="text-xs" style={{ color: C.sub }}>対戦なし</div>
+                  : fuchuRs.map((r) => <GameRow key={r.g.id} g={r.g} setNav={setNav} showOpp oppName={oppName} />)}
+              </div>
+            )}
+            {/* Tier別 */}
+            <div className="space-y-2 mt-3">
+              {tierStats2.map(({ t, w, l, d, n, rs }) => (
+                <div key={t.k}>
+                  <button className="w-full flex items-center gap-3 text-left py-1"
+                    onClick={() => n > 0 && setOpenKey(openKey === t.k ? null : t.k)}>
+                    <span className="text-xs font-bold px-2 py-1 rounded text-white shrink-0 w-7 text-center" style={{ background: t.color }}>{t.k}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold">{t.desc}</div>
+                      {n > 0 && (
+                        <div className="h-1.5 rounded-full overflow-hidden mt-1 flex" style={{ background: C.card2 }}>
+                          <div style={{ width: `${(w / n) * 100}%`, background: C.win }} />
+                          <div style={{ width: `${(d / n) * 100}%`, background: C.sub }} />
+                          <div style={{ width: `${(l / n) * 100}%`, background: C.loss }} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
+                      {n === 0 ? <span className="text-xs" style={{ color: C.sub, fontFamily: "sans-serif" }}>対戦なし</span> : (
+                        <>
+                          <span className="text-lg" style={{ color: C.win }}>{w}</span>
+                          <span className="text-[10px]" style={{ color: C.sub }}>勝</span>
+                          <span className="text-lg ml-1" style={{ color: C.loss }}>{l}</span>
+                          <span className="text-[10px]" style={{ color: C.sub }}>敗</span>
+                          {d > 0 && <span className="text-[10px] ml-1" style={{ color: C.sub, fontFamily: "sans-serif" }}>({d}分)</span>}
+                        </>
+                      )}
+                    </div>
+                    {n > 0 && <ChevronDown size={16} style={{ color: C.sub, transform: openKey === t.k ? "rotate(180deg)" : "none" }} />}
+                  </button>
+                  {openKey === t.k && n > 0 && (
+                    <div className="py-2 space-y-2 pl-9">
+                      {rs.map((r) => <GameRow key={r.g.id} g={r.g} setNav={setNav} showOpp oppName={oppName} />)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="text-[10px] mt-2" style={{ color: C.sub }}>Tierは設定タブの対戦相手登録で設定できます。各行をタップで対戦相手を表示。</div>
+          </Card>
+        );
+      })()}
       <Seg items={[["list", "試合一覧"], ["byTour", "大会別"], ["byOpp", "相手別"]]} value={mode} onChange={(m) => { setMode(m); setOpenKey(null); }} />
       {mode === "list" && (
         <div className={isPC ? "grid grid-cols-2 gap-3" : "space-y-2"}>
