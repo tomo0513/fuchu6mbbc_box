@@ -106,7 +106,7 @@ const INVERSE_STATS = new Set(["to", "pf"]);
 /* ============ 相手チームのTier(強さ) ============ */
 const TIERS = [
   { k: "A", label: "A", desc: "都大会上位レベル", color: "#E25C5C" },
-  { k: "B", label: "B", desc: "府中大会優勝レベル", color: "#FF7A3D" },
+  { k: "B", label: "B", desc: "府中大会上位レベル", color: "#FF7A3D" },
   { k: "C", label: "C", desc: "同格", color: "#FFB23E" },
   { k: "D", label: "D", desc: "格下", color: "#3DBE7B" },
 ];
@@ -147,6 +147,16 @@ function ytId(url) {
   return m ? m[1] : null;
 }
 
+// 画像URLを直接表示可能な形に変換(Googleドライブの共有リンク対応)
+function imgUrl(url) {
+  if (!url) return null;
+  const s = String(url).trim();
+  // Googleドライブ: /file/d/XXX/view または ?id=XXX → 直接表示URL
+  const m = s.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]+)/);
+  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000`;
+  return s; // それ以外(Imgur, iCloud, 直リンク等)はそのまま
+}
+
 /* ============ ピリオドヘルパー ============ */
 const periodsOf = (g) => 4 + (+g?.ot || 0);
 const periodLabel = (i) => (i <= 4 ? `Q${i}` : `OT${i - 4}`);
@@ -156,7 +166,7 @@ const normGame = (g) => {
   const { scoreSheet, ...rest } = g;
   return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0,
     qScores: { own: padQ(g.qScores?.own), opp: padQ(g.qScores?.opp) },
-    events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {} };
+    events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
 
 /* ============ スタッツ計算 ============ */
@@ -1359,14 +1369,16 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     <div className="space-y-3">
       {/* 管理者のみ入力UI表示 */}
       {!isAdmin && (
-        <div className="text-center py-4 px-3 rounded-xl text-sm" style={{ background: C.card2, color: C.sub }}>
-          閲覧モードです。スタッツ入力は管理者のみ行えます。<br />
-          <button className="mt-2 text-xs font-bold underline" style={{ color: C.orange }}
-            onClick={() => {
-              const p = prompt("管理者パスワードを入力してください");
-              if (p !== null) { if (!window.__adminLogin) window.__adminLogin = () => {}; }
-            }}>管理者としてログイン</button>
-        </div>
+        <Card>
+          <div className="text-xs mb-2" style={{ color: C.sub }}>閲覧モードです。Qを選んでプレイログを確認できます。</div>
+          <div className="flex gap-1.5 overflow-x-auto">
+            {Array.from({ length: periods }, (_, i) => i + 1).map((n) => (
+              <button key={n} className="flex-1 min-w-14 py-2.5 rounded-lg font-bold"
+                style={q === n ? { background: C.orange, color: "#fff" } : { background: C.card2, color: C.sub }}
+                onClick={() => setQ(n)}>{periodLabel(n)}</button>
+            ))}
+          </div>
+        </Card>
       )}
       {isAdmin && <Card>
         {/* Q選択 + 固定トグル */}
@@ -1596,6 +1608,55 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
           )}
         </div>
       </Card>
+
+      {/* スコアカード写真 */}
+      <Card>
+        <SectionTitle>スコアカード(写真)</SectionTitle>
+        {(() => {
+          const cards = game.scoreCards || [];
+          return (
+            <>
+              <div className="space-y-3">
+                {cards.map((url, i) => {
+                  const src = imgUrl(url);
+                  return (
+                    <div key={i}>
+                      {isAdmin && (
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold w-12 shrink-0" style={{ color: C.sub }}>{i + 1}枚目</span>
+                          <input className="flex-1 rounded-lg px-2 py-1.5 text-sm" style={getInputStyle(C)} placeholder="画像のURL"
+                            value={url} onChange={(e) => upd({ scoreCards: cards.map((c, j) => j === i ? e.target.value : c) })} />
+                          <button className="p-1.5 shrink-0" style={{ color: C.loss }}
+                            onClick={() => upd({ scoreCards: cards.filter((_, j) => j !== i) })}><Trash2 size={16} /></button>
+                        </div>
+                      )}
+                      {src && <img src={src} alt={`スコアカード${i + 1}`} className="w-full rounded-xl"
+                        style={{ border: `1px solid ${C.border}` }} loading="lazy"
+                        referrerPolicy="no-referrer" />}
+                    </div>
+                  );
+                })}
+              </div>
+              {isAdmin && (
+                <>
+                  <button className="mt-3 w-full flex items-center justify-center gap-1 py-2.5 rounded-xl font-bold text-sm"
+                    style={{ border: `1px solid ${C.border}`, color: C.orange }}
+                    onClick={() => upd({ scoreCards: [...cards, ""] })}>
+                    <Plus size={16} /> スコアカードを追加
+                  </button>
+                  <div className="text-[10px] mt-2 leading-relaxed" style={{ color: C.sub }}>
+                    ※写真はGoogleドライブ等にアップして、その共有リンク(「リンクを知っている全員」に設定)を貼ってください。アプリ本体には画像を保存しないので容量を消費しません。Googleドライブのリンクは自動で表示用に変換されます。
+                  </div>
+                </>
+              )}
+              {!isAdmin && cards.filter((c) => imgUrl(c)).length === 0 && (
+                <div className="text-sm text-center py-4" style={{ color: C.sub }}>まだスコアカードが登録されていません。</div>
+              )}
+            </>
+          );
+        })()}
+      </Card>
+
       <Card>
         <SectionTitle>TeamHub用 書き出し</SectionTitle>
         <div className="flex gap-2">
@@ -1997,7 +2058,7 @@ function SettingsScreen({ data, save }) {
                 ))}
               </div>
               <div className="text-[10px] mb-2" style={{ color: C.sub }}>
-                {oppForm.tier ? tierOf(oppForm.tier)?.desc : "A:都大会上位 / B:府中優勝レベル / C:同格 / D:格下"}
+                {oppForm.tier ? tierOf(oppForm.tier)?.desc : "A:都大会上位 / B:府中上位レベル / C:同格 / D:格下"}
               </div>
               <PrimaryBtn disabled={!oppForm.name} onClick={() => { save({ ...data, opponents: [...data.opponents, { id: uid(), logo: "", ...oppForm }] }); setOppForm({ name: "", area: "", numbers: "", tier: "" }); }}>対戦相手を追加</PrimaryBtn>
             </>
