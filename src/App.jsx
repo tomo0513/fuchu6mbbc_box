@@ -103,6 +103,15 @@ const STAT_DEFS = [
 ];
 const INVERSE_STATS = new Set(["to", "pf"]);
 
+/* ============ 相手チームのTier(強さ) ============ */
+const TIERS = [
+  { k: "A", label: "A", desc: "都大会上位レベル", color: "#E25C5C" },
+  { k: "B", label: "B", desc: "府中大会優勝レベル", color: "#FF7A3D" },
+  { k: "C", label: "C", desc: "同格", color: "#FFB23E" },
+  { k: "D", label: "D", desc: "格下", color: "#3DBE7B" },
+];
+const tierOf = (k) => TIERS.find((t) => t.k === k);
+
 /* ============ ユーティリティ ============ */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const fmt1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
@@ -561,6 +570,10 @@ export default function App() {
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         input::placeholder, textarea::placeholder { color: ${CT.sub}88; }
         select option { background: ${CT.inputBg}; color: ${CT.text}; }
+        .play-btn { transition: transform .08s, background .15s, color .15s; -webkit-tap-highlight-color: transparent; }
+        .play-btn:not(:disabled):active { transform: scale(0.92); background: var(--btn-col) !important; color: #fff !important; }
+        @keyframes flashPop { 0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.9); } 15% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+        .flash-toast { animation: flashPop 1.3s ease-out forwards; }
         @media print {
           body * { visibility: hidden; }
           .report-root, .report-root * { visibility: visible; }
@@ -670,6 +683,19 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
 
   const recentGames = results.slice(0, isPC ? 5 : 3);
 
+  // 府中市内の勝敗・Tier別勝敗を集計
+  const wldOf = (rs) => ({
+    w: rs.filter((r) => r.own > r.opp).length,
+    l: rs.filter((r) => r.own < r.opp).length,
+    d: rs.filter((r) => r.own === r.opp).length,
+  });
+  const fuchuResults = results.filter((r) => (getOpp(r.g.opponentId)?.area || "").includes("府中"));
+  const fuchu = wldOf(fuchuResults);
+  const tierStats = TIERS.map((t) => {
+    const rs = results.filter((r) => getOpp(r.g.opponentId)?.tier === t.k);
+    return { t, ...wldOf(rs), n: rs.length };
+  });
+
   return (
     <div className={isPC ? "grid grid-cols-2 gap-5" : "space-y-3"}>
       {/* 成績カード */}
@@ -685,6 +711,54 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
           <div><div className="text-2xl font-bold">{fmt1(avgPA)}</div><div className="text-xs" style={{ color: C.sub }}>平均失点</div></div>
           <div><div className="text-2xl font-bold" style={{ color: avgPF - avgPA >= 0 ? C.win : C.loss }}>{(avgPF - avgPA >= 0 ? "+" : "") + fmt1(avgPF - avgPA)}</div><div className="text-xs" style={{ color: C.sub }}>得失点差</div></div>
         </div>
+      </Card>
+
+      {/* 府中市内・Tier別の勝敗 */}
+      <Card className={isPC ? "col-span-2" : ""}>
+        <SectionTitle>相手レベル別の成績</SectionTitle>
+        <div className="flex items-center gap-3 mb-3 pb-3" style={{ borderBottom: `1px solid ${C.border}` }}>
+          <div className="text-2xl">🏙️</div>
+          <div className="flex-1">
+            <div className="font-bold text-sm">府中市内のチーム</div>
+            <div className="text-[10px]" style={{ color: C.sub }}>地区に「府中」を含む相手との対戦</div>
+          </div>
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
+            <span className="text-3xl" style={{ color: C.win }}>{fuchu.w}</span>
+            <span className="text-sm mx-0.5" style={{ color: C.sub }}>勝</span>
+            <span className="text-3xl" style={{ color: C.loss }}>{fuchu.l}</span>
+            <span className="text-sm ml-0.5" style={{ color: C.sub }}>敗</span>
+            {fuchu.d > 0 && <span className="text-xs ml-1" style={{ color: C.sub, fontFamily: "sans-serif" }}>({fuchu.d}分)</span>}
+          </div>
+        </div>
+        <div className="space-y-2">
+          {tierStats.map(({ t, w, l, d, n }) => (
+            <div key={t.k} className="flex items-center gap-3">
+              <span className="text-xs font-bold px-2 py-1 rounded text-white shrink-0 w-7 text-center" style={{ background: t.color }}>{t.k}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold">{t.desc}</div>
+                {n > 0 && (
+                  <div className="h-1.5 rounded-full overflow-hidden mt-1 flex" style={{ background: C.card2 }}>
+                    <div style={{ width: `${(w / n) * 100}%`, background: C.win }} />
+                    <div style={{ width: `${(d / n) * 100}%`, background: C.sub }} />
+                    <div style={{ width: `${(l / n) * 100}%`, background: C.loss }} />
+                  </div>
+                )}
+              </div>
+              <div className="shrink-0 text-right" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
+                {n === 0 ? <span className="text-xs" style={{ color: C.sub, fontFamily: "sans-serif" }}>対戦なし</span> : (
+                  <>
+                    <span className="text-xl" style={{ color: C.win }}>{w}</span>
+                    <span className="text-xs" style={{ color: C.sub }}>勝</span>
+                    <span className="text-xl ml-1" style={{ color: C.loss }}>{l}</span>
+                    <span className="text-xs" style={{ color: C.sub }}>敗</span>
+                    {d > 0 && <span className="text-[10px] ml-1" style={{ color: C.sub, fontFamily: "sans-serif" }}>({d}分)</span>}
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="text-[10px] mt-2" style={{ color: C.sub }}>Tierは設定タブの対戦相手登録で設定できます。</div>
       </Card>
 
       {/* 注目選手 */}
@@ -1214,6 +1288,8 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const [insertAfter, setInsertAfter] = useState(null);
   const [showLineup, setShowLineup] = useState(false);
   const [qLocked, setQLocked] = useState(false); // Q固定モード
+  const [flash, setFlash] = useState(null); // 直近に記録したアクションのフラッシュ表示
+  const flashTimer = useRef(null);
 
   // side変更時: 相手ならTEAM_KEYをデフォルト選択
   const changeSide = (k) => {
@@ -1259,6 +1335,11 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     });
     // sel・side・timeは保持(前の入力を引き継ぐ)
     if (insertAfter) setInsertAfter(ev.id);
+    // 視覚フィードバック: 記録内容を一瞬表示
+    const who = key === TEAM_KEY ? (side === "own" ? "自チーム" : "相手チーム") : (side === "own" ? pName(key) : `相手 #${key}`);
+    setFlash({ id: ev.id, text: `${who} – ${ACTION_LABEL[action]}${pts ? ` (+${pts})` : ""}` });
+    clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 1300);
   };
   const delEvent = (id) => {
     const ev = (game.events || []).find((e) => e.id === id);
@@ -1382,15 +1463,16 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         <div className="grid grid-cols-3 gap-1.5">
           {ACTIONS.map((a) => {
             const disabled = !sel || (a.sub && sel === TEAM_KEY);
+            const col = a.good ? C.win : a.bad ? C.loss : C.text;
             return (
               <button key={a.k} disabled={disabled} onClick={() => addEvent(a.k)}
-                className="py-2.5 rounded-xl text-xs font-bold disabled:opacity-30 active:scale-95 transition-transform"
-                style={{ border: `1px solid ${a.good ? C.win : a.bad ? C.loss : C.border}`, color: a.good ? C.win : a.bad ? C.loss : C.text, background: C.card2 }}>{a.label}</button>
+                className="play-btn py-3 rounded-xl text-xs font-bold disabled:opacity-30"
+                style={{ border: `1px solid ${a.good ? C.win : a.bad ? C.loss : C.border}`, color: col, background: C.card2, "--btn-col": col }}>{a.label}</button>
             );
           })}
           <button onClick={() => addEvent("TOT", true)}
-            className="py-2.5 rounded-xl text-xs font-bold active:scale-95 transition-transform col-span-3"
-            style={{ border: `1px solid ${C.led}`, color: C.led, background: C.card2 }}>
+            className="play-btn py-3 rounded-xl text-xs font-bold col-span-3"
+            style={{ border: `1px solid ${C.led}`, color: C.led, background: C.card2, "--btn-col": C.led }}>
             タイムアウト({side === "own" ? "自チーム" : "相手"})
           </button>
         </div>
@@ -1398,6 +1480,14 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
           {sel === TEAM_KEY ? "チーム全体のプレイとして記録します(24秒TOなど)" : sel ? "得点プレイはスコアボードに自動加算されます" : "選手(またはチーム)を選んでからアクションをタップ"}
         </div>
       </Card>}
+
+      {/* 記録トースト: 押したことが視覚的にわかる */}
+      {flash && (
+        <div className="fixed left-1/2 z-40 px-4 py-2.5 rounded-full text-sm font-bold shadow-lg pointer-events-none flash-toast"
+          style={{ bottom: 90, transform: "translateX(-50%)", background: C.win, color: "#fff" }}>
+          ✓ 記録しました: {flash.text}
+        </div>
+      )}
       {isAdmin && insertAfter && (
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold"
           style={{ background: "#3A2A14", border: `1px solid ${C.led}`, color: C.led }}>
@@ -1407,36 +1497,27 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         </div>
       )}
       <Card>
-        <SectionTitle>プレイログ({events.length})</SectionTitle>
-        {events.length === 0 ? <div className="text-sm" style={{ color: C.sub }}>記録されたプレイはまだありません。</div> : (
-          <div className="space-y-3 max-h-[500px] overflow-y-auto">
-            {Array.from({ length: periods }, (_, i) => i + 1).map((qn) => {
-              const qEvents = [...events].filter((e) => e.q === qn).reverse();
-              if (qEvents.length === 0) return null;
-              return (
-                <div key={qn}>
-                  <div className="text-xs font-bold py-1 px-2 rounded-lg mb-1 inline-block" style={{ background: C.orange, color: "#fff" }}>{periodLabel(qn)}</div>
-                  <div className="space-y-1">
-                    {qEvents.map((e) => (
-                      <div key={e.id} className="flex items-center gap-1.5 text-sm py-1.5 rounded-lg px-1"
-                        style={{ borderBottom: `1px solid ${C.border}44`, background: insertAfter === e.id ? "#3A2A1466" : "transparent" }}>
-                        <span className="text-xs w-9" style={{ color: C.sub }}>{e.time || "–"}</span>
-                        <span className="flex-1 truncate">
-                          {e.side === "own" ? pName(e.playerId) : (e.oppNum === TEAM_KEY ? "相手チーム" : `相手 #${e.oppNum}`)}
-                          <span style={{ color: e.side === "own" ? C.sub : C.oppText }}> – {ACTION_LABEL[e.action]}</span>
-                        </span>
-                        {PTS_OF[e.action] ? <span className="text-xs font-bold" style={{ color: C.led }}>+{PTS_OF[e.action]}</span> : null}
-                        {isAdmin && <>
-                          <button className="p-1" style={{ color: insertAfter === e.id ? C.led : C.sub }}
-                            onClick={() => setInsertAfter(insertAfter === e.id ? null : e.id)}><CornerDownRight size={14} /></button>
-                          <button className="p-1" style={{ color: C.sub }} onClick={() => delEvent(e.id)}><Trash2 size={14} /></button>
-                        </>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+        <SectionTitle>{periodLabel(q)}のプレイログ({events.filter((e) => e.q === q).length})</SectionTitle>
+        {events.filter((e) => e.q === q).length === 0 ? (
+          <div className="text-sm" style={{ color: C.sub }}>{periodLabel(q)}に記録されたプレイはまだありません。</div>
+        ) : (
+          <div className="space-y-1 max-h-[500px] overflow-y-auto">
+            {[...events].filter((e) => e.q === q).reverse().map((e) => (
+              <div key={e.id} className="flex items-center gap-1.5 text-sm py-1.5 rounded-lg px-1"
+                style={{ borderBottom: `1px solid ${C.border}44`, background: insertAfter === e.id ? "#3A2A1466" : "transparent" }}>
+                <span className="text-xs w-9" style={{ color: C.sub }}>{e.time || "–"}</span>
+                <span className="flex-1 truncate">
+                  {e.side === "own" ? pName(e.playerId) : (e.oppNum === TEAM_KEY ? "相手チーム" : `相手 #${e.oppNum}`)}
+                  <span style={{ color: e.side === "own" ? C.sub : C.oppText }}> – {ACTION_LABEL[e.action]}</span>
+                </span>
+                {PTS_OF[e.action] ? <span className="text-xs font-bold" style={{ color: C.led }}>+{PTS_OF[e.action]}</span> : null}
+                {isAdmin && <>
+                  <button className="p-1" style={{ color: insertAfter === e.id ? C.led : C.sub }}
+                    onClick={() => setInsertAfter(insertAfter === e.id ? null : e.id)}><CornerDownRight size={14} /></button>
+                  <button className="p-1" style={{ color: C.sub }} onClick={() => delEvent(e.id)}><Trash2 size={14} /></button>
+                </>}
+              </div>
+            ))}
           </div>
         )}
       </Card>
@@ -1796,7 +1877,7 @@ function Ranking({ data, setTab, setNav }) {
 function SettingsScreen({ data, save }) {
   const C = useC();
   const [team, setTeam] = useState(data.team);
-  const [oppForm, setOppForm] = useState({ name: "", area: "", numbers: "" });
+  const [oppForm, setOppForm] = useState({ name: "", area: "", numbers: "", tier: "" });
   const [editOpp, setEditOpp] = useState(null);
   const [oppDraft, setOppDraft] = useState(null);
   const oppCount = data.opponents.length;
@@ -1866,6 +1947,16 @@ function SettingsScreen({ data, save }) {
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppDraft.name} onChange={(e) => setOppDraft({ ...oppDraft, name: e.target.value })} />
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppDraft.area || ""} onChange={(e) => setOppDraft({ ...oppDraft, area: e.target.value })} />
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り) 4,5,6,7" value={oppDraft.numbers || ""} onChange={(e) => setOppDraft({ ...oppDraft, numbers: e.target.value })} />
+                <div className="text-xs mb-1" style={{ color: C.sub }}>強さ(Tier)</div>
+                <div className="flex gap-1.5 mb-2">
+                  {TIERS.map((t) => (
+                    <button key={t.k} onClick={() => setOppDraft({ ...oppDraft, tier: oppDraft.tier === t.k ? "" : t.k })}
+                      className="flex-1 py-2 rounded-lg text-xs font-bold"
+                      style={oppDraft.tier === t.k ? { background: t.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                      title={t.desc}>{t.label}</button>
+                  ))}
+                </div>
+                {oppDraft.tier && <div className="text-[10px] mb-2" style={{ color: C.sub }}>{tierOf(oppDraft.tier)?.desc}</div>}
                 <div className="flex gap-3">
                   <button className="text-sm font-bold" style={{ color: C.orange }} onClick={commitEdit}>保存</button>
                   <button className="text-sm" style={{ color: C.sub }} onClick={() => { setEditOpp(null); setOppDraft(null); }}>キャンセル</button>
@@ -1875,7 +1966,11 @@ function SettingsScreen({ data, save }) {
               <div className="flex items-center gap-2.5">
                 <OppLogo o={o} size={36} />
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm truncate">{o.name}{o.area ? <span className="font-normal text-xs" style={{ color: C.sub }}>({o.area})</span> : null}</div>
+                  <div className="font-bold text-sm truncate flex items-center gap-1.5">
+                    {o.tier && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white shrink-0" style={{ background: tierOf(o.tier)?.color }}>{o.tier}</span>}
+                    <span className="truncate">{o.name}</span>
+                    {o.area ? <span className="font-normal text-xs shrink-0" style={{ color: C.sub }}>({o.area})</span> : null}
+                  </div>
                   <div className="text-xs truncate" style={{ color: C.sub }}>背番号: {o.numbers || "未登録"}</div>
                 </div>
                 <button className="p-1.5" style={{ color: C.sub }} onClick={() => startEdit(o)}><Pencil size={16} /></button>
@@ -1892,7 +1987,19 @@ function SettingsScreen({ data, save }) {
               <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppForm.name} onChange={(e) => setOppForm({ ...oppForm, name: e.target.value })} />
               <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppForm.area} onChange={(e) => setOppForm({ ...oppForm, area: e.target.value })} />
               <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り)" value={oppForm.numbers} onChange={(e) => setOppForm({ ...oppForm, numbers: e.target.value })} />
-              <PrimaryBtn disabled={!oppForm.name} onClick={() => { save({ ...data, opponents: [...data.opponents, { id: uid(), logo: "", ...oppForm }] }); setOppForm({ name: "", area: "", numbers: "" }); }}>対戦相手を追加</PrimaryBtn>
+              <div className="text-xs mb-1" style={{ color: C.sub }}>強さ(Tier)</div>
+              <div className="flex gap-1.5 mb-1">
+                {TIERS.map((t) => (
+                  <button key={t.k} onClick={() => setOppForm({ ...oppForm, tier: oppForm.tier === t.k ? "" : t.k })}
+                    className="flex-1 py-2 rounded-lg text-xs font-bold"
+                    style={oppForm.tier === t.k ? { background: t.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                    title={t.desc}>{t.label}</button>
+                ))}
+              </div>
+              <div className="text-[10px] mb-2" style={{ color: C.sub }}>
+                {oppForm.tier ? tierOf(oppForm.tier)?.desc : "A:都大会上位 / B:府中優勝レベル / C:同格 / D:格下"}
+              </div>
+              <PrimaryBtn disabled={!oppForm.name} onClick={() => { save({ ...data, opponents: [...data.opponents, { id: uid(), logo: "", ...oppForm }] }); setOppForm({ name: "", area: "", numbers: "", tier: "" }); }}>対戦相手を追加</PrimaryBtn>
             </>
           )}
         </div>
