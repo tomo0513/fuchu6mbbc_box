@@ -302,6 +302,41 @@ function analysisFor(data, game, scope) {
     if (scope === "all" && qData[2] && qData[2].自チーム - qData[2].相手 < 0) tips.push("Q3の入りで失点が先行。ハーフタイム明けの最初の2分間の集中を声かけしましょう。");
     if (tips.length === 0) tips.push("大きな課題は見当たりません。この内容を継続しましょう。");
   }
+
+  // プロのミニバス分析アナリスト視点: 良かった点・改善点(全体スコープのみ)
+  const goodPoints = [];
+  const improvePoints = [];
+  if (scope === "all" && ownT.n > 0) {
+    const fgp = ownT.fga > 0 ? ownT.fgm / ownT.fga : 0;
+    const ftp = ownT.fta > 0 ? ownT.ftm / ownT.fta : 0;
+    const oppFgp = oppT.fga > 0 ? oppT.fgm / oppT.fga : 0;
+    const astRate = ownT.fgm > 0 ? ownT.ast / ownT.fgm : 0;
+    const margins = qData.map((x) => x.自チーム - x.相手);
+    const topScorer = [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.pts - a.s.pts)[0];
+    const topEff = [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff)[0];
+
+    // --- 良かった点 ---
+    if (fgp >= 0.45) goodPoints.push(`フィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は小学生年代では非常に高い水準です。無理のないシュートセレクションができており、ボールを動かして良い形を作れていた証拠です。`);
+    else if (fgp >= 0.38) goodPoints.push(`フィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は年代の平均を上回ります。シュートチャンスの選び方は概ね良好でした。`);
+    if (oppFgp > 0 && oppFgp < 0.35) goodPoints.push(`相手のFG成功率を${pct(oppT.fgm, oppT.fga)}に抑えました。ディフェンスのプレッシャーとヘルプが機能し、イージーシュートを与えていません。`);
+    if (ownT.reb > oppT.reb) goodPoints.push(`リバウンドで${ownT.reb}対${oppT.reb}と上回りました(OR${ownT.or}/DR${ownT.dr})。特にボックスアウトの意識が数字に表れています。${ownT.or >= 5 ? "オフェンスリバウンドからのセカンドチャンスも作れていました。" : ""}`);
+    if (ownT.stl >= 6) goodPoints.push(`スティール${ownT.stl}本はアクティブなディフェンスの成果です。パスラインを読んで積極的に仕掛けられていました。`);
+    if (astRate >= 0.5 && ownT.fgm > 0) goodPoints.push(`全得点のうちアシスト経由が${Math.round(astRate * 100)}%。個人技に頼らず、パスでズレを作って得点する良いバスケットができています。`);
+    if (ftp >= 0.6 && ownT.fta >= 6) goodPoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}と確実に決め切りました。競った展開で効いてくる重要な数字です。`);
+    if (win && margins.filter((m) => m > 0).length >= 3) goodPoints.push(`複数のピリオドで相手を上回り、試合を通して主導権を握れていました。集中力が最後まで続いた点を評価できます。`);
+    if (topEff && topEff.s.eff >= 12) goodPoints.push(`${topEff.label}がEFF${topEff.s.eff}と高い貢献度を記録。${topEff.s.pts}得点${topEff.s.reb}リバウンド${topEff.s.ast}アシストとオールラウンドにチームを支えました。`);
+    if (goodPoints.length === 0) goodPoints.push(`数字上の強みは控えめでしたが、最後まで走り切る姿勢が見えた試合でした。次につながる経験です。`);
+
+    // --- 改善点 ---
+    if (fgp < 0.33 && ownT.fga >= 10) improvePoints.push(`FG成功率${pct(ownT.fgm, ownT.fga)}は改善余地があります。遠い位置からの難しいシュートが多くなっていないか、ゴール下やフリーの味方を使えていたか映像で確認したいところです。練習ではレイアップとゴール下フィニッシュの本数を増やしましょう。`);
+    if (ownT.to >= 12) improvePoints.push(`ターンオーバー${ownT.to}個は多めです。相手のプレッシャーに対してパスを焦った場面が想定されます。ピボット、ボールミート、強いパスの3点を日々のドリルで徹底すると減らせます。`);
+    if (oppT.or >= 8) improvePoints.push(`相手にオフェンスリバウンドを${oppT.or}本許しました。シュートが打たれた瞬間の「ボックスアウト」を全員が徹底することで、相手のセカンドチャンスを大きく減らせます。`);
+    if (ftp < 0.5 && ownT.fta >= 6) improvePoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}は勝敗を左右します。毎回の練習の最後に、疲れた状態で10本連続のFTルーティンを入れることをおすすめします。`);
+    if (astRate < 0.35 && ownT.fgm >= 6) improvePoints.push(`アシスト比率が低く、1対1で完結する場面が多かったようです。「もう1本パスを回す」意識と、合わせの動き(カット、スクリーン)を増やすと得点はさらに安定します。`);
+    if (oppFgp >= 0.45) improvePoints.push(`相手のFG成功率${pct(oppT.fgm, oppT.fga)}を許しました。ボールマンへの間合いとヘルプの戻りに改善余地があります。特にゴール下を簡単に使われていないか確認しましょう。`);
+    if (margins[2] !== undefined && margins[2] < -3) improvePoints.push(`第3ピリオドで失点が先行しました(${margins[2]})。ハーフタイム明けの入りは小学生が最も集中を切らしやすい時間帯です。最初の2分のプレーを声かけで引き締めたいところです。`);
+    if (improvePoints.length === 0) improvePoints.push(`大きな穴は見当たらない好ゲームでした。強いて言えば、リードした時間帯でも安易なプレーに逃げず、丁寧なバスケットを続けられると盤石になります。`);
+  }
   const reviews = scope === "all" ? [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff).map((r, i) => {
     const s = r.s;
     const parts = [`${s.pts}得点(FG ${s.fgm}/${s.fga}${s.fta > 0 ? `、FT ${s.ftm}/${s.fta}` : ""})`];
@@ -323,7 +358,9 @@ function analysisFor(data, game, scope) {
     ["得点", ownPts, oppPts],
     ["FG", `${ownT.fgm}/${ownT.fga} (${pct(ownT.fgm, ownT.fga)})`, `${oppT.fgm}/${oppT.fga} (${pct(oppT.fgm, oppT.fga)})`],
     ["FT", `${ownT.ftm}/${ownT.fta} (${pct(ownT.ftm, ownT.fta)})`, `${oppT.ftm}/${oppT.fta} (${pct(oppT.ftm, oppT.fta)})`],
-    ["リバウンド(OR/DR)", `${ownT.reb} (${ownT.or}/${ownT.dr})`, `${oppT.reb} (${oppT.or}/${oppT.dr})`],
+    ["リバウンド合計", ownT.reb, oppT.reb],
+    ["└ オフェンス(OR)", ownT.or, oppT.or],
+    ["└ ディフェンス(DR)", ownT.dr, oppT.dr],
     ["アシスト", ownT.ast, oppT.ast],
     ["スティール", ownT.stl, oppT.stl],
     ["ブロック", ownT.blk, oppT.blk],
@@ -331,7 +368,7 @@ function analysisFor(data, game, scope) {
     ["ファウル", ownT.pf, oppT.pf],
     ["タイムアウト", timeoutsOf(game.events, "own", scope), timeoutsOf(game.events, "opp", scope)],
   ];
-  return { periods, ownT, oppT, ownPts, oppPts, ortg, drtg, net, win, ownRows, oppRows, qData, insights, tips, reviews, compRows, scopeLabel };
+  return { periods, ownT, oppT, ownPts, oppPts, ortg, drtg, net, win, ownRows, oppRows, qData, insights, tips, reviews, compRows, scopeLabel, goodPoints, improvePoints };
 }
 
 function flowAnalysis(data, game) {
@@ -677,18 +714,18 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const n = results.length;
   const avgPF = n ? results.reduce((a, r) => a + r.own, 0) / n : 0;
   const avgPA = n ? results.reduce((a, r) => a + r.opp, 0) / n : 0;
-  const star = useMemo(() => {
-    // 直近3試合の平均EFFが最高の選手をピックアップ
+  const stars = useMemo(() => {
+    // 直近3試合の平均EFFが高い順に上位5人をピックアップ
     const recent3 = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 3);
-    if (recent3.length === 0) return null;
-    let best = null;
+    if (recent3.length === 0) return [];
+    const rows = [];
     for (const p of data.players) {
       const per = recent3.map((g) => aggStats(g.events, "own", p.id, "all", g)).filter((s) => hasStats(s));
       if (per.length === 0) continue;
       const avgEff = per.reduce((a, s) => a + s.eff, 0) / per.length;
-      if (!best || avgEff > best.avgEff) best = { p, avgEff, n: per.length };
+      rows.push({ p, avgEff, n: per.length });
     }
-    return best;
+    return rows.sort((a, b) => b.avgEff - a.avgEff).slice(0, 5);
   }, [data]);
 
   const recentGames = results.slice(0, isPC ? 5 : 3);
@@ -710,27 +747,33 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
         </div>
       </Card>
 
-      {/* 注目選手 */}
-      {star && (
+      {/* 注目選手(上位5人) */}
+      {stars.length > 0 && (
         <Card>
-          <SectionTitle>注目選手</SectionTitle>
-          <button className="flex items-center gap-3 w-full text-left"
-            onClick={() => { setTab("players"); setNav({ playerId: star.p.id }); }}>
-            <Avatar p={star.p} size={52} />
-            <div className="flex-1">
-              <div className="font-bold text-lg">{star.p.codename || star.p.name}</div>
-              <div className="text-xs" style={{ color: C.sub }}>#{star.p.number}・{star.p.grade}年・直近{star.n}試合</div>
-            </div>
-            <div className="text-right">
-              <div className="text-4xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(star.avgEff)}</div>
-              <div className="text-xs" style={{ color: C.sub }}>平均EFF</div>
-            </div>
-          </button>
+          <SectionTitle>注目選手(直近3試合の平均EFF)</SectionTitle>
+          <div className="space-y-1">
+            {stars.map((st, i) => (
+              <button key={st.p.id} className="flex items-center gap-3 w-full text-left py-1.5"
+                style={{ borderBottom: i < stars.length - 1 ? `1px solid ${C.border}44` : "none" }}
+                onClick={() => { setTab("players"); setNav({ playerId: st.p.id }); }}>
+                <span className="w-6 text-center text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
+                <Avatar p={st.p} size={40} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold truncate">{st.p.codename || st.p.name}</div>
+                  <div className="text-[10px]" style={{ color: C.sub }}>#{st.p.number}・{st.p.grade}年・直近{st.n}試合</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold" style={{ color: i === 0 ? C.orange : C.text, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(st.avgEff)}</div>
+                  <div className="text-[10px]" style={{ color: C.sub }}>平均EFF</div>
+                </div>
+              </button>
+            ))}
+          </div>
         </Card>
       )}
 
       {/* 直近の試合 */}
-      <div className={isPC && star ? "" : isPC ? "col-span-2" : ""}>
+      <div className={isPC ? "col-span-2" : ""}>
         <div className="flex items-center justify-between mb-2 px-1">
           <SectionTitle>直近の試合</SectionTitle>
           <button className="text-xs font-bold" style={{ color: C.orange }} onClick={() => setTab("games")}>すべて見る</button>
@@ -858,6 +901,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const p = data.players.find((x) => x.id === nav.playerId);
   const [editing, setEditing] = useState(false);
   const [trendStat, setTrendStat] = useState("eff"); // 推移グラフの表示項目
+  const [selGame, setSelGame] = useState(null); // 推移とスタッツの連動用(選択中の試合id)
   if (!p) return null;
   const games = [...data.games].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const { per, n, tot } = careerStats(games, p.id);
@@ -870,7 +914,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
     { k: "reb", label: "リバウンド", color: "#FFB23E" },
   ];
   const trendOpt = TREND_OPTS.find((o) => o.k === trendStat);
-  const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, value: x.s[trendStat] }));
+  const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, value: x.s[trendStat], gid: x.g.id }));
   // キャリアハイ(1試合の最高記録)
   const careerHigh = {};
   ["pts", "reb", "ast", "stl", "blk", "eff"].forEach((k) => {
@@ -980,7 +1024,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
       </Card>
       {n > 0 && (
         <Card>
-          <SectionTitle>試合ごとの推移</SectionTitle>
+          <SectionTitle>試合ごとの推移とスタッツ</SectionTitle>
           <div className="flex gap-1.5 mb-3">
             {TREND_OPTS.map((o) => (
               <button key={o.k} onClick={() => setTrendStat(o.k)}
@@ -991,38 +1035,43 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
             ))}
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={chart} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
+            <LineChart data={chart} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}
+              onClick={(e) => { const pl = e?.activePayload?.[0]?.payload; if (pl) setSelGame(selGame === pl.gid ? null : pl.gid); }}>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
               <XAxis dataKey="name" fontSize={10} stroke={C.sub} />
               <YAxis fontSize={10} allowDecimals={false} stroke={C.sub} />
               <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, color: C.text }} />
               <ReferenceLine y={0} stroke={C.sub} strokeWidth={1.5} />
-              <Line type="monotone" dataKey="value" name={trendOpt?.label} stroke={trendOpt?.color} strokeWidth={2.5} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="value" name={trendOpt?.label} stroke={trendOpt?.color} strokeWidth={2.5}
+                dot={(props) => {
+                  const active = props.payload.gid === selGame;
+                  return <circle key={props.payload.gid} cx={props.cx} cy={props.cy} r={active ? 6 : 3}
+                    fill={active ? C.led : trendOpt?.color} stroke={active ? "#fff" : "none"} strokeWidth={active ? 2 : 0} />;
+                }} />
             </LineChart>
           </ResponsiveContainer>
-          <div className="text-[10px] text-center" style={{ color: C.sub }}>{trendOpt?.label}の試合ごとの推移</div>
-        </Card>
-      )}
-      {n > 0 && (
-        <Card>
-          <SectionTitle>試合別スタッツ</SectionTitle>
+          <div className="text-[10px] text-center mb-2" style={{ color: C.sub }}>グラフの点や下の表をタップすると、その試合が連動してハイライトされます</div>
           <div className="overflow-x-auto -mx-1">
             <table className="text-xs w-full min-w-[600px]">
               <thead><tr style={{ color: C.sub, borderBottom: `1px solid ${C.border}` }}>
                 {["日付","対戦相手","得点","REB","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
               </tr></thead>
               <tbody>
-                {[...per].reverse().map(({ g, s }) => (
-                  <tr key={g.id} style={{ borderBottom: `1px solid ${C.border}44` }}>
-                    <td className="py-1.5 px-1 whitespace-nowrap">{g.date?.slice(5)}</td>
-                    <td className="px-1 whitespace-nowrap truncate" style={{ color: C.sub, maxWidth: 90 }}>{oppNm(g)}</td>
-                    <td className="px-1 font-bold" style={{ color: C.orange }}>{s.pts}</td><td className="px-1">{s.reb}</td>
-                    <td className="px-1">{s.ast}</td><td className="px-1">{s.stl}</td><td className="px-1">{s.blk}</td>
-                    <td className="px-1">{s.to}</td><td className="px-1">{s.pf}</td><td className="px-1">{s.min}</td>
-                    <td className="px-1" style={{ color: s.pm === null ? C.sub : s.pm >= 0 ? C.win : C.loss }}>{s.pm === null ? "–" : (s.pm >= 0 ? "+" : "") + s.pm}</td>
-                    <td className="px-1 font-bold">{s.eff}</td>
-                  </tr>
-                ))}
+                {[...per].reverse().map(({ g, s }) => {
+                  const active = g.id === selGame;
+                  return (
+                    <tr key={g.id} onClick={() => setSelGame(active ? null : g.id)}
+                      style={{ borderBottom: `1px solid ${C.border}44`, background: active ? `${C.led}22` : "transparent", cursor: "pointer" }}>
+                      <td className="py-1.5 px-1 whitespace-nowrap" style={active ? { fontWeight: 700, color: C.led } : {}}>{g.date?.slice(5)}</td>
+                      <td className="px-1 whitespace-nowrap truncate" style={{ color: C.sub, maxWidth: 90 }}>{oppNm(g)}</td>
+                      <td className="px-1 font-bold" style={{ color: C.orange }}>{s.pts}</td><td className="px-1">{s.reb}</td>
+                      <td className="px-1">{s.ast}</td><td className="px-1">{s.stl}</td><td className="px-1">{s.blk}</td>
+                      <td className="px-1">{s.to}</td><td className="px-1">{s.pf}</td><td className="px-1">{s.min}</td>
+                      <td className="px-1" style={{ color: s.pm === null ? C.sub : s.pm >= 0 ? C.win : C.loss }}>{s.pm === null ? "–" : (s.pm >= 0 ? "+" : "") + s.pm}</td>
+                      <td className="px-1 font-bold">{s.eff}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1289,7 +1338,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
 function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   const C = useC();
   const g = data.games.find((x) => x.id === nav.gameId);
-  const [sub, setSub] = useState("entry");
+  const [sub, setSub] = useState(isAdmin ? "entry" : "analysis");
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [report, setReport] = useState(null);
@@ -1334,12 +1383,12 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
         </div>
       )}
       <div className="flex rounded-xl overflow-hidden text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
-        {[["entry", "入力"], ["analysis", "分析"], ["media", "資料"]].map(([k, l]) => (
+        {[...(isAdmin ? [["entry", "入力"]] : []), ["analysis", "概要"], ["media", "メディア"]].map(([k, l]) => (
           <button key={k} className="flex-1 py-2.5" onClick={() => setSub(k)}
             style={sub === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
         ))}
       </div>
-      {sub === "entry" && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
+      {sub === "entry" && isAdmin && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
       {sub === "analysis" && <GameAnalysis data={data} game={g} oppName={oppName} onReport={setReport} isAdmin={isAdmin} />}
       {sub === "media" && <GameMedia data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
     </div>
@@ -1427,19 +1476,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const logEvents = [...events].reverse();
   return (
     <div className="space-y-3">
-      {/* 管理者のみ入力UI表示 */}
-      {!isAdmin && (
-        <Card>
-          <div className="text-xs mb-2" style={{ color: C.sub }}>閲覧モードです。Qを選んでプレイログを確認できます。</div>
-          <div className="flex gap-1.5 overflow-x-auto">
-            {Array.from({ length: periods }, (_, i) => i + 1).map((n) => (
-              <button key={n} className="flex-1 min-w-14 py-2.5 rounded-lg font-bold"
-                style={q === n ? { background: C.orange, color: "#fff" } : { background: C.card2, color: C.sub }}
-                onClick={() => setQ(n)}>{periodLabel(n)}</button>
-            ))}
-          </div>
-        </Card>
-      )}
       {isAdmin && <Card>
         {/* Q選択 + 固定トグル */}
         <div className="flex items-center gap-2 mb-3">
@@ -1790,6 +1826,14 @@ function ReportView({ data, game, mode, oppName, onClose }) {
         {a.oppRows.length > 0 && (<><T>{opp} ボックススコア</T><BoxTable rows={a.oppRows} /></>)}
         <T>試合分析サマリー</T>
         <ul style={{ fontSize: 13, paddingLeft: 20, margin: "4px 0" }}>{a.insights.map((s, i) => <li key={i}>{s}</li>)}</ul>
+        {a.goodPoints.length > 0 && (
+          <>
+            <p style={{ fontWeight: 700, marginBottom: 4, fontSize: 13, color: "#1B8A52" }}>【良かった点】</p>
+            <ul style={{ fontSize: 13, paddingLeft: 20, margin: "4px 0" }}>{a.goodPoints.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}</ul>
+            <p style={{ fontWeight: 700, marginBottom: 4, fontSize: 13, color: "#E8632C" }}>【改善点】</p>
+            <ul style={{ fontSize: 13, paddingLeft: 20, margin: "4px 0" }}>{a.improvePoints.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}</ul>
+          </>
+        )}
         <p style={{ fontWeight: 700, marginBottom: 4, fontSize: 13 }}>次戦に向けた提言</p>
         <ul style={{ fontSize: 13, paddingLeft: 20, margin: "4px 0" }}>{a.tips.map((s, i) => <li key={i}>{s}</li>)}</ul>
         {mode === "detail" && flow && (
@@ -1825,14 +1869,16 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
     <div className="overflow-x-auto -mx-1">
       <table className="text-xs w-full min-w-[600px]">
         <thead><tr style={{ color: C.sub, borderBottom: `1px solid ${C.border}` }}>
-          {["選手","得点","FG","FT","OR","DR","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
+          {["選手","得点","FG","FG%","FT","OR","DR","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
         </tr></thead>
         <tbody>
           {[...rows].sort((x, y) => y.s.eff - x.s.eff).map(({ key, label, s }) => (
             <tr key={key} style={{ borderBottom: `1px solid ${C.border}44` }}>
               <td className="py-1.5 px-1 whitespace-nowrap font-bold">{label}</td>
               <td className="px-1 font-bold" style={{ color: accent }}>{s.pts}</td>
-              <td className="px-1">{s.fgm}/{s.fga}</td><td className="px-1">{s.ftm}/{s.fta}</td>
+              <td className="px-1">{s.fgm}/{s.fga}</td>
+              <td className="px-1" style={{ color: C.sub }}>{pct(s.fgm, s.fga)}</td>
+              <td className="px-1">{s.ftm}/{s.fta}</td>
               <td className="px-1">{s.or}</td><td className="px-1">{s.dr}</td><td className="px-1">{s.ast}</td>
               <td className="px-1">{s.stl}</td><td className="px-1">{s.blk}</td><td className="px-1">{s.to}</td>
               <td className="px-1">{s.pf}</td><td className="px-1">{s.min}</td>
@@ -1943,10 +1989,48 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
         </Card>
       )}
       <Card>
-        <SectionTitle>{scope === "all" ? (a.win ? "勝因分析" : a.ownPts === a.oppPts ? "試合分析" : "敗因分析") : `${periodLabel(scope)} の分析`}</SectionTitle>
+        <SectionTitle>{scope === "all" ? "分析" : `${periodLabel(scope)} の分析`}</SectionTitle>
         <ul className="text-sm space-y-1.5">{a.insights.map((s, i) => <li key={i} className="flex gap-2"><span style={{ color: C.orange }}>●</span><span>{s}</span></li>)}</ul>
       </Card>
-      {a.tips.length > 0 && (
+
+      {/* AI分析(全体のみ): 良かった点・改善点 */}
+      {scope === "all" && a.goodPoints.length > 0 && (
+        <Card style={{ border: `1px solid ${C.win}44` }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🏀</span>
+            <div>
+              <div className="text-xs font-bold tracking-widest" style={{ color: C.win }}>AIアナリスト分析</div>
+              <div className="text-[10px]" style={{ color: C.sub }}>プロのミニバス分析アナリストの視点</div>
+            </div>
+          </div>
+          <div className="mb-3">
+            <div className="text-sm font-bold mb-2 flex items-center gap-1.5" style={{ color: C.win }}>
+              <span className="px-2 py-0.5 rounded text-white text-xs" style={{ background: C.win }}>GOOD</span> 良かった点
+            </div>
+            <ul className="text-sm space-y-2">
+              {a.goodPoints.map((s, i) => (
+                <li key={i} className="flex gap-2 leading-relaxed"><span className="shrink-0" style={{ color: C.win }}>◎</span><span>{s}</span></li>
+              ))}
+            </ul>
+          </div>
+          <div className="pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+            <div className="text-sm font-bold mb-2 flex items-center gap-1.5" style={{ color: C.orange }}>
+              <span className="px-2 py-0.5 rounded text-white text-xs" style={{ background: C.orange }}>NEXT</span> 改善点
+            </div>
+            <ul className="text-sm space-y-2">
+              {a.improvePoints.map((s, i) => (
+                <li key={i} className="flex gap-2 leading-relaxed"><span className="shrink-0" style={{ color: C.orange }}>▲</span><span>{s}</span></li>
+              ))}
+            </ul>
+          </div>
+          <div className="text-[10px] mt-3 pt-2" style={{ color: C.sub, borderTop: `1px solid ${C.border}` }}>
+            ※入力されたスタッツとプレイログをもとに自動生成した分析です。実際の試合内容と照らし合わせてご活用ください。
+          </div>
+        </Card>
+      )}
+
+      {/* 次戦に向けた提言: 全体のみ */}
+      {scope === "all" && a.tips.length > 0 && (
         <Card>
           <SectionTitle>次戦に向けた提言</SectionTitle>
           <ul className="text-sm space-y-1.5">{a.tips.map((s, i) => <li key={i} className="flex gap-2"><Target size={14} className="mt-0.5 shrink-0" style={{ color: C.win }} /><span>{s}</span></li>)}</ul>
