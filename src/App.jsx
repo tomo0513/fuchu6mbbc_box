@@ -1510,6 +1510,23 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 1300);
   };
+  // 交代OUT: 出場選手をベンチに戻す(OUTイベント記録 + 出場メンバーから除外)
+  const subOutPlayer = (pid) => {
+    const ev = { id: uid(), q, time: time.trim(), side: "own", action: "OUT", playerId: pid };
+    updGame((x) => {
+      const cur = x.lineups?.[q] || [];
+      return {
+        ...x,
+        events: [...x.events, ev],
+        lineups: { ...x.lineups, [q]: cur.filter((i) => i !== pid) },
+      };
+    });
+    const p = data.players.find((x) => x.id === pid);
+    setSel(null);
+    setFlash({ id: ev.id, text: `#${p?.number} ${p?.codename || p?.name} – 交代OUT` });
+    clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 1300);
+  };
   const pName = (id) => {
     if (id === TEAM_KEY) return "チーム";
     const p = data.players.find((x) => x.id === id);
@@ -1603,6 +1620,14 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                   </button>
                 ))}
               </div>
+              {/* 交代OUT: 選択中の出場選手をベンチに戻す */}
+              {sel && sel !== TEAM_KEY && lineup.includes(sel) && (
+                <button onClick={() => subOutPlayer(sel)}
+                  className="mb-2 px-3 py-2 rounded-xl text-xs font-bold w-full flex items-center justify-center gap-1.5"
+                  style={{ border: `1px solid ${C.loss}`, color: C.loss }}>
+                  🔄 {pName(sel)} を交代OUT(ベンチに戻す)
+                </button>
+              )}
               {/* 交代IN: ベンチ選手を投入 */}
               {players.filter((p) => !lineup.includes(p.id)).length > 0 && (
                 <div className="mb-3 p-2 rounded-xl" style={{ background: C.card2 }}>
