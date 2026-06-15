@@ -112,6 +112,9 @@ const TIERS = [
 ];
 const tierOf = (k) => TIERS.find((t) => t.k === k);
 
+// あいうえお順ソート(アルファベット→ひらがな・漢字)。日本語ロケール対応
+const nameCompare = (a, b) => (a || "").localeCompare(b || "", "ja");
+
 /* ============ ユーティリティ ============ */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const fmt1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
@@ -303,40 +306,47 @@ function analysisFor(data, game, scope) {
     if (tips.length === 0) tips.push("大きな課題は見当たりません。この内容を継続しましょう。");
   }
 
-  // プロのミニバス分析アナリスト視点: 良かった点・改善点(全体スコープのみ)
+  // プロのミニバス分析アナリスト視点: 良かった点・改善点(全体・各Q)
   const goodPoints = [];
   const improvePoints = [];
-  if (scope === "all" && ownT.n > 0) {
+  if (ownT.n > 0) {
+    const isAll = scope === "all";
+    const sl = isAll ? "この試合" : `${scopeLabel}`;
     const fgp = ownT.fga > 0 ? ownT.fgm / ownT.fga : 0;
     const ftp = ownT.fta > 0 ? ownT.ftm / ownT.fta : 0;
     const oppFgp = oppT.fga > 0 ? oppT.fgm / oppT.fga : 0;
     const astRate = ownT.fgm > 0 ? ownT.ast / ownT.fgm : 0;
     const margins = qData.map((x) => x.自チーム - x.相手);
-    const topScorer = [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.pts - a.s.pts)[0];
     const topEff = [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff)[0];
 
     // --- 良かった点 ---
-    if (fgp >= 0.45) goodPoints.push(`フィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は小学生年代では非常に高い水準です。無理のないシュートセレクションができており、ボールを動かして良い形を作れていた証拠です。`);
-    else if (fgp >= 0.38) goodPoints.push(`フィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は年代の平均を上回ります。シュートチャンスの選び方は概ね良好でした。`);
-    if (oppFgp > 0 && oppFgp < 0.35) goodPoints.push(`相手のFG成功率を${pct(oppT.fgm, oppT.fga)}に抑えました。ディフェンスのプレッシャーとヘルプが機能し、イージーシュートを与えていません。`);
-    if (ownT.reb > oppT.reb) goodPoints.push(`リバウンドで${ownT.reb}対${oppT.reb}と上回りました(OR${ownT.or}/DR${ownT.dr})。特にボックスアウトの意識が数字に表れています。${ownT.or >= 5 ? "オフェンスリバウンドからのセカンドチャンスも作れていました。" : ""}`);
-    if (ownT.stl >= 6) goodPoints.push(`スティール${ownT.stl}本はアクティブなディフェンスの成果です。パスラインを読んで積極的に仕掛けられていました。`);
-    if (astRate >= 0.5 && ownT.fgm > 0) goodPoints.push(`全得点のうちアシスト経由が${Math.round(astRate * 100)}%。個人技に頼らず、パスでズレを作って得点する良いバスケットができています。`);
-    if (ftp >= 0.6 && ownT.fta >= 6) goodPoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}と確実に決め切りました。競った展開で効いてくる重要な数字です。`);
-    if (win && margins.filter((m) => m > 0).length >= 3) goodPoints.push(`複数のピリオドで相手を上回り、試合を通して主導権を握れていました。集中力が最後まで続いた点を評価できます。`);
-    if (topEff && topEff.s.eff >= 12) goodPoints.push(`${topEff.label}がEFF${topEff.s.eff}と高い貢献度を記録。${topEff.s.pts}得点${topEff.s.reb}リバウンド${topEff.s.ast}アシストとオールラウンドにチームを支えました。`);
-    if (goodPoints.length === 0) goodPoints.push(`数字上の強みは控えめでしたが、最後まで走り切る姿勢が見えた試合でした。次につながる経験です。`);
+    if (fgp >= 0.45 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は小学生年代では非常に高い水準です。無理のないシュートセレクションができており、ボールを動かして良い形を作れていた証拠です。`);
+    else if (fgp >= 0.38 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は年代の平均を上回ります。シュートチャンスの選び方は概ね良好でした。`);
+    if (oppFgp > 0 && oppFgp < 0.35 && oppT.fga >= (isAll ? 8 : 3)) goodPoints.push(`相手のFG成功率を${pct(oppT.fgm, oppT.fga)}に抑えました。ディフェンスのプレッシャーとヘルプが機能し、イージーシュートを与えていません。`);
+    if (ownT.reb > oppT.reb && ownT.reb + oppT.reb >= (isAll ? 10 : 3)) goodPoints.push(`リバウンドで${ownT.reb}対${oppT.reb}と上回りました(OR${ownT.or}/DR${ownT.dr})。ボックスアウトの意識が数字に表れています。${ownT.or >= (isAll ? 5 : 2) ? "オフェンスリバウンドからのセカンドチャンスも作れていました。" : ""}`);
+    if (ownT.stl >= (isAll ? 6 : 2)) goodPoints.push(`スティール${ownT.stl}本はアクティブなディフェンスの成果です。パスラインを読んで積極的に仕掛けられていました。`);
+    if (astRate >= 0.5 && ownT.fgm >= (isAll ? 4 : 2)) goodPoints.push(`得点のうちアシスト経由が${Math.round(astRate * 100)}%。個人技に頼らず、パスでズレを作って得点する良いバスケットができています。`);
+    if (ftp >= 0.6 && ownT.fta >= (isAll ? 6 : 2)) goodPoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}と確実に決め切りました。競った展開で効いてくる重要な数字です。`);
+    if (isAll && win && margins.filter((m) => m > 0).length >= 3) goodPoints.push(`複数のピリオドで相手を上回り、試合を通して主導権を握れていました。集中力が最後まで続いた点を評価できます。`);
+    if (!isAll && ownPts > oppPts) goodPoints.push(`${scopeLabel}は${ownPts}対${oppPts}とリードを奪えました。この時間帯の戦い方は継続したいところです。`);
+    if (topEff && topEff.s.eff >= (isAll ? 12 : 5)) goodPoints.push(`${topEff.label}がEFF${topEff.s.eff}と高い貢献度を記録。${topEff.s.pts}得点${topEff.s.reb}リバウンド${topEff.s.ast}アシストとチームを支えました。`);
+    if (goodPoints.length === 0) goodPoints.push(`${sl}は数字上の強みは控えめでしたが、最後まで走り切る姿勢が見えました。次につながる内容です。`);
 
     // --- 改善点 ---
-    if (fgp < 0.33 && ownT.fga >= 10) improvePoints.push(`FG成功率${pct(ownT.fgm, ownT.fga)}は改善余地があります。遠い位置からの難しいシュートが多くなっていないか、ゴール下やフリーの味方を使えていたか映像で確認したいところです。練習ではレイアップとゴール下フィニッシュの本数を増やしましょう。`);
-    if (ownT.to >= 12) improvePoints.push(`ターンオーバー${ownT.to}個は多めです。相手のプレッシャーに対してパスを焦った場面が想定されます。ピボット、ボールミート、強いパスの3点を日々のドリルで徹底すると減らせます。`);
-    if (oppT.or >= 8) improvePoints.push(`相手にオフェンスリバウンドを${oppT.or}本許しました。シュートが打たれた瞬間の「ボックスアウト」を全員が徹底することで、相手のセカンドチャンスを大きく減らせます。`);
-    if (ftp < 0.5 && ownT.fta >= 6) improvePoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}は勝敗を左右します。毎回の練習の最後に、疲れた状態で10本連続のFTルーティンを入れることをおすすめします。`);
-    if (astRate < 0.35 && ownT.fgm >= 6) improvePoints.push(`アシスト比率が低く、1対1で完結する場面が多かったようです。「もう1本パスを回す」意識と、合わせの動き(カット、スクリーン)を増やすと得点はさらに安定します。`);
-    if (oppFgp >= 0.45) improvePoints.push(`相手のFG成功率${pct(oppT.fgm, oppT.fga)}を許しました。ボールマンへの間合いとヘルプの戻りに改善余地があります。特にゴール下を簡単に使われていないか確認しましょう。`);
-    if (margins[2] !== undefined && margins[2] < -3) improvePoints.push(`第3ピリオドで失点が先行しました(${margins[2]})。ハーフタイム明けの入りは小学生が最も集中を切らしやすい時間帯です。最初の2分のプレーを声かけで引き締めたいところです。`);
-    if (improvePoints.length === 0) improvePoints.push(`大きな穴は見当たらない好ゲームでした。強いて言えば、リードした時間帯でも安易なプレーに逃げず、丁寧なバスケットを続けられると盤石になります。`);
+    if (fgp < 0.33 && ownT.fga >= (isAll ? 10 : 4)) improvePoints.push(`FG成功率${pct(ownT.fgm, ownT.fga)}は改善余地があります。遠い位置からの難しいシュートが多くなっていないか、ゴール下やフリーの味方を使えていたか映像で確認したいところです。練習ではレイアップとゴール下フィニッシュの本数を増やしましょう。`);
+    if (ownT.to >= (isAll ? 12 : 4)) improvePoints.push(`ターンオーバー${ownT.to}個は多めです。相手のプレッシャーに対してパスを焦った場面が想定されます。ピボット、ボールミート、強いパスの3点をドリルで徹底すると減らせます。`);
+    if (oppT.or >= (isAll ? 8 : 3)) improvePoints.push(`相手にオフェンスリバウンドを${oppT.or}本許しました。シュートが打たれた瞬間の「ボックスアウト」を全員が徹底することで、相手のセカンドチャンスを減らせます。`);
+    if (ftp < 0.5 && ownT.fta >= (isAll ? 6 : 2)) improvePoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}は勝敗を左右します。練習の最後に、疲れた状態で連続FTを入れることをおすすめします。`);
+    if (astRate < 0.35 && ownT.fgm >= (isAll ? 6 : 3)) improvePoints.push(`アシスト比率が低く、1対1で完結する場面が多かったようです。「もう1本パスを回す」意識と合わせの動き(カット、スクリーン)を増やすと得点が安定します。`);
+    if (oppFgp >= 0.45 && oppT.fga >= (isAll ? 8 : 3)) improvePoints.push(`相手のFG成功率${pct(oppT.fgm, oppT.fga)}を許しました。ボールマンへの間合いとヘルプの戻りに改善余地があります。ゴール下を簡単に使われていないか確認しましょう。`);
+    if (isAll && margins[2] !== undefined && margins[2] < -3) improvePoints.push(`第3ピリオドで失点が先行しました(${margins[2]})。ハーフタイム明けの入りは集中を切らしやすい時間帯です。最初の2分のプレーを声かけで引き締めたいところです。`);
+    if (!isAll && ownPts < oppPts) improvePoints.push(`${scopeLabel}は${ownPts}対${oppPts}とリードを許しました。この時間帯に何が起きたか、失点の形を映像で振り返ると次に活きます。`);
+    if (improvePoints.length === 0) improvePoints.push(`${sl}は大きな穴は見当たりませんでした。強いて言えば、リードした時間帯でも安易なプレーに逃げず、丁寧なバスケットを続けられると盤石になります。`);
   }
+
+  // 旧insights/tipsは残すが画面では未使用(レポート互換のため保持)
+  void insights; void tips;
+
   const reviews = scope === "all" ? [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff).map((r, i) => {
     const s = r.s;
     const parts = [`${s.pts}得点(FG ${s.fgm}/${s.fga}${s.fta > 0 ? `、FT ${s.ftm}/${s.fta}` : ""})`];
@@ -515,6 +525,8 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [loginInput, setLoginInput] = useState("");
   const [loginErr, setLoginErr] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  useEffect(() => { const t = setTimeout(() => setShowSplash(false), 1600); return () => clearTimeout(t); }, []);
 
   useEffect(() => {
     (async () => {
@@ -559,8 +571,18 @@ export default function App() {
     timer.current = setTimeout(persist, 700);
   };
 
-  if (!data) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: C.bg, color: C.sub }}>読み込み中…</div>
+  if (!data || showSplash) return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: CT.bg, color: CT.text }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap'); @keyframes splashIn { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }`}</style>
+      <div style={{ animation: "splashIn .6s ease-out" }} className="flex flex-col items-center gap-4">
+        {data?.team?.logo
+          ? <img src={data.team.logo} alt="" className="w-24 h-24 rounded-full object-cover" style={{ boxShadow: `0 0 40px ${CT.orange}55` }} />
+          : <div className="w-24 h-24 rounded-full flex items-center justify-center text-5xl" style={{ background: CT.card2, border: `1px solid ${CT.border}` }}>🏀</div>}
+        <div className="text-2xl font-bold text-center px-6">{data?.team?.name || "府中六小ミニバス"}</div>
+        <div className="text-sm tracking-[0.3em] font-bold" style={{ color: CT.orange, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.3em" }}>GAME MANAGEMENT APP</div>
+      </div>
+      {!data && <div className="text-xs mt-4" style={{ color: CT.sub }}>読み込み中…</div>}
+    </div>
   );
 
   const getOpp = (id) => data.opponents.find((o) => o.id === id);
@@ -715,15 +737,15 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const avgPF = n ? results.reduce((a, r) => a + r.own, 0) / n : 0;
   const avgPA = n ? results.reduce((a, r) => a + r.opp, 0) / n : 0;
   const stars = useMemo(() => {
-    // 直近3試合の平均EFFが高い順に上位5人をピックアップ
-    const recent3 = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 3);
-    if (recent3.length === 0) return [];
+    // 直近5試合の平均EFFが高い順に上位5人をピックアップ
+    const recent5 = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 5);
+    if (recent5.length === 0) return [];
     const rows = [];
     for (const p of data.players) {
-      const per = recent3.map((g) => aggStats(g.events, "own", p.id, "all", g)).filter((s) => hasStats(s));
+      const per = recent5.map((g) => aggStats(g.events, "own", p.id, "all", g)).filter((s) => hasStats(s));
       if (per.length === 0) continue;
-      const avgEff = per.reduce((a, s) => a + s.eff, 0) / per.length;
-      rows.push({ p, avgEff, n: per.length });
+      const avg = (k) => per.reduce((a, s) => a + s[k], 0) / per.length;
+      rows.push({ p, avgEff: avg("eff"), avgPts: avg("pts"), avgAst: avg("ast"), avgReb: avg("reb"), n: per.length });
     }
     return rows.sort((a, b) => b.avgEff - a.avgEff).slice(0, 5);
   }, [data]);
@@ -750,7 +772,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
       {/* 注目選手(上位5人) */}
       {stars.length > 0 && (
         <Card>
-          <SectionTitle>注目選手(直近3試合の平均EFF)</SectionTitle>
+          <SectionTitle>注目選手(直近5試合の平均EFF)</SectionTitle>
           <div className="space-y-1">
             {stars.map((st, i) => (
               <button key={st.p.id} className="flex items-center gap-3 w-full text-left py-1.5"
@@ -760,9 +782,13 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
                 <Avatar p={st.p} size={40} />
                 <div className="flex-1 min-w-0">
                   <div className="font-bold truncate">{st.p.codename || st.p.name}</div>
-                  <div className="text-[10px]" style={{ color: C.sub }}>#{st.p.number}・{st.p.grade}年・直近{st.n}試合</div>
+                  <div className="text-[10px] flex gap-2 mt-0.5" style={{ color: C.sub }}>
+                    <span>得点 <b style={{ color: C.text }}>{fmt1(st.avgPts)}</b></span>
+                    <span>AST <b style={{ color: C.text }}>{fmt1(st.avgAst)}</b></span>
+                    <span>REB <b style={{ color: C.text }}>{fmt1(st.avgReb)}</b></span>
+                  </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <div className="text-2xl font-bold" style={{ color: i === 0 ? C.orange : C.text, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(st.avgEff)}</div>
                   <div className="text-[10px]" style={{ color: C.sub }}>平均EFF</div>
                 </div>
@@ -1101,7 +1127,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
       <Field label="対戦相手">
         <select className={inputCls} style={getInputStyle(C)} value={f.opponentId} onChange={(e) => setF({ ...f, opponentId: e.target.value })}>
           <option value="">(新しいチームを入力)</option>
-          {data.opponents.map((o) => <option key={o.id} value={o.id}>{o.name}{o.area ? `(${o.area})` : ""}</option>)}
+          {[...data.opponents].sort((a, b) => nameCompare(a.name, b.name)).map((o) => <option key={o.id} value={o.id}>{o.name}{o.area ? `(${o.area})` : ""}</option>)}
         </select>
       </Field>
       {!f.opponentId && (!oppFull
@@ -1177,7 +1203,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
       }} />
   );
   const wld = (gs) => { const rs = gs.map((g) => gamePts(g)); return { w: rs.filter((r) => r.own > r.opp).length, l: rs.filter((r) => r.own < r.opp).length, d: rs.filter((r) => r.own === r.opp).length }; };
-  const byOpp = data.opponents.map((o) => ({ o, gs: games.filter((g) => g.opponentId === o.id) })).filter((x) => x.gs.length > 0).sort((a, b) => b.gs.length - a.gs.length);
+  const byOpp = data.opponents.map((o) => ({ o, gs: games.filter((g) => g.opponentId === o.id) })).filter((x) => x.gs.length > 0).sort((a, b) => nameCompare(a.o.name, b.o.name));
   const tourNames = [...new Set(games.map((g) => g.tournament || "練習試合"))];
   const byTour = tourNames.map((t) => ({ t, gs: games.filter((g) => (g.tournament || "練習試合") === t) })).sort((a, b) => (b.gs[0]?.date || "").localeCompare(a.gs[0]?.date || ""));
   const WL = ({ gs }) => {
@@ -1466,6 +1492,24 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     if (insertAfter === id) setInsertAfter(null);
     updGame((x) => ({ ...x, events: x.events.filter((e) => e.id !== id), qScores: pts ? applyScore(x.qScores, ev.side, ev.q - 1, -pts) : x.qScores }));
   };
+  // 交代IN: ベンチ選手を投入(INイベント記録 + 出場メンバー追加 + 選択状態に)
+  const subInPlayer = (pid) => {
+    const ev = { id: uid(), q, time: time.trim(), side: "own", action: "IN", playerId: pid };
+    updGame((x) => {
+      const cur = x.lineups?.[q] || [];
+      return {
+        ...x,
+        events: [...x.events, ev],
+        lineups: { ...x.lineups, [q]: cur.includes(pid) ? cur : [...cur, pid] },
+      };
+    });
+    setSide("own");
+    setSel(pid);
+    const p = data.players.find((x) => x.id === pid);
+    setFlash({ id: ev.id, text: `#${p?.number} ${p?.codename || p?.name} – 交代IN` });
+    clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 1300);
+  };
   const pName = (id) => {
     if (id === TEAM_KEY) return "チーム";
     const p = data.players.find((x) => x.id === id);
@@ -1540,18 +1584,41 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         </div>
         {side === "own" ? (
           data.players.length === 0 ? <div className="text-sm mb-3" style={{ color: C.sub }}>先に「選手」タブで選手を登録してください。</div> : (
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              <button onClick={() => setSel(TEAM_KEY)}
-                className="px-3 py-2 rounded-full text-sm font-bold"
-                style={sel === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}>チーム</button>
-              {players.map((p) => (
-                <button key={p.id} onClick={() => setSel(p.id)}
+            <>
+              {lineup.length === 0 && (
+                <div className="text-xs mb-2 px-2 py-1.5 rounded-lg" style={{ background: `${C.led}22`, color: C.led }}>
+                  上の「{periodLabel(q)}の出場メンバー」から出場中の選手を登録してください。登録した選手のみ記録できます。
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                <button onClick={() => setSel(TEAM_KEY)}
                   className="px-3 py-2 rounded-full text-sm font-bold"
-                  style={sel === p.id ? { background: C.orange, color: "#fff" } : { border: `1px solid ${lineup.includes(p.id) ? C.win : C.border}`, color: C.text }}>
-                  #{p.number} {p.codename || p.name}{lineup.includes(p.id) ? " ●" : ""}
-                </button>
-              ))}
-            </div>
+                  style={sel === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}>チーム</button>
+                {/* 出場メンバーのみ表示 */}
+                {players.filter((p) => lineup.includes(p.id)).map((p) => (
+                  <button key={p.id} onClick={() => setSel(p.id)}
+                    className="px-3 py-2 rounded-full text-sm font-bold"
+                    style={sel === p.id ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.win}`, color: C.text }}>
+                    #{p.number} {p.codename || p.name}
+                  </button>
+                ))}
+              </div>
+              {/* 交代IN: ベンチ選手を投入 */}
+              {players.filter((p) => !lineup.includes(p.id)).length > 0 && (
+                <div className="mb-3 p-2 rounded-xl" style={{ background: C.card2 }}>
+                  <div className="text-[10px] font-bold mb-1.5" style={{ color: C.sub }}>🔄 交代IN(ベンチから投入 → 出場メンバーに追加)</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {players.filter((p) => !lineup.includes(p.id)).map((p) => (
+                      <button key={p.id} onClick={() => subInPlayer(p.id)}
+                        className="px-3 py-1.5 rounded-full text-xs font-bold"
+                        style={{ border: `1px dashed ${C.sub}`, color: C.sub }}>
+                        + #{p.number} {p.codename || p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )
         ) : (
           <div className="flex flex-wrap gap-1.5 mb-3 items-center">
@@ -1569,8 +1636,8 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
           </div>
         )}
         <div className="grid grid-cols-3 gap-1.5">
-          {ACTIONS.map((a) => {
-            const disabled = !sel || (a.sub && sel === TEAM_KEY);
+          {ACTIONS.filter((a) => !a.sub).map((a) => {
+            const disabled = !sel;
             const col = a.good ? C.win : a.bad ? C.loss : C.text;
             return (
               <button key={a.k} disabled={disabled} onClick={() => addEvent(a.k)}
@@ -1988,18 +2055,14 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
           </div>
         </Card>
       )}
-      <Card>
-        <SectionTitle>{scope === "all" ? "分析" : `${periodLabel(scope)} の分析`}</SectionTitle>
-        <ul className="text-sm space-y-1.5">{a.insights.map((s, i) => <li key={i} className="flex gap-2"><span style={{ color: C.orange }}>●</span><span>{s}</span></li>)}</ul>
-      </Card>
 
-      {/* AI分析(全体のみ): 良かった点・改善点 */}
-      {scope === "all" && a.goodPoints.length > 0 && (
+      {/* AIアナリスト分析: 全体・各Q */}
+      {a.goodPoints.length > 0 && (
         <Card style={{ border: `1px solid ${C.win}44` }}>
           <div className="flex items-center gap-2 mb-3">
             <span className="text-lg">🏀</span>
             <div>
-              <div className="text-xs font-bold tracking-widest" style={{ color: C.win }}>AIアナリスト分析</div>
+              <div className="text-xs font-bold tracking-widest" style={{ color: C.win }}>AIアナリスト分析{scope === "all" ? "" : ` (${periodLabel(scope)})`}</div>
               <div className="text-[10px]" style={{ color: C.sub }}>プロのミニバス分析アナリストの視点</div>
             </div>
           </div>
@@ -2137,7 +2200,7 @@ function SettingsScreen({ data, save }) {
           <SectionTitle>対戦相手チーム</SectionTitle>
           <span className="text-xs" style={{ color: oppCount >= MAX_OPPONENTS ? C.loss : C.sub }}>{oppCount}/{MAX_OPPONENTS}</span>
         </div>
-        {data.opponents.map((o) => (
+        {[...data.opponents].sort((a, b) => nameCompare(a.name, b.name)).map((o) => (
           <div key={o.id} className="py-2" style={{ borderBottom: `1px solid ${C.border}44` }}>
             {editOpp === o.id ? (
               <div>
