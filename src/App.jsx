@@ -1761,38 +1761,74 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
   };
   const videos = game.videos || {};
   const vidKeys = [...Array.from({ length: periods }, (_, i) => String(i + 1)), "all"];
+  // 各Qのリンクを配列として正規化(旧データの文字列にも対応)
+  const vidList = (k) => {
+    const v = videos[k];
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string" && v) return [v];
+    return [];
+  };
+  const setVidList = (k, list) => upd({ videos: { ...videos, [k]: list } });
   return (
     <div className="space-y-3">
       <Card>
         <SectionTitle><span className="inline-flex items-center gap-1"><Film size={13} /> 試合動画(YouTube)</span></SectionTitle>
-        <div className="space-y-3">
+        <div className="space-y-4">
           {vidKeys.map((k) => {
             const label = k === "all" ? "フル/その他" : periodLabel(+k);
-            const id = ytId(videos[k]);
-            // 閲覧モードでリンクも動画もない場合はスキップ
-            if (!isAdmin && !id) return null;
+            const list = vidList(k);
+            const playable = list.filter((u) => ytId(u));
+            // 閲覧モードで再生可能な動画がない場合はスキップ
+            if (!isAdmin && playable.length === 0) return null;
             return (
               <div key={k}>
+                <div className="text-xs font-bold mb-1.5" style={{ color: C.sub }}>{label}</div>
                 {isAdmin ? (
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-bold w-16" style={{ color: C.sub }}>{label}</span>
-                    <input className="flex-1 rounded-lg px-2 py-1.5 text-sm" style={getInputStyle(C)} placeholder="https://youtu.be/..."
-                      value={videos[k] || ""} onChange={(e) => upd({ videos: { ...videos, [k]: e.target.value } })} />
+                  <div className="space-y-2">
+                    {(list.length ? list : [""]).map((url, i) => {
+                      const id = ytId(url);
+                      return (
+                        <div key={i}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] w-6 shrink-0" style={{ color: C.sub }}>{i + 1}</span>
+                            <input className="flex-1 rounded-lg px-2 py-1.5 text-sm" style={getInputStyle(C)} placeholder="https://youtu.be/..."
+                              value={url} onChange={(e) => {
+                                const base = list.length ? list : [""];
+                                setVidList(k, base.map((u, j) => j === i ? e.target.value : u));
+                              }} />
+                            {list.length > 0 && <button className="p-1.5 shrink-0" style={{ color: C.loss }}
+                              onClick={() => setVidList(k, list.filter((_, j) => j !== i))}><Trash2 size={15} /></button>}
+                          </div>
+                          {id && <div className="rounded-xl overflow-hidden ml-8" style={{ aspectRatio: "16/9" }}>
+                            <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${id}`} title={`動画 ${label} ${i + 1}`} frameBorder="0" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
+                          </div>}
+                        </div>
+                      );
+                    })}
+                    <button className="text-xs font-bold flex items-center gap-1 ml-8" style={{ color: C.orange }}
+                      onClick={() => setVidList(k, [...list, ""])}>
+                      <Plus size={13} /> {label}に動画を追加
+                    </button>
                   </div>
                 ) : (
-                  <div className="text-xs font-bold mb-1" style={{ color: C.sub }}>{label}</div>
+                  <div className="space-y-2">
+                    {playable.map((url, i) => (
+                      <div key={i} className="rounded-xl overflow-hidden" style={{ aspectRatio: "16/9" }}>
+                        <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${ytId(url)}`} title={`動画 ${label} ${i + 1}`} frameBorder="0" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
+                      </div>
+                    ))}
+                  </div>
                 )}
-                {id && <div className="rounded-xl overflow-hidden" style={{ aspectRatio: "16/9" }}>
-                  <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${id}`} title={`動画 ${label}`} frameBorder="0" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
-                </div>}
               </div>
             );
           })}
-          {!isAdmin && !vidKeys.some((k) => ytId(videos[k])) && (
+          {!isAdmin && !vidKeys.some((k) => vidList(k).some((u) => ytId(u))) && (
             <div className="text-sm text-center py-4" style={{ color: C.sub }}>まだ動画が登録されていません。</div>
           )}
-          {isAdmin && periods > 4 && (
-            <div className="text-[10px] mt-1" style={{ color: C.sub }}>※OTのリンク欄も上に表示されています。</div>
+          {isAdmin && (
+            <div className="text-[10px] mt-1 leading-relaxed" style={{ color: C.sub }}>
+              ※同じQでも「動画を追加」で複数のリンクを登録できます。{periods > 4 ? "OTのリンク欄も上に表示されています。" : ""}
+            </div>
           )}
         </div>
       </Card>
