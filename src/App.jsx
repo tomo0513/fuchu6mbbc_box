@@ -1135,6 +1135,26 @@ function GameForm({ data, initial, onSave, onCancel }) {
   const periods = (+f.regQ || 4) + (+f.ot || 0);
   const setQ = (side, i, v) => setF({ ...f, qScores: { ...f.qScores, [side]: f.qScores[side].map((x, j) => (j === i ? v : x)) } });
   const oppFull = !f.opponentId && data.opponents.length >= MAX_OPPONENTS;
+
+  const handleSave = () => {
+    // 4Q→3Qに変更し、Q4にデータがある場合は確認してクリア
+    const wasRegQ = initial ? regQOf(initial) : 4;
+    if (wasRegQ === 4 && (+f.regQ === 3)) {
+      const q4Score = (+f.qScores?.own?.[3] || 0) + (+f.qScores?.opp?.[3] || 0);
+      const q4Events = (initial?.events || []).filter((e) => e.q === 4).length;
+      if (q4Score > 0 || q4Events > 0) {
+        const msg = `3ピリオド制に変更すると、第4ピリオドの${q4Score > 0 ? "スコア" : ""}${q4Score > 0 && q4Events > 0 ? "と" : ""}${q4Events > 0 ? `プレイログ(${q4Events}件)` : ""}が削除されます。よろしいですか?`;
+        if (!confirm(msg)) return;
+        // Q4のスコアとプレイログをクリア
+        const own = [...f.qScores.own]; const opp = [...f.qScores.opp];
+        own[3] = ""; opp[3] = "";
+        const cleared = { ...f, qScores: { own, opp }, _clearQ4: true };
+        onSave(cleared);
+        return;
+      }
+    }
+    onSave(f);
+  };
   return (
     <Card>
       <SectionTitle>{initial ? "試合情報を編集" : "試合を登録"}</SectionTitle>
@@ -1185,7 +1205,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
       <div className="flex gap-2">
         <button className="flex-1 py-3 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }} onClick={onCancel}>キャンセル</button>
         <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange }}
-          disabled={!f.date || (!f.opponentId && (!f.newOpp || oppFull))} onClick={() => onSave(f)}>保存する</button>
+          disabled={!f.date || (!f.opponentId && (!f.newOpp || oppFull))} onClick={handleSave}>保存する</button>
       </div>
     </Card>
   );
@@ -1402,7 +1422,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   if (editing) return (
     <GameForm data={data} initial={g} onCancel={() => setEditing(false)}
       onSave={(f) => {
-        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, qScores: f.qScores }) : x) });
+        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, qScores: f.qScores, events: f._clearQ4 ? (x.events || []).filter((e) => e.q !== 4) : x.events, lineups: f._clearQ4 ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => +k !== 4)) : x.lineups }) : x) });
         setEditing(false);
       }} />
   );
