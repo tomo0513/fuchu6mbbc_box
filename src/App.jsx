@@ -137,7 +137,7 @@ function shrinkSquare(file, size, cb) {
       const ctx = cv.getContext("2d");
       const m = Math.min(img.width, img.height);
       ctx.drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, size, size);
-      cb(cv.toDataURL("image/jpeg", 0.7));
+      cb(cv.toDataURL("image/jpeg", 0.85));
     };
     img.src = reader.result;
   };
@@ -161,13 +161,15 @@ function imgUrl(url) {
 }
 
 /* ============ ピリオドヘルパー ============ */
-const periodsOf = (g) => 4 + (+g?.ot || 0);
-const periodLabel = (i) => (i <= 4 ? `Q${i}` : `OT${i - 4}`);
-const periodLen = (g, i) => (i <= 4 ? (+g?.qLen || 6) * 60 : (+g?.otLen || 3) * 60);
+const regQOf = (g) => +g?.regQ || 4; // レギュラーピリオド数(3 or 4)
+const periodsOf = (g) => regQOf(g) + (+g?.ot || 0);
+const periodLabel2 = (g, i) => (i <= regQOf(g) ? `Q${i}` : `OT${i - regQOf(g)}`);
+const periodLabel = (i) => `Q${i}`; // 後方互換(OTなし簡易表示)
+const periodLen = (g, i) => (i <= regQOf(g) ? (+g?.qLen || 6) * 60 : (+g?.otLen || 3) * 60);
 const padQ = (arr) => { const a = [...(arr || [])]; while (a.length < 6) a.push(""); return a; };
 const normGame = (g) => {
   const { scoreSheet, ...rest } = g;
-  return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0,
+  return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0, regQ: +g.regQ || 4,
     qScores: { own: padQ(g.qScores?.own), opp: padQ(g.qScores?.opp) },
     events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
@@ -255,8 +257,17 @@ function careerStats(games, playerId) {
   const per = games.map((g) => ({ g, s: aggStats(g.events, "own", playerId, "all", g) })).filter((x) => hasStats(x.s));
   const n = per.length;
   const tot = {};
-  [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"].forEach((k) => (tot[k] = per.reduce((a, x) => a + (x.s[k] || 0), 0)));
-  return { per, n, tot };
+  const totAdj = {}; // 平均用: 3Q試合は4/3倍して4Q換算
+  const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
+  cntKeys.forEach((k) => {
+    tot[k] = per.reduce((a, x) => a + (x.s[k] || 0), 0);
+    // 平均用の補正合計(EFFや出場分・カウント系を4Q換算)。率(FG%等)はtotから計算するので対象外
+    totAdj[k] = per.reduce((a, x) => {
+      const factor = regQOf(x.g) === 3 ? 4 / 3 : 1;
+      return a + (x.s[k] || 0) * factor;
+    }, 0);
+  });
+  return { per, n, tot, totAdj };
 }
 
 function mipOf(game, players) {
@@ -280,9 +291,9 @@ function analysisFor(data, game, scope) {
   const ownRows = data.players.map((p) => ({ key: p.id, label: `#${p.number} ${p.codename || p.name}`, p, s: aggStats(events, "own", p.id, scope, game) })).filter((r) => hasStats(r.s) || r.s.min > 0);
   const oppKeys = [...new Set(events.filter((e) => e.side === "opp" && e.oppNum && e.oppNum !== TEAM_KEY && (scope === "all" || e.q === scope)).map((e) => e.oppNum))];
   const oppRows = oppKeys.map((n) => ({ key: n, label: `#${n}`, s: aggStats(events, "opp", n, scope, game) })).filter((r) => hasStats(r.s));
-  const qData = Array.from({ length: periods }, (_, i) => ({ name: periodLabel(i + 1), 自チーム: +(game.qScores?.own?.[i]) || 0, 相手: +(game.qScores?.opp?.[i]) || 0 }));
+  const qData = Array.from({ length: periods }, (_, i) => ({ name: periodLabel2(game, i + 1), 自チーム: +(game.qScores?.own?.[i]) || 0, 相手: +(game.qScores?.opp?.[i]) || 0 }));
   const insights = [], tips = [];
-  const scopeLabel = scope === "all" ? "試合全体" : periodLabel(scope);
+  const scopeLabel = scope === "all" ? "試合全体" : periodLabel2(game, scope);
   if (ownT.n === 0) {
     insights.push(`${scopeLabel}のプレイログが未入力のため、スコアのみで表示しています。`);
   } else {
@@ -402,7 +413,7 @@ function flowAnalysis(data, game) {
   for (let q = 1; q <= periods; q++) {
     const o = +(game.qScores?.own?.[q - 1]) || 0, p = +(game.qScores?.opp?.[q - 1]) || 0;
     const rows = data.players.map((pl) => ({ pl, s: aggStats(game.events, "own", pl.id, q, game) })).filter((r) => r.s.pts > 0).sort((a, b) => b.s.pts - a.s.pts);
-    const parts = [`${periodLabel(q)}: ${o}-${p}${o > p ? "で上回る" : o < p ? "で劣勢" : "の互角"}`];
+    const parts = [`${periodLabel2(game, q)}: ${o}-${p}${o > p ? "で上回る" : o < p ? "で劣勢" : "の互角"}`];
     if (rows[0]) parts.push(`#${rows[0].pl.number} ${rows[0].pl.codename || rows[0].pl.name}が${rows[0].s.pts}得点`);
     if (perPeriod[q]) parts.push(...perPeriod[q]);
     const tos = timeoutsOf(game.events, "own", q) + timeoutsOf(game.events, "opp", q);
@@ -576,8 +587,8 @@ export default function App() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap'); @keyframes splashIn { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }`}</style>
       <div style={{ animation: "splashIn .6s ease-out" }} className="flex flex-col items-center gap-4">
         {data?.team?.logo
-          ? <img src={data.team.logo} alt="" className="w-24 h-24 rounded-full object-cover" style={{ boxShadow: `0 0 40px ${CT.orange}55` }} />
-          : <div className="w-24 h-24 rounded-full flex items-center justify-center text-5xl" style={{ background: CT.card2, border: `1px solid ${CT.border}` }}>🏀</div>}
+          ? <img src={data.team.logo} alt="" className="rounded-full object-cover" style={{ width: 144, height: 144, boxShadow: `0 0 50px ${CT.orange}66` }} />
+          : <div className="rounded-full flex items-center justify-center" style={{ width: 144, height: 144, fontSize: 72, background: CT.card2, border: `1px solid ${CT.border}` }}>🏀</div>}
         <div className="text-2xl font-bold text-center px-6">{data?.team?.name || "府中六小ミニバス"}</div>
         <div className="text-sm tracking-[0.3em] font-bold" style={{ color: CT.orange, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.3em" }}>GAME MANAGEMENT APP</div>
       </div>
@@ -930,7 +941,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const [selGame, setSelGame] = useState(null); // 推移とスタッツの連動用(選択中の試合id)
   if (!p) return null;
   const games = [...data.games].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  const { per, n, tot } = careerStats(games, p.id);
+  const { per, n, tot, totAdj } = careerStats(games, p.id);
+  const has3Q = per.some((x) => regQOf(x.g) === 3);
   const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
   // 推移グラフ: EFF/得点/アシスト/リバウンドから選択
   const TREND_OPTS = [
@@ -941,6 +953,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   ];
   const trendOpt = TREND_OPTS.find((o) => o.k === trendStat);
   const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, value: x.s[trendStat], gid: x.g.id }));
+  const trendAvg = chart.length > 0 ? chart.reduce((a, c) => a + (c.value || 0), 0) / chart.length : 0;
   // キャリアハイ(1試合の最高記録)
   const careerHigh = {};
   ["pts", "reb", "ast", "stl", "blk", "eff"].forEach((k) => {
@@ -989,7 +1002,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
               {targets.map((t, i) => {
                 const def = STAT_DEFS.find((d) => d.k === t.stat);
                 const goal = +t.value || 0;
-                const actual = n > 0 ? tot[t.stat] / n : 0;
+                const actual = n > 0 ? totAdj[t.stat] / n : 0;
                 const inv = INVERSE_STATS.has(t.stat);
                 const achieved = inv ? actual <= goal : actual >= goal;
                 const ratio = inv ? (actual > 0 ? Math.min(1, goal / actual) : 1) : (goal > 0 ? Math.min(1, actual / goal) : 0);
@@ -1015,10 +1028,11 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
       )}
       <Card>
         <SectionTitle>通算成績({n}試合)</SectionTitle>
+        {has3Q && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※3ピリオド制の試合は、平均値のみ4ピリオド換算(×4/3)で算出しています。合計はそのままです。</div>}
         {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
           <>
             <div className="grid grid-cols-3 gap-2 text-center">
-              {[["得点", tot.pts, fmt1(tot.pts / n)],["リバウンド", tot.reb, fmt1(tot.reb / n)],["アシスト", tot.ast, fmt1(tot.ast / n)],["スティール", tot.stl, fmt1(tot.stl / n)],["EFF", tot.eff, fmt1(tot.eff / n)],["TO", tot.to, fmt1(tot.to / n)]].map(([l, t, a]) => (
+              {[["得点", tot.pts, fmt1(totAdj.pts / n)],["リバウンド", tot.reb, fmt1(totAdj.reb / n)],["アシスト", tot.ast, fmt1(totAdj.ast / n)],["スティール", tot.stl, fmt1(totAdj.stl / n)],["EFF", tot.eff, fmt1(totAdj.eff / n)],["TO", tot.to, fmt1(totAdj.to / n)]].map(([l, t, a]) => (
                 <div key={l} className="rounded-xl py-2.5" style={{ background: C.card2 }}>
                   <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{t}</div>
                   <div className="text-[10px]" style={{ color: C.sub }}>{l}(平均 {a})</div>
@@ -1028,7 +1042,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
             <div className="flex justify-around mt-3 pt-3 text-center text-sm" style={{ borderTop: `1px solid ${C.border}` }}>
               <div><span className="font-bold text-lg">{pct(tot.fgm, tot.fga)}</span><div className="text-[10px]" style={{ color: C.sub }}>FG%</div></div>
               <div><span className="font-bold text-lg">{pct(tot.ftm, tot.fta)}</span><div className="text-[10px]" style={{ color: C.sub }}>FT%</div></div>
-              <div><span className="font-bold text-lg">{fmt1(tot.min / n)}</span><div className="text-[10px]" style={{ color: C.sub }}>平均出場(分)</div></div>
+              <div><span className="font-bold text-lg">{fmt1(totAdj.min / n)}</span><div className="text-[10px]" style={{ color: C.sub }}>平均出場(分)</div></div>
             </div>
             <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
               <div className="text-[10px] font-bold mb-2" style={{ color: C.led }}>🏅 キャリアハイ(1試合最高)</div>
@@ -1068,6 +1082,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
               <YAxis fontSize={10} allowDecimals={false} stroke={C.sub} />
               <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, color: C.text }} />
               <ReferenceLine y={0} stroke={C.sub} strokeWidth={1.5} />
+              <ReferenceLine y={trendAvg} stroke={trendOpt?.color} strokeDasharray="5 4" strokeWidth={1.5}
+                label={{ value: `平均 ${fmt1(trendAvg)}`, position: "insideTopRight", fill: trendOpt?.color, fontSize: 10 }} />
               <Line type="monotone" dataKey="value" name={trendOpt?.label} stroke={trendOpt?.color} strokeWidth={2.5}
                 dot={(props) => {
                   const active = props.payload.gid === selGame;
@@ -1113,10 +1129,10 @@ function GameForm({ data, initial, onSave, onCancel }) {
   const [f, setF] = useState(initial ? { ...normGame(initial), newOpp: "" } : {
     date: new Date().toISOString().slice(0, 10), tournament: "",
     opponentId: data.opponents[0]?.id || "", newOpp: "",
-    qLen: 6, otLen: 3, ot: 0,
+    qLen: 6, otLen: 3, ot: 0, regQ: 4,
     qScores: { own: padQ([]), opp: padQ([]) },
   });
-  const periods = 4 + (+f.ot || 0);
+  const periods = (+f.regQ || 4) + (+f.ot || 0);
   const setQ = (side, i, v) => setF({ ...f, qScores: { ...f.qScores, [side]: f.qScores[side].map((x, j) => (j === i ? v : x)) } });
   const oppFull = !f.opponentId && data.opponents.length >= MAX_OPPONENTS;
   return (
@@ -1133,6 +1149,12 @@ function GameForm({ data, initial, onSave, onCancel }) {
       {!f.opponentId && (!oppFull
         ? <Field label="新しい相手チーム名"><input className={inputCls} style={getInputStyle(C)} value={f.newOpp} onChange={(e) => setF({ ...f, newOpp: e.target.value })} placeholder="◯◯ミニバス" /></Field>
         : <div className="text-xs mb-3" style={{ color: C.loss }}>対戦相手の登録上限({MAX_OPPONENTS}チーム)に達しています。</div>)}
+      <Field label="試合形式">
+        <select className={inputCls} style={getInputStyle(C)} value={f.regQ} onChange={(e) => setF({ ...f, regQ: +e.target.value })}>
+          <option value={4}>4ピリオド制(通常)</option>
+          <option value={3}>3ピリオド制</option>
+        </select>
+      </Field>
       <div className="grid grid-cols-3 gap-3">
         <Field label="Qの時間">
           <select className={inputCls} style={getInputStyle(C)} value={f.qLen} onChange={(e) => setF({ ...f, qLen: +e.target.value })}>
@@ -1153,7 +1175,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
       <div className="text-xs mb-1" style={{ color: C.sub }}>ピリオド別スコア</div>
       <div className="overflow-x-auto">
         <div className="grid items-center text-center text-sm mb-3 gap-1.5" style={{ gridTemplateColumns: `64px repeat(${periods}, 1fr)`, minWidth: periods > 4 ? 360 : 0 }}>
-          <div></div>{Array.from({ length: periods }, (_, i) => <div key={i} className="text-xs" style={{ color: C.sub }}>{periodLabel(i + 1)}</div>)}
+          <div></div>{Array.from({ length: periods }, (_, i) => <div key={i} className="text-xs" style={{ color: C.sub }}>{periodLabel2(f, i + 1)}</div>)}
           <div className="text-xs font-bold">自チーム</div>
           {Array.from({ length: periods }, (_, i) => <input key={i} inputMode="numeric" className="rounded-lg py-2 text-center w-full" style={getInputStyle(C)} value={f.qScores.own[i]} onChange={(e) => setQ("own", i, e.target.value)} />)}
           <div className="text-xs font-bold">相手</div>
@@ -1197,7 +1219,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
       onSave={(f) => {
         let oppId = f.opponentId, opponents = data.opponents;
         if (!oppId) { oppId = uid(); opponents = [...opponents, { id: oppId, name: f.newOpp, area: "", numbers: "", logo: "" }]; }
-        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, qScores: f.qScores, events: [] });
+        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, qScores: f.qScores, events: [] });
         save({ ...data, opponents, games: [...data.games, g] });
         setAdding(false); setNav({ gameId: g.id });
       }} />
@@ -1380,7 +1402,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   if (editing) return (
     <GameForm data={data} initial={g} onCancel={() => setEditing(false)}
       onSave={(f) => {
-        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, qScores: f.qScores }) : x) });
+        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, qScores: f.qScores }) : x) });
         setEditing(false);
       }} />
   );
@@ -1550,7 +1572,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                     : { background: C.card2, color: C.sub }}
                 onClick={() => { if (!qLocked) setQ(n); }}
                 disabled={qLocked && q !== n}
-              >{periodLabel(n)}</button>
+              >{periodLabel2(game, n)}</button>
             ))}
           </div>
           <button className="shrink-0 px-3 py-2.5 rounded-lg text-xs font-bold"
@@ -1560,12 +1582,12 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
             {qLocked ? "🔒固定中" : "固定"}
           </button>
         </div>
-        {qLocked && <div className="text-xs mb-2 px-2 py-1 rounded-lg" style={{ background: C.card2, color: C.win }}>🔒 {periodLabel(q)}に固定中。解除するには「固定中」ボタンをタップ</div>}
+        {qLocked && <div className="text-xs mb-2 px-2 py-1 rounded-lg" style={{ background: C.card2, color: C.win }}>🔒 {periodLabel2(game, q)}に固定中。解除するには「固定中」ボタンをタップ</div>}
         <button className="w-full flex items-center gap-2 mb-3 text-sm font-bold rounded-xl px-3 py-2.5"
           style={{ background: C.card2, color: lineup.length ? C.win : C.sub }}
           onClick={() => setShowLineup(!showLineup)}>
           <UsersRound size={16} />
-          {periodLabel(q)}の出場メンバー({lineup.length}人)
+          {periodLabel2(game, q)}の出場メンバー({lineup.length}人)
           <ChevronDown size={16} className="ml-auto" style={{ transform: showLineup ? "rotate(180deg)" : "none" }} />
         </button>
         {showLineup && (
@@ -1583,7 +1605,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
               ))}
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[10px]" style={{ color: C.sub }}>タップで追加/解除。複数選択できます({periodLabel(q)}フル出場として計算)</span>
+              <span className="text-[10px]" style={{ color: C.sub }}>タップで追加/解除。複数選択できます({periodLabel2(game, q)}フル出場として計算)</span>
               {q > 1 && <button className="text-xs font-bold shrink-0 ml-2" style={{ color: C.orange }} onClick={copyPrevLineup}>前と同じ</button>}
             </div>
           </div>
@@ -1604,7 +1626,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
             <>
               {lineup.length === 0 && (
                 <div className="text-xs mb-2 px-2 py-1.5 rounded-lg" style={{ background: `${C.led}22`, color: C.led }}>
-                  上の「{periodLabel(q)}の出場メンバー」から出場中の選手を登録してください。登録した選手のみ記録できます。
+                  上の「{periodLabel2(game, q)}の出場メンバー」から出場中の選手を登録してください。登録した選手のみ記録できます。
                 </div>
               )}
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1697,9 +1719,9 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         </div>
       )}
       <Card>
-        <SectionTitle>{periodLabel(q)}のプレイログ({events.filter((e) => e.q === q).length})</SectionTitle>
+        <SectionTitle>{periodLabel2(game, q)}のプレイログ({events.filter((e) => e.q === q).length})</SectionTitle>
         {events.filter((e) => e.q === q).length === 0 ? (
-          <div className="text-sm" style={{ color: C.sub }}>{periodLabel(q)}に記録されたプレイはまだありません。</div>
+          <div className="text-sm" style={{ color: C.sub }}>{periodLabel2(game, q)}に記録されたプレイはまだありません。</div>
         ) : (
           <div className="space-y-1 max-h-[500px] overflow-y-auto">
             {[...events].filter((e) => e.q === q).reverse().map((e) => (
@@ -1739,7 +1761,7 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
       if (pts) { if (e.side === "own") ro += pts; else rp += pts; }
       const p = e.side === "own" && e.playerId !== TEAM_KEY ? data.players.find((x) => x.id === e.playerId) : null;
       const isTeam = e.playerId === TEAM_KEY || e.oppNum === TEAM_KEY;
-      return { period: periodLabel(e.q), time: e.time || "", team: e.side === "own" ? data.team.name : oppName(game.opponentId), num: isTeam ? "" : e.side === "own" ? (p?.number || "") : e.oppNum, name: isTeam ? "チーム" : e.side === "own" ? (p?.codename || p?.name || "") : "", action: ACTION_LABEL[e.action], pts: pts || "", score: `${ro}-${rp}` };
+      return { period: periodLabel2(game, e.q), time: e.time || "", team: e.side === "own" ? data.team.name : oppName(game.opponentId), num: isTeam ? "" : e.side === "own" ? (p?.number || "") : e.oppNum, name: isTeam ? "チーム" : e.side === "own" ? (p?.codename || p?.name || "") : "", action: ACTION_LABEL[e.action], pts: pts || "", score: `${ro}-${rp}` };
     });
   };
   const toCSV = () => {
@@ -1775,7 +1797,7 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
         <SectionTitle><span className="inline-flex items-center gap-1"><Film size={13} /> 試合動画(YouTube)</span></SectionTitle>
         <div className="space-y-4">
           {vidKeys.map((k) => {
-            const label = k === "all" ? "フル/その他" : periodLabel(+k);
+            const label = k === "all" ? "フル/その他" : periodLabel2(game, +k);
             const list = vidList(k);
             const playable = list.filter((u) => ytId(u));
             // 閲覧モードで再生可能な動画がない場合はスキップ
@@ -1976,7 +1998,7 @@ function ReportView({ data, game, mode, oppName, onClose }) {
                 <tbody>{flow.sorted.map((e) => {
                   const isTeam = e.playerId === TEAM_KEY || e.oppNum === TEAM_KEY;
                   const p = e.side === "own" && !isTeam ? data.players.find((x) => x.id === e.playerId) : null;
-                  return (<tr key={e.id}><td style={td}>{periodLabel(e.q)}</td><td style={td}>{e.time || ""}</td><td style={td}>{e.side === "own" ? data.team.name : opp}</td><td style={td}>{isTeam ? "チーム" : e.side === "own" ? `#${p?.number || ""} ${p?.codename || p?.name || ""}` : `#${e.oppNum}`}</td><td style={td}>{ACTION_LABEL[e.action]}</td></tr>);
+                  return (<tr key={e.id}><td style={td}>{periodLabel2(game, e.q)}</td><td style={td}>{e.time || ""}</td><td style={td}>{e.side === "own" ? data.team.name : opp}</td><td style={td}>{isTeam ? "チーム" : e.side === "own" ? `#${p?.number || ""} ${p?.codename || p?.name || ""}` : `#${e.oppNum}`}</td><td style={td}>{ACTION_LABEL[e.action]}</td></tr>);
                 })}</tbody>
               </table></>)}
           </>
@@ -2025,7 +2047,7 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
         <button className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.orange}`, color: C.orange }} onClick={() => onReport("detail")}><FileText size={15} /> レポート(詳細)</button>
       </div>}
       <div className="flex gap-1.5 overflow-x-auto">
-        {[["all", "全体"], ...Array.from({ length: a.periods }, (_, i) => [i + 1, periodLabel(i + 1)])].map(([k, l]) => (
+        {[["all", "全体"], ...Array.from({ length: a.periods }, (_, i) => [i + 1, periodLabel2(game, i + 1)])].map(([k, l]) => (
           <button key={k} className="flex-1 min-w-12 py-2 rounded-lg font-bold text-sm"
             style={scope === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub, border: `1px solid ${C.border}` }}
             onClick={() => setScope(k)}>{l}</button>
@@ -2035,7 +2057,7 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
         <Card>
           <div className="flex items-center justify-center gap-6" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
             <div className="text-center"><div className="text-6xl" style={{ color: C.led }}>{a.ownPts}</div><div className="text-xs" style={{ fontFamily: "sans-serif", color: C.sub }}>自チーム</div></div>
-            <div className="text-xl" style={{ color: C.sub }}>{periodLabel(scope)}</div>
+            <div className="text-xl" style={{ color: C.sub }}>{periodLabel2(game, scope)}</div>
             <div className="text-center"><div className="text-6xl" style={{ color: C.oppText }}>{a.oppPts}</div><div className="text-xs" style={{ fontFamily: "sans-serif", color: C.sub }}>相手</div></div>
           </div>
         </Card>
@@ -2123,7 +2145,7 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
           <div className="flex items-center gap-2 mb-3">
             <span className="text-lg">🏀</span>
             <div>
-              <div className="text-xs font-bold tracking-widest" style={{ color: C.win }}>AIアナリスト分析{scope === "all" ? "" : ` (${periodLabel(scope)})`}</div>
+              <div className="text-xs font-bold tracking-widest" style={{ color: C.win }}>AIアナリスト分析{scope === "all" ? "" : ` (${periodLabel2(game, scope)})`}</div>
               <div className="text-[10px]" style={{ color: C.sub }}>プロのミニバス分析アナリストの視点</div>
             </div>
           </div>
@@ -2248,7 +2270,7 @@ function SettingsScreen({ data, save }) {
           {team.logo ? <img src={team.logo} alt="" className="w-14 h-14 rounded-full object-cover" /> : <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl" style={{ background: C.card2, border: `1px solid ${C.border}` }}>🏀</div>}
           <label className="text-sm font-bold px-3 py-2 rounded-xl" style={{ border: `1px solid ${C.border}` }}>
             ロゴ画像を選ぶ
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) shrinkSquare(f, 96, (d) => setTeam({ ...team, logo: d })); }} />
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) shrinkSquare(f, 256, (d) => setTeam({ ...team, logo: d })); }} />
           </label>
           {team.logo && <button className="text-xs" style={{ color: C.loss }} onClick={() => setTeam({ ...team, logo: "" })}>削除</button>}
         </div>
