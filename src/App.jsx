@@ -169,7 +169,7 @@ const periodLen = (g, i) => (i <= regQOf(g) ? (+g?.qLen || 6) * 60 : (+g?.otLen 
 const padQ = (arr) => { const a = [...(arr || [])]; while (a.length < 6) a.push(""); return a; };
 const normGame = (g) => {
   const { scoreSheet, ...rest } = g;
-  return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0, regQ: +g.regQ || 4,
+  return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0, regQ: +g.regQ || 4, order: +g.order || 0,
     qScores: { own: padQ(g.qScores?.own), opp: padQ(g.qScores?.opp) },
     events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
@@ -252,6 +252,10 @@ function sideTotals(events, side, scope) {
 const timeoutsOf = (events, side, scope) =>
   (events || []).filter((e) => e.side === side && e.action === "TOT" && (scope === "all" || e.q === scope)).length;
 const gamePts = (g) => ({ own: qSum(g.qScores?.own, periodsOf(g)), opp: qSum(g.qScores?.opp, periodsOf(g)) });
+
+// 試合の並び順: 日付 → 同日内order。descは新しい順
+const gameOrderAsc = (a, b) => (a.date || "").localeCompare(b.date || "") || ((+a.order || 0) - (+b.order || 0));
+const gameOrderDesc = (a, b) => (b.date || "").localeCompare(a.date || "") || ((+b.order || 0) - (+a.order || 0));
 
 function careerStats(games, playerId) {
   const per = games.map((g) => ({ g, s: aggStats(g.events, "own", playerId, "all", g) })).filter((x) => hasStats(x.s));
@@ -586,11 +590,8 @@ export default function App() {
     <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: CT.bg, color: CT.text }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap'); @keyframes splashIn { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }`}</style>
       <div style={{ animation: "splashIn .6s ease-out" }} className="flex flex-col items-center gap-4">
-        {data?.team?.logo
-          ? <img src={data.team.logo} alt="" className="rounded-full object-cover" style={{ width: 144, height: 144, boxShadow: `0 0 50px ${CT.orange}66` }} />
-          : <div className="rounded-full flex items-center justify-center" style={{ width: 144, height: 144, fontSize: 72, background: CT.card2, border: `1px solid ${CT.border}` }}>🏀</div>}
-        <div className="text-2xl font-bold text-center px-6">{data?.team?.name || "府中六小ミニバス"}</div>
-        <div className="text-sm tracking-[0.3em] font-bold" style={{ color: CT.orange, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.3em" }}>GAME MANAGEMENT APP</div>
+        <div className="text-3xl font-bold text-center px-6">{data?.team?.name || "府中六小ミニバス"}</div>
+        <div className="text-base tracking-[0.3em] font-bold" style={{ color: CT.orange, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.3em" }}>GAME MANAGEMENT APP</div>
       </div>
       {!data && <div className="text-xs mt-4" style={{ color: CT.sub }}>読み込み中…</div>}
     </div>
@@ -740,7 +741,7 @@ export default function App() {
 /* ============ ダッシュボード ============ */
 function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const C = useC();
-  const games = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const games = [...data.games].sort(gameOrderDesc);
   const results = games.map((g) => ({ g, ...gamePts(g) }));
   const w = results.filter((r) => r.own > r.opp).length;
   const l = results.filter((r) => r.own < r.opp).length;
@@ -749,7 +750,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const avgPA = n ? results.reduce((a, r) => a + r.opp, 0) / n : 0;
   const stars = useMemo(() => {
     // 直近5試合の平均EFFが高い順に上位5人をピックアップ
-    const recent5 = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 5);
+    const recent5 = [...data.games].sort(gameOrderDesc).slice(0, 5);
     if (recent5.length === 0) return [];
     const rows = [];
     for (const p of data.players) {
@@ -782,7 +783,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
 
       {/* 注目選手(上位5人) */}
       {stars.length > 0 && (
-        <Card>
+        <Card className="h-full">
           <SectionTitle>注目選手(直近5試合の平均EFF)</SectionTitle>
           <div className="space-y-1">
             {stars.map((st, i) => (
@@ -810,13 +811,13 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
       )}
 
       {/* 直近の試合 */}
-      <div className={isPC ? "col-span-2" : ""}>
-        <div className="flex items-center justify-between mb-2 px-1">
+      <Card className="h-full">
+        <div className="flex items-center justify-between mb-2">
           <SectionTitle>直近の試合</SectionTitle>
           <button className="text-xs font-bold" style={{ color: C.orange }} onClick={() => setTab("games")}>すべて見る</button>
         </div>
         {recentGames.length === 0 ? (
-          <Card className="text-center text-sm py-8" style={{ color: C.sub }}>まだ試合がありません。「試合」タブから登録しましょう。</Card>
+          <div className="text-center text-sm py-8" style={{ color: C.sub }}>まだ試合がありません。「試合」タブから登録しましょう。</div>
         ) : (
           <div className="space-y-2">
             {recentGames.map(({ g, own, opp }) => (
@@ -827,7 +828,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -940,7 +941,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const [trendStat, setTrendStat] = useState("eff"); // 推移グラフの表示項目
   const [selGame, setSelGame] = useState(null); // 推移とスタッツの連動用(選択中の試合id)
   if (!p) return null;
-  const games = [...data.games].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const games = [...data.games].sort(gameOrderAsc);
   const { per, n, tot, totAdj } = careerStats(games, p.id);
   const has3Q = per.some((x) => regQOf(x.g) === 3);
   const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
@@ -1135,6 +1136,8 @@ function GameForm({ data, initial, onSave, onCancel }) {
   const periods = (+f.regQ || 4) + (+f.ot || 0);
   const setQ = (side, i, v) => setF({ ...f, qScores: { ...f.qScores, [side]: f.qScores[side].map((x, j) => (j === i ? v : x)) } });
   const oppFull = !f.opponentId && data.opponents.length >= MAX_OPPONENTS;
+  // 同じ日の試合数(自分以外)
+  const sameDayGames = data.games.filter((x) => x.date === f.date && x.id !== initial?.id);
 
   const handleSave = () => {
     // 4Q→3Qに変更し、Q4にデータがある場合は確認してクリア
@@ -1159,6 +1162,12 @@ function GameForm({ data, initial, onSave, onCancel }) {
     <Card>
       <SectionTitle>{initial ? "試合情報を編集" : "試合を登録"}</SectionTitle>
       <Field label="日付"><input type="date" className={inputCls} style={getInputStyle(C)} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+      {sameDayGames.length > 0 && (
+        <Field label={`同じ日の試合順(この日は他に${sameDayGames.length}試合あります。小さい番号が先)`}>
+          <input className={inputCls} style={getInputStyle(C)} inputMode="numeric" value={f.order ?? ""}
+            onChange={(e) => setF({ ...f, order: e.target.value === "" ? "" : +e.target.value })} placeholder="例: 1, 2, 3..." />
+        </Field>
+      )}
       <Field label="大会名"><input className={inputCls} style={getInputStyle(C)} value={f.tournament} onChange={(e) => setF({ ...f, tournament: e.target.value })} placeholder="市民大会 予選リーグ" /></Field>
       <Field label="対戦相手">
         <select className={inputCls} style={getInputStyle(C)} value={f.opponentId} onChange={(e) => setF({ ...f, opponentId: e.target.value })}>
@@ -1232,14 +1241,14 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState("list");
   const [openKey, setOpenKey] = useState(null);
-  const games = [...data.games].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const games = [...data.games].sort(gameOrderDesc);
   const results = games.map((g) => ({ g, ...gamePts(g) }));
   if (adding) return (
     <GameForm data={data} onCancel={() => setAdding(false)}
       onSave={(f) => {
         let oppId = f.opponentId, opponents = data.opponents;
         if (!oppId) { oppId = uid(); opponents = [...opponents, { id: oppId, name: f.newOpp, area: "", numbers: "", logo: "" }]; }
-        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, qScores: f.qScores, events: [] });
+        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, qScores: f.qScores, events: [] });
         save({ ...data, opponents, games: [...data.games, g] });
         setAdding(false); setNav({ gameId: g.id });
       }} />
@@ -1422,7 +1431,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   if (editing) return (
     <GameForm data={data} initial={g} onCancel={() => setEditing(false)}
       onSave={(f) => {
-        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, qScores: f.qScores, events: f._clearQ4 ? (x.events || []).filter((e) => e.q !== 4) : x.events, lineups: f._clearQ4 ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => +k !== 4)) : x.lineups }) : x) });
+        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, qScores: f.qScores, events: f._clearQ4 ? (x.events || []).filter((e) => e.q !== 4) : x.events, lineups: f._clearQ4 ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => +k !== 4)) : x.lineups }) : x) });
         setEditing(false);
       }} />
   );
