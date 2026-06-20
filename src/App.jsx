@@ -114,10 +114,17 @@ const tierOf = (k) => TIERS.find((t) => t.k === k);
 
 // あいうえお順ソート(アルファベット→ひらがな・漢字)。日本語ロケール対応
 const nameCompare = (a, b) => (a || "").localeCompare(b || "", "ja");
+// 対戦相手の並び: Tier順(A→D→未設定) → 読み(kana)優先のあいうえお順
+const TIER_RANK = { A: 0, B: 1, C: 2, D: 3 };
+const oppCompare = (a, b) => {
+  const ra = TIER_RANK[a.tier] ?? 9, rb = TIER_RANK[b.tier] ?? 9;
+  if (ra !== rb) return ra - rb;
+  return nameCompare(a.kana || a.name, b.kana || b.name);
+};
 
 /* ============ ユーティリティ ============ */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-const fmt1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+const fmt1 = (n) => (Number.isFinite(n) ? (Math.round(n * 10) / 10).toFixed(1) : "0.0");
 const pct = (m, a) => (a > 0 ? Math.round((m / a) * 100) + "%" : "–");
 const qSum = (arr, periods) => (arr || []).slice(0, periods).reduce((a, b) => a + (+b || 0), 0);
 
@@ -259,19 +266,22 @@ const gameOrderDesc = (a, b) => (b.date || "").localeCompare(a.date || "") || ((
 
 function careerStats(games, playerId) {
   const per = games.map((g) => ({ g, s: aggStats(g.events, "own", playerId, "all", g) })).filter((x) => hasStats(x.s));
-  const n = per.length;
+  // 平均用: スコアが0-0(まだ未入力)の試合は試合数にカウントしない
+  const played = per.filter((x) => { const p = gamePts(x.g); return (p.own + p.opp) > 0; });
+  const n = played.length;
   const tot = {};
   const totAdj = {}; // 平均用: 3Q試合は4/3倍して4Q換算
   const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
   cntKeys.forEach((k) => {
+    // 合計は全試合(per)を集計
     tot[k] = per.reduce((a, x) => a + (x.s[k] || 0), 0);
-    // 平均用の補正合計(EFFや出場分・カウント系を4Q換算)。率(FG%等)はtotから計算するので対象外
-    totAdj[k] = per.reduce((a, x) => {
+    // 平均用の補正合計: 0-0を除いたplayedのみ、3Q試合は4Q換算
+    totAdj[k] = played.reduce((a, x) => {
       const factor = regQOf(x.g) === 3 ? 4 / 3 : 1;
       return a + (x.s[k] || 0) * factor;
     }, 0);
   });
-  return { per, n, tot, totAdj };
+  return { per, n, tot, totAdj, gamesPlayed: per.length };
 }
 
 function mipOf(game, players) {
@@ -749,8 +759,8 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const avgPF = n ? results.reduce((a, r) => a + r.own, 0) / n : 0;
   const avgPA = n ? results.reduce((a, r) => a + r.opp, 0) / n : 0;
   const stars = useMemo(() => {
-    // 直近5試合の平均EFFが高い順に上位5人をピックアップ
-    const recent5 = [...data.games].sort(gameOrderDesc).slice(0, 5);
+    // 直近5試合の平均EFFが高い順に上位5人(0-0の未入力試合は除外)
+    const recent5 = [...data.games].filter((g) => { const p = gamePts(g); return (p.own + p.opp) > 0; }).sort(gameOrderDesc).slice(0, 5);
     if (recent5.length === 0) return [];
     const rows = [];
     for (const p of data.players) {
@@ -942,7 +952,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const [selGame, setSelGame] = useState(null); // 推移とスタッツの連動用(選択中の試合id)
   if (!p) return null;
   const games = [...data.games].sort(gameOrderAsc);
-  const { per, n, tot, totAdj } = careerStats(games, p.id);
+  const { per, n, tot, totAdj, gamesPlayed } = careerStats(games, p.id);
   const has3Q = per.some((x) => regQOf(x.g) === 3);
   const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
   // 推移グラフ: EFF/得点/アシスト/リバウンドから選択
@@ -1028,7 +1038,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
         </Card>
       )}
       <Card>
-        <SectionTitle>通算成績({n}試合)</SectionTitle>
+        <SectionTitle>通算成績({gamesPlayed}試合{n < gamesPlayed ? `・平均は${n}試合で算出` : ""})</SectionTitle>
         {has3Q && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※3ピリオド制の試合は、平均値のみ4ピリオド換算(×4/3)で算出しています。合計はそのままです。</div>}
         {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
           <>
@@ -2257,7 +2267,7 @@ function Ranking({ data, setTab, setNav }) {
 function SettingsScreen({ data, save }) {
   const C = useC();
   const [team, setTeam] = useState(data.team);
-  const [oppForm, setOppForm] = useState({ name: "", area: "", numbers: "", tier: "" });
+  const [oppForm, setOppForm] = useState({ name: "", kana: "", area: "", numbers: "", tier: "" });
   const [editOpp, setEditOpp] = useState(null);
   const [oppDraft, setOppDraft] = useState(null);
   const oppCount = data.opponents.length;
@@ -2312,7 +2322,7 @@ function SettingsScreen({ data, save }) {
           <SectionTitle>対戦相手チーム</SectionTitle>
           <span className="text-xs" style={{ color: oppCount >= MAX_OPPONENTS ? C.loss : C.sub }}>{oppCount}/{MAX_OPPONENTS}</span>
         </div>
-        {[...data.opponents].sort((a, b) => nameCompare(a.name, b.name)).map((o) => (
+        {[...data.opponents].sort(oppCompare).map((o) => (
           <div key={o.id} className="py-2" style={{ borderBottom: `1px solid ${C.border}44` }}>
             {editOpp === o.id ? (
               <div>
@@ -2325,6 +2335,7 @@ function SettingsScreen({ data, save }) {
                   {oppDraft?.logo && <button className="text-xs" style={{ color: C.loss }} onClick={() => setOppDraft({ ...oppDraft, logo: "" })}>削除</button>}
                 </div>
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppDraft.name} onChange={(e) => setOppDraft({ ...oppDraft, name: e.target.value })} />
+                <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="読み(カタカナ・並べ替え用)" value={oppDraft.kana || ""} onChange={(e) => setOppDraft({ ...oppDraft, kana: e.target.value })} />
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppDraft.area || ""} onChange={(e) => setOppDraft({ ...oppDraft, area: e.target.value })} />
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り) 4,5,6,7" value={oppDraft.numbers || ""} onChange={(e) => setOppDraft({ ...oppDraft, numbers: e.target.value })} />
                 <div className="text-xs mb-1" style={{ color: C.sub }}>強さ(Tier)</div>
@@ -2365,6 +2376,7 @@ function SettingsScreen({ data, save }) {
           ) : (
             <>
               <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppForm.name} onChange={(e) => setOppForm({ ...oppForm, name: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="読み(カタカナ・並べ替え用)例: フチュウロクショウ" value={oppForm.kana} onChange={(e) => setOppForm({ ...oppForm, kana: e.target.value })} />
               <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppForm.area} onChange={(e) => setOppForm({ ...oppForm, area: e.target.value })} />
               <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り)" value={oppForm.numbers} onChange={(e) => setOppForm({ ...oppForm, numbers: e.target.value })} />
               <div className="text-xs mb-1" style={{ color: C.sub }}>強さ(Tier)</div>
@@ -2379,7 +2391,7 @@ function SettingsScreen({ data, save }) {
               <div className="text-[10px] mb-2" style={{ color: C.sub }}>
                 {oppForm.tier ? tierOf(oppForm.tier)?.desc : "A:都大会上位 / B:府中上位レベル / C:同格 / D:格下"}
               </div>
-              <PrimaryBtn disabled={!oppForm.name} onClick={() => { save({ ...data, opponents: [...data.opponents, { id: uid(), logo: "", ...oppForm }] }); setOppForm({ name: "", area: "", numbers: "", tier: "" }); }}>対戦相手を追加</PrimaryBtn>
+              <PrimaryBtn disabled={!oppForm.name} onClick={() => { save({ ...data, opponents: [...data.opponents, { id: uid(), logo: "", ...oppForm }] }); setOppForm({ name: "", kana: "", area: "", numbers: "", tier: "" }); }}>対戦相手を追加</PrimaryBtn>
             </>
           )}
         </div>
