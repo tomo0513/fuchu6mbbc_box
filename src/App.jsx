@@ -195,7 +195,8 @@ function courtIntervals(events, side, key, g) {
       .map((e) => ({ a: e.action, t: parseClock(e.time, len) ?? (e.action === "IN" ? len : 0) }));
     const inLineup = side === "own" && (lineups[q] || []).includes(key);
     if (inLineup && !evs.some((e) => e.a === "IN")) evs = [{ a: "IN", t: len }, ...evs];
-    evs.sort((a, b) => b.t - a.t);
+    // 残り時間の降順(=試合の進行順)。同時刻はOUTを先に処理して区間を確定
+    evs.sort((a, b) => (b.t - a.t) || (a.a === "OUT" ? -1 : 1));
     if (evs.length) has = true;
     const iv = []; let start = null;
     for (const e of evs) {
@@ -597,13 +598,44 @@ export default function App() {
   };
 
   if (!data || showSplash) return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: CT.bg, color: CT.text }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap'); @keyframes splashIn { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }`}</style>
-      <div style={{ animation: "splashIn .6s ease-out" }} className="flex flex-col items-center gap-4">
-        <div className="text-3xl font-bold text-center px-6">{data?.team?.name || "府中六小ミニバス"}</div>
-        <div className="text-base tracking-[0.3em] font-bold" style={{ color: CT.orange, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.3em" }}>GAME MANAGEMENT APP</div>
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden" style={{ background: CT.bg, color: CT.text }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+        @keyframes splashIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+        @keyframes splashLine { from { width: 0; opacity: 0; } to { width: 64px; opacity: 1; } }
+        @keyframes splashGlow { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+        @keyframes splashSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+        @keyframes splashFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+      `}</style>
+      {/* 背景の装飾グロー */}
+      <div className="absolute" style={{ top: "20%", left: "50%", transform: "translateX(-50%)", width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${CT.orange}22, transparent 70%)`, animation: "splashGlow 3s ease-in-out infinite" }} />
+      {/* コートライン装飾 */}
+      <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: `repeating-linear-gradient(90deg, ${CT.text} 0 1px, transparent 1px 80px)` }} />
+
+      <div className="relative flex flex-col items-center" style={{ animation: "splashIn .7s ease-out" }}>
+        {/* バスケットボールアイコン */}
+        <div className="mb-6" style={{ animation: "splashFloat 2.5s ease-in-out infinite" }}>
+          <div className="rounded-full flex items-center justify-center relative" style={{ width: 88, height: 88, background: `linear-gradient(135deg, ${CT.orange}, ${CT.led})`, boxShadow: `0 12px 40px ${CT.orange}55` }}>
+            <svg width="50" height="50" viewBox="0 0 100 100" style={{ animation: "splashSpin 12s linear infinite" }}>
+              <circle cx="50" cy="50" r="46" fill="none" stroke="#fff" strokeWidth="3" />
+              <path d="M50 4 V96 M4 50 H96" stroke="#fff" strokeWidth="3" fill="none" />
+              <path d="M14 18 Q50 50 14 82 M86 18 Q50 50 86 82" stroke="#fff" strokeWidth="3" fill="none" />
+            </svg>
+          </div>
+        </div>
+
+        {/* チーム名 */}
+        <div className="text-3xl font-bold text-center px-6 mb-3" style={{ letterSpacing: "0.02em" }}>{data?.team?.name || "府中六小ミニバス"}</div>
+
+        {/* 装飾ライン */}
+        <div className="h-[2px] rounded-full mb-3" style={{ background: `linear-gradient(90deg, transparent, ${CT.orange}, transparent)`, animation: "splashLine .9s ease-out .3s both" }} />
+
+        {/* タイトル */}
+        <div className="text-lg font-bold" style={{ color: CT.orange, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.34em", paddingLeft: "0.34em" }}>GAME MANAGEMENT</div>
+        <div className="text-xs mt-1" style={{ color: CT.sub, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.5em", paddingLeft: "0.5em" }}>APP</div>
       </div>
-      {!data && <div className="text-xs mt-4" style={{ color: CT.sub }}>読み込み中…</div>}
+
+      {!data && <div className="absolute bottom-12 text-xs" style={{ color: CT.sub }}>読み込み中…</div>}
     </div>
   );
 
@@ -1553,9 +1585,23 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     if (insertAfter === id) setInsertAfter(null);
     updGame((x) => ({ ...x, events: x.events.filter((e) => e.id !== id), qScores: pts ? applyScore(x.qScores, ev.side, ev.q - 1, -pts) : x.qScores }));
   };
+  // 残り時間を取得(入力欄が空ならpromptで聞く)。"M:SS"形式
+  const askRemain = (label) => {
+    let t = time.trim();
+    if (!t) {
+      const len = (q <= regQOf(game) ? (+game.qLen || 6) : (+game.otLen || 3));
+      const ans = prompt(`${label}した時点の「残り時間」を入力してください(例: 4:30)\n※${periodLabel2(game, q)}の長さは${len}分です。空欄ならQ満了(${len}:00)として計算します。`, "");
+      if (ans === null) return undefined; // キャンセル
+      t = (ans || "").trim();
+    }
+    return t;
+  };
   // 交代IN: ベンチ選手を投入(INイベント記録 + 出場メンバー追加 + 選択状態に)
   const subInPlayer = (pid) => {
-    const ev = { id: uid(), q, time: time.trim(), side: "own", action: "IN", playerId: pid };
+    const p = data.players.find((x) => x.id === pid);
+    const t = askRemain(`#${p?.number} ${p?.codename || p?.name} が交代IN`);
+    if (t === undefined) return;
+    const ev = { id: uid(), q, time: t, side: "own", action: "IN", playerId: pid };
     updGame((x) => {
       const cur = x.lineups?.[q] || [];
       return {
@@ -1566,14 +1612,16 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     });
     setSide("own");
     setSel(pid);
-    const p = data.players.find((x) => x.id === pid);
-    setFlash({ id: ev.id, text: `#${p?.number} ${p?.codename || p?.name} – 交代IN` });
+    setFlash({ id: ev.id, text: `#${p?.number} ${p?.codename || p?.name} – 交代IN${t ? ` (残り${t})` : ""}` });
     clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 1300);
   };
   // 交代OUT: 出場選手をベンチに戻す(OUTイベント記録 + 出場メンバーから除外)
   const subOutPlayer = (pid) => {
-    const ev = { id: uid(), q, time: time.trim(), side: "own", action: "OUT", playerId: pid };
+    const p = data.players.find((x) => x.id === pid);
+    const t = askRemain(`#${p?.number} ${p?.codename || p?.name} が交代OUT`);
+    if (t === undefined) return;
+    const ev = { id: uid(), q, time: t, side: "own", action: "OUT", playerId: pid };
     updGame((x) => {
       const cur = x.lineups?.[q] || [];
       return {
@@ -1582,9 +1630,8 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         lineups: { ...x.lineups, [q]: cur.filter((i) => i !== pid) },
       };
     });
-    const p = data.players.find((x) => x.id === pid);
     setSel(null);
-    setFlash({ id: ev.id, text: `#${p?.number} ${p?.codename || p?.name} – 交代OUT` });
+    setFlash({ id: ev.id, text: `#${p?.number} ${p?.codename || p?.name} – 交代OUT${t ? ` (残り${t})` : ""}` });
     clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 1300);
   };
