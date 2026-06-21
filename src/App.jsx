@@ -194,9 +194,13 @@ function courtIntervals(events, side, key, g) {
       .filter((e) => matchKey(e, side, key) && e.q === q && (e.action === "IN" || e.action === "OUT"))
       .map((e) => ({ a: e.action, t: parseClock(e.time, len) ?? (e.action === "IN" ? len : 0) }));
     const inLineup = side === "own" && (lineups[q] || []).includes(key);
-    if (inLineup && !evs.some((e) => e.a === "IN")) evs = [{ a: "IN", t: len }, ...evs];
-    // 残り時間の降順(=試合の進行順)。同時刻はOUTを先に処理して区間を確定
+    // まず時系列順(残り時間の降順)に並べる。同時刻はOUT→INの順
     evs.sort((a, b) => (b.t - a.t) || (a.a === "OUT" ? -1 : 1));
+    // 最初のイベントがOUT、またはイベントが無くlineup登録済みなら、Q頭からの出場を補完
+    // (スターター/Q頭から出ていた選手の経過時間を正しく計上。lineup未登録でも救済)
+    const firstIsOut = evs.length > 0 && evs[0].a === "OUT";
+    const noEventButInLineup = evs.length === 0 && inLineup;
+    if (firstIsOut || noEventButInLineup) evs = [{ a: "IN", t: len }, ...evs];
     if (evs.length) has = true;
     const iv = []; let start = null;
     for (const e of evs) {
