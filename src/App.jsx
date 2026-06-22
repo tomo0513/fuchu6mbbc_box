@@ -125,6 +125,12 @@ const oppCompare = (a, b) => {
 /* ============ ユーティリティ ============ */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const fmt1 = (n) => (Number.isFinite(n) ? (Math.round(n * 10) / 10).toFixed(1) : "0.0");
+// 整数ならそのまま、小数があれば小数第1位まで
+const fmtSmart = (n) => {
+  if (!Number.isFinite(n)) return "0";
+  const r = Math.round(n * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+};
 const pct = (m, a) => (a > 0 ? Math.round((m / a) * 100) + "%" : "–");
 const qSum = (arr, periods) => (arr || []).slice(0, periods).reduce((a, b) => a + (+b || 0), 0);
 
@@ -2297,7 +2303,14 @@ function Ranking({ data, setTab, setNav }) {
     }
     return { p, n: c.n, total: c.tot[stat], avg: c.totAdj[stat] / c.n };
   }).filter(Boolean).sort((a, b) => (mode === "total" ? b.total - a.total : b.avg - a.avg));
-  const statOptions = [...STAT_DEFS.map((d) => [d.k, d.label]), ["fgp", "フィールドゴール率(FG%)"], ["ftp", "フリースロー率(FT%)"]];
+  const statOptions = [];
+  for (const d of STAT_DEFS) {
+    statOptions.push([d.k, d.label]);
+    if (d.k === "pts") {
+      statOptions.push(["fgp", "フィールドゴール率(FG%)"]);
+      statOptions.push(["ftp", "フリースロー率(FT%)"]);
+    }
+  }
   return (
     <Card>
       <div className="flex gap-2 mb-3">
@@ -2321,7 +2334,7 @@ function Ranking({ data, setTab, setNav }) {
             <div className="w-8 text-center text-2xl" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</div>
             <Avatar p={r.p} size={36} />
             <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{r.p.codename || r.p.name}</div><div className="text-[10px]" style={{ color: C.sub }}>#{r.p.number}・{isPctStat ? `${r.made}/${r.att}本` : `${r.n}試合`}</div></div>
-            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{isPctStat ? `${fmt1(r.total)}%` : mode === "total" ? r.total : fmt1(r.avg)}</div>
+            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{isPctStat ? `${fmt1(r.total)}%` : mode === "total" ? fmtSmart(r.total) : fmt1(r.avg)}</div>
           </button>
         ))}</div>
       )}
