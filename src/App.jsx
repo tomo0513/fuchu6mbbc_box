@@ -2281,32 +2281,47 @@ function Ranking({ data, setTab, setNav }) {
   const C = useC();
   const [stat, setStat] = useState("pts");
   const [mode, setMode] = useState("total");
+  const isPctStat = stat === "fgp" || stat === "ftp"; // 率系スタッツ
   const rows = data.players.map((p) => {
     const c = careerStats(data.games, p.id);
     if (c.n === 0) return null;
-    return { p, n: c.n, total: c.tot[stat], avg: c.tot[stat] / c.n };
+    if (stat === "fgp") {
+      if ((c.tot.fga || 0) === 0) return null;
+      const v = (c.tot.fgm / c.tot.fga) * 100;
+      return { p, n: c.n, total: v, avg: v, made: c.tot.fgm, att: c.tot.fga };
+    }
+    if (stat === "ftp") {
+      if ((c.tot.fta || 0) === 0) return null;
+      const v = (c.tot.ftm / c.tot.fta) * 100;
+      return { p, n: c.n, total: v, avg: v, made: c.tot.ftm, att: c.tot.fta };
+    }
+    return { p, n: c.n, total: c.tot[stat], avg: c.totAdj[stat] / c.n };
   }).filter(Boolean).sort((a, b) => (mode === "total" ? b.total - a.total : b.avg - a.avg));
+  const statOptions = [...STAT_DEFS.map((d) => [d.k, d.label]), ["fgp", "フィールドゴール率(FG%)"], ["ftp", "フリースロー率(FT%)"]];
   return (
     <Card>
       <div className="flex gap-2 mb-3">
         <select className={inputCls} style={getInputStyle(C)} value={stat} onChange={(e) => setStat(e.target.value)}>
-          {STAT_DEFS.map((d) => <option key={d.k} value={d.k}>{d.label}</option>)}
+          {statOptions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
-        <div className="flex rounded-xl overflow-hidden shrink-0 text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
-          {[["total", "合計"], ["avg", "平均"]].map(([k, l]) => (
-            <button key={k} className="px-4" onClick={() => setMode(k)}
-              style={mode === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
-          ))}
-        </div>
+        {!isPctStat && (
+          <div className="flex rounded-xl overflow-hidden shrink-0 text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
+            {[["total", "合計"], ["avg", "平均"]].map(([k, l]) => (
+              <button key={k} className="px-4" onClick={() => setMode(k)}
+                style={mode === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
+            ))}
+          </div>
+        )}
       </div>
+      {isPctStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※成功数／試投数からの通算成功率。試投のある選手のみ表示します。</div>}
       {rows.length === 0 ? <div className="text-sm py-4 text-center" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
         <div>{rows.map((r, i) => (
           <button key={r.p.id} className="w-full flex items-center gap-3 py-2.5 text-left" style={{ borderBottom: `1px solid ${C.border}44` }}
             onClick={() => { setTab("players"); setNav({ playerId: r.p.id }); }}>
             <div className="w-8 text-center text-2xl" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</div>
             <Avatar p={r.p} size={36} />
-            <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{r.p.codename || r.p.name}</div><div className="text-[10px]" style={{ color: C.sub }}>#{r.p.number}・{r.n}試合</div></div>
-            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{mode === "total" ? r.total : fmt1(r.avg)}</div>
+            <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{r.p.codename || r.p.name}</div><div className="text-[10px]" style={{ color: C.sub }}>#{r.p.number}・{isPctStat ? `${r.made}/${r.att}本` : `${r.n}試合`}</div></div>
+            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{isPctStat ? `${fmt1(r.total)}%` : mode === "total" ? r.total : fmt1(r.avg)}</div>
           </button>
         ))}</div>
       )}
