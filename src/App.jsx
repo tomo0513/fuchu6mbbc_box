@@ -284,8 +284,8 @@ function careerStats(games, playerId) {
   const totAdj = {}; // 平均用: 3Q試合は4/3倍して4Q換算
   const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
   cntKeys.forEach((k) => {
-    // 合計は全試合(per)を集計
-    tot[k] = per.reduce((a, x) => a + (x.s[k] || 0), 0);
+    // 合計は全試合(per)を集計。浮動小数点誤差を防ぐため小数第1位に丸める
+    tot[k] = Math.round(per.reduce((a, x) => a + (x.s[k] || 0), 0) * 10) / 10;
     // 平均用の補正合計: 0-0を除いたplayedのみ、3Q試合は4Q換算
     totAdj[k] = played.reduce((a, x) => {
       const factor = regQOf(x.g) === 3 ? 4 / 3 : 1;
