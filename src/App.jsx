@@ -617,13 +617,15 @@ export default function App() {
         @keyframes splashPulse { 0%,100% { opacity: .13; transform: translate(-50%,-50%) scale(1); } 50% { opacity: .18; transform: translate(-50%,-50%) scale(1.04); } }
       `}</style>
 
-      {/* 背景透かし: チームロゴを画面全体に大きく */}
+      {/* 背景透かし: ロゴのみを表示(blend-modeで白フチを消す) */}
       {data?.team?.logo && (
         <img src={data.team.logo} alt="" aria-hidden="true"
           className="absolute pointer-events-none select-none"
           style={{ top: "50%", left: "50%", transform: "translate(-50%,-50%)",
             width: "min(100vw, 100vh)", height: "min(100vw, 100vh)",
-            objectFit: "contain", opacity: 0.13,
+            objectFit: "contain",
+            opacity: theme === "dark" ? 0.45 : 0.35,
+            mixBlendMode: theme === "dark" ? "screen" : "multiply",
             animation: "splashPulse 4s ease-in-out infinite" }} />
       )}
       {/* ロゴがない場合のコートライン装飾 */}
@@ -1153,89 +1155,60 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
             </LineChart>
           </ResponsiveContainer>
 
-          {/* ===== 下段: シュート効率 + 試投棒グラフ ===== */}
-          <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${C.border}` }}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[11px] font-bold" style={{ color: C.sub }}>シュート効率</div>
-              <div className="flex gap-3 text-[10px]" style={{ color: C.sub }}>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-5 h-0.5 rounded" style={{ background: C.orange }} />
-                  FG%
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-5 h-0.5 rounded" style={{ background: C.oppBlue, borderTop: `2px dashed ${C.oppBlue}`, height: 0 }} />
-                  FT%
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: `${C.sub}30` }} />
-                  試投本数
-                </span>
-              </div>
-            </div>
-            {(() => {
-              const effChart = per.map((x, i) => ({
-                name: x.g.date?.slice(5) || `G${i + 1}`,
-                gid: x.g.id,
-                fgp: x.s.fga > 0 ? Math.round((x.s.fgm / x.s.fga) * 1000) / 10 : null,
-                ftp: x.s.fta > 0 ? Math.round((x.s.ftm / x.s.fta) * 1000) / 10 : null,
-                fga: x.s.fga,  // FG試投
-                fta: x.s.fta,  // FT試投
-              }));
-              const fgpVals = effChart.map((d) => d.fgp).filter((v) => v !== null);
-              const ftpVals = effChart.map((d) => d.ftp).filter((v) => v !== null);
-              const fgpAvg = fgpVals.length ? Math.round(fgpVals.reduce((a, b) => a + b, 0) / fgpVals.length * 10) / 10 : null;
-              const ftpAvg = ftpVals.length ? Math.round(ftpVals.reduce((a, b) => a + b, 0) / ftpVals.length * 10) / 10 : null;
-              return (
-                <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={effChart} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}
+          {/* ===== 下段: シュート効率(案Z) FG%折れ線+平均線 ===== */}
+          {(() => {
+            const effChart = per.map((x, i) => ({
+              name: x.g.date?.slice(5) || `G${i + 1}`,
+              gid: x.g.id,
+              fgp: x.s.fga > 0 ? Math.round((x.s.fgm / x.s.fga) * 1000) / 10 : null,
+            }));
+            const fgpVals = effChart.map((d) => d.fgp).filter((v) => v !== null);
+            const fgpAvg = fgpVals.length ? Math.round(fgpVals.reduce((a, b) => a + b, 0) / fgpVals.length * 10) / 10 : null;
+            return (
+              <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${C.border}` }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="text-[11px] font-bold" style={{ color: C.sub }}>シュート効率(FG%)</div>
+                  <span className="flex items-center gap-1 text-[10px]" style={{ color: C.sub }}>
+                    <span className="inline-block w-5 h-0.5 rounded" style={{ background: C.orange }} />FG%
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px]" style={{ color: C.sub }}>
+                    <span className="inline-block" style={{ width: 20, borderTop: `1.5px dashed ${C.orange}` }} />平均
+                  </span>
+                </div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={effChart} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}
                     onClick={(e) => { const pl = e?.activePayload?.[0]?.payload; if (pl) setSelGame(selGame === pl.gid ? null : pl.gid); }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                     <XAxis dataKey="name" fontSize={10} stroke={C.sub} />
-                    {/* 左軸: %, 右軸: 試投本数 */}
-                    <YAxis yAxisId="pct" domain={[0, 100]} fontSize={10} stroke={C.sub}
-                      tickFormatter={(v) => `${v}%`} />
-                    <YAxis yAxisId="att" orientation="right" fontSize={10} stroke={C.sub}
-                      allowDecimals={false} tickFormatter={(v) => `${v}本`} />
+                    <YAxis domain={[0, 100]} fontSize={10} stroke={C.sub} tickFormatter={(v) => `${v}%`} />
                     <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, color: C.text }}
-                      formatter={(val, name) => name === "FG試投" || name === "FT試投" ? [`${val}本`, name] : [`${val}%`, name]} />
-                    {/* 試投棒グラフ(背景・薄い) */}
-                    <Bar yAxisId="att" dataKey="fga" name="FG試投" fill={`${C.orange}28`} radius={[3, 3, 0, 0]} barSize={10} />
-                    <Bar yAxisId="att" dataKey="fta" name="FT試投" fill={`${C.oppBlue}28`} radius={[3, 3, 0, 0]} barSize={10} />
-                    {/* 平均ライン */}
-                    {fgpAvg !== null && <ReferenceLine yAxisId="pct" y={fgpAvg} stroke={C.orange} strokeDasharray="5 4" strokeWidth={1.5}
-                      label={{ value: `FG平均 ${fmt1(fgpAvg)}%`, position: "insideTopRight", fill: C.orange, fontSize: 10 }} />}
-                    {ftpAvg !== null && <ReferenceLine yAxisId="pct" y={ftpAvg} stroke={C.oppBlue} strokeDasharray="5 4" strokeWidth={1.5}
-                      label={{ value: `FT平均 ${fmt1(ftpAvg)}%`, position: "insideTopLeft", fill: C.oppBlue, fontSize: 10 }} />}
-                    {/* 効率折れ線 */}
-                    <Line yAxisId="pct" type="monotone" dataKey="fgp" name="FG%" stroke={C.orange} strokeWidth={2.5}
-                      connectNulls dot={(props) => {
+                      formatter={(val) => val !== null ? [`${val}%`, "FG%"] : ["–", "FG%"]} />
+                    {fgpAvg !== null && (
+                      <ReferenceLine y={fgpAvg} stroke={C.orange} strokeDasharray="5 4" strokeWidth={1.5}
+                        label={{ value: `平均 ${fmt1(fgpAvg)}%`, position: "insideTopRight", fill: C.orange, fontSize: 10 }} />
+                    )}
+                    <Line type="monotone" dataKey="fgp" name="FG%" stroke={C.orange} strokeWidth={2.5} connectNulls
+                      dot={(props) => {
                         if (props.payload.fgp === null) return null;
                         const active = props.payload.gid === selGame;
-                        return <circle key={`fg-${props.payload.gid}`} cx={props.cx} cy={props.cy} r={active ? 6 : 3}
-                          fill={active ? C.led : C.orange} stroke={active ? "#fff" : "none"} strokeWidth={active ? 2 : 0} />;
+                        return <circle key={`fg-${props.payload.gid}`} cx={props.cx} cy={props.cy}
+                          r={active ? 6 : 3} fill={active ? C.led : C.orange}
+                          stroke={active ? "#fff" : "none"} strokeWidth={active ? 2 : 0} />;
                       }} />
-                    <Line yAxisId="pct" type="monotone" dataKey="ftp" name="FT%" stroke={C.oppBlue} strokeWidth={2.5}
-                      strokeDasharray="6 3" connectNulls dot={(props) => {
-                        if (props.payload.ftp === null) return null;
-                        const active = props.payload.gid === selGame;
-                        return <polygon key={`ft-${props.payload.gid}`}
-                          points={`${props.cx},${props.cy - (active ? 6 : 4)} ${props.cx + (active ? 6 : 4)},${props.cy + (active ? 4 : 3)} ${props.cx - (active ? 6 : 4)},${props.cy + (active ? 4 : 3)}`}
-                          fill={active ? C.led : C.oppBlue} stroke={active ? "#fff" : "none"} strokeWidth={active ? 2 : 0} />;
-                      }} />
-                  </ComposedChart>
+                  </LineChart>
                 </ResponsiveContainer>
-              );
-            })()}
-            <div className="text-[10px] mt-1" style={{ color: C.sub }}>
-              ※試投なし(0本)の試合は折れ線に表示されません。左軸=成功率、右軸=試投本数。
-            </div>
-          </div>
+                <div className="text-[10px] mt-1" style={{ color: C.sub }}>
+                  ※試投なし(0本)の試合は表示されません。FT%は下の表で確認できます。
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="text-[10px] text-center my-3" style={{ color: C.sub }}>グラフの点や下の表をタップすると、その試合が連動してハイライトされます</div>
           <div className="overflow-x-auto -mx-1">
-            <table className="text-xs w-full min-w-[600px]">
+            <table className="text-xs w-full min-w-[700px]">
               <thead><tr style={{ color: C.sub, borderBottom: `1px solid ${C.border}` }}>
-                {["日付","対戦相手","得点","REB","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
+                {["日付","対戦相手","得点","REB","AST","STL","BLK","TO","PF","分","+/-","EFF","FG%","FT%"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
               </tr></thead>
               <tbody>
                 {[...per].reverse().map(({ g, s }) => {
@@ -1250,6 +1223,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
                       <td className="px-1">{s.to}</td><td className="px-1">{s.pf}</td><td className="px-1">{s.min}</td>
                       <td className="px-1" style={{ color: s.pm === null ? C.sub : s.pm >= 0 ? C.win : C.loss }}>{s.pm === null ? "–" : (s.pm >= 0 ? "+" : "") + s.pm}</td>
                       <td className="px-1 font-bold">{s.eff}</td>
+                      <td className="px-1" style={{ color: C.orange }}>{s.fga > 0 ? `${pct(s.fgm, s.fga)}` : "–"}</td>
+                      <td className="px-1" style={{ color: C.oppBlue }}>{s.fta > 0 ? `${pct(s.ftm, s.fta)}` : "–"}</td>
                     </tr>
                   );
                 })}
