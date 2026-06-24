@@ -617,22 +617,22 @@ export default function App() {
         @keyframes splashPulse { 0%,100% { opacity: .13; transform: translate(-50%,-50%) scale(1); } 50% { opacity: .18; transform: translate(-50%,-50%) scale(1.04); } }
       `}</style>
 
-      {/* 背景透かし: ロゴのみを表示(blend-modeで白フチを消す) */}
-      {data?.team?.logo && (
-        <img src={data.team.logo} alt="" aria-hidden="true"
-          className="absolute pointer-events-none select-none"
-          style={{ top: "50%", left: "50%", transform: "translate(-50%,-50%)",
-            width: "min(100vw, 100vh)", height: "min(100vw, 100vh)",
-            objectFit: "contain",
-            opacity: theme === "dark" ? 0.45 : 0.35,
-            mixBlendMode: theme === "dark" ? "screen" : "multiply",
-            animation: "splashPulse 4s ease-in-out infinite" }} />
-      )}
-      {/* ロゴがない場合のコートライン装飾 */}
-      {!data?.team?.logo && (
-        <div className="absolute inset-0 opacity-[0.04]"
-          style={{ backgroundImage: `repeating-linear-gradient(90deg, ${CT.text} 0 1px, transparent 1px 80px)` }} />
-      )}
+      {/* 背景透かし: 透過PNG(Googleドライブ)を直接使用 */}
+      {(() => {
+        const logoUrl = "https://drive.google.com/uc?export=view&id=1CXtXALgtc3bqV2-NXMMtDWk8LVjLxj3E";
+        return (
+          <img src={logoUrl} alt="" aria-hidden="true"
+            className="absolute pointer-events-none select-none"
+            style={{
+              top: "50%", left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "min(96vw, 96vh)", height: "min(96vw, 96vh)",
+              objectFit: "contain",
+              opacity: 0.18,
+              animation: "splashPulse 4s ease-in-out infinite",
+            }} />
+        );
+      })()}
       {/* 中央グロー */}
       <div className="absolute" style={{ top: "50%", left: "50%", transform: "translate(-50%,-50%)",
         width: 340, height: 340, borderRadius: "50%",
@@ -998,6 +998,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const [editing, setEditing] = useState(false);
   const [trendStat, setTrendStat] = useState("eff"); // 推移グラフの表示項目
   const [selGame, setSelGame] = useState(null); // 推移とスタッツの連動用(選択中の試合id)
+  const [effStat, setEffStat] = useState("fgp"); // 効率グラフ: FG% or FT%
   if (!p) return null;
   const games = [...data.games].sort(gameOrderAsc);
   const { per, n, tot, totAdj, gamesPlayed } = careerStats(games, p.id);
@@ -1155,50 +1156,68 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
             </LineChart>
           </ResponsiveContainer>
 
-          {/* ===== 下段: シュート効率(案Z) FG%折れ線+平均線 ===== */}
+          {/* ===== 下段: シュート効率 FG%/FT% タブ切り替え ===== */}
           {(() => {
+            const EFF_OPTS = [
+              { k: "fgp", label: "FG%", color: C.orange,   made: "fgm", att: "fga" },
+              { k: "ftp", label: "FT%", color: C.oppBlue,  made: "ftm", att: "fta" },
+            ];
+            const eo = EFF_OPTS.find((o) => o.k === effStat);
             const effChart = per.map((x, i) => ({
               name: x.g.date?.slice(5) || `G${i + 1}`,
               gid: x.g.id,
-              fgp: x.s.fga > 0 ? Math.round((x.s.fgm / x.s.fga) * 1000) / 10 : null,
+              val: x.s[eo.att] > 0 ? Math.round((x.s[eo.made] / x.s[eo.att]) * 1000) / 10 : null,
+              att: x.s[eo.att],
             }));
-            const fgpVals = effChart.map((d) => d.fgp).filter((v) => v !== null);
-            const fgpAvg = fgpVals.length ? Math.round(fgpVals.reduce((a, b) => a + b, 0) / fgpVals.length * 10) / 10 : null;
+            const vals = effChart.map((d) => d.val).filter((v) => v !== null);
+            const avg = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10 : null;
+            const hasData = vals.length > 0;
             return (
               <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${C.border}` }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="text-[11px] font-bold" style={{ color: C.sub }}>シュート効率(FG%)</div>
-                  <span className="flex items-center gap-1 text-[10px]" style={{ color: C.sub }}>
-                    <span className="inline-block w-5 h-0.5 rounded" style={{ background: C.orange }} />FG%
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px]" style={{ color: C.sub }}>
-                    <span className="inline-block" style={{ width: 20, borderTop: `1.5px dashed ${C.orange}` }} />平均
-                  </span>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-[11px] font-bold" style={{ color: C.sub }}>シュート効率</div>
+                  {/* FG% / FT% タブ */}
+                  <div className="flex rounded-lg overflow-hidden text-xs font-bold" style={{ border: `1px solid ${C.border}` }}>
+                    {EFF_OPTS.map((o) => (
+                      <button key={o.k} onClick={() => setEffStat(o.k)} className="px-4 py-1.5"
+                        style={effStat === o.k ? { background: o.color, color: "#fff" } : { background: C.card, color: C.sub }}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <LineChart data={effChart} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}
-                    onClick={(e) => { const pl = e?.activePayload?.[0]?.payload; if (pl) setSelGame(selGame === pl.gid ? null : pl.gid); }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                    <XAxis dataKey="name" fontSize={10} stroke={C.sub} />
-                    <YAxis domain={[0, 100]} fontSize={10} stroke={C.sub} tickFormatter={(v) => `${v}%`} />
-                    <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, color: C.text }}
-                      formatter={(val) => val !== null ? [`${val}%`, "FG%"] : ["–", "FG%"]} />
-                    {fgpAvg !== null && (
-                      <ReferenceLine y={fgpAvg} stroke={C.orange} strokeDasharray="5 4" strokeWidth={1.5}
-                        label={{ value: `平均 ${fmt1(fgpAvg)}%`, position: "insideTopRight", fill: C.orange, fontSize: 10 }} />
-                    )}
-                    <Line type="monotone" dataKey="fgp" name="FG%" stroke={C.orange} strokeWidth={2.5} connectNulls
-                      dot={(props) => {
-                        if (props.payload.fgp === null) return null;
-                        const active = props.payload.gid === selGame;
-                        return <circle key={`fg-${props.payload.gid}`} cx={props.cx} cy={props.cy}
-                          r={active ? 6 : 3} fill={active ? C.led : C.orange}
-                          stroke={active ? "#fff" : "none"} strokeWidth={active ? 2 : 0} />;
-                      }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                {!hasData ? (
+                  <div className="text-xs text-center py-6" style={{ color: C.sub }}>
+                    {eo.label}の試投記録がまだありません。
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <LineChart data={effChart} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}
+                      onClick={(e) => { const pl = e?.activePayload?.[0]?.payload; if (pl) setSelGame(selGame === pl.gid ? null : pl.gid); }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                      <XAxis dataKey="name" fontSize={10} stroke={C.sub} />
+                      <YAxis domain={[0, 100]} fontSize={10} stroke={C.sub} tickFormatter={(v) => `${v}%`} />
+                      <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, color: C.text }}
+                        formatter={(val, _, props) => val !== null
+                          ? [`${val}% (${props.payload.att}本中)`, eo.label]
+                          : ["試投なし", eo.label]} />
+                      {avg !== null && (
+                        <ReferenceLine y={avg} stroke={eo.color} strokeDasharray="5 4" strokeWidth={1.5}
+                          label={{ value: `平均 ${fmt1(avg)}%`, position: "insideTopRight", fill: eo.color, fontSize: 10 }} />
+                      )}
+                      <Line type="monotone" dataKey="val" name={eo.label} stroke={eo.color} strokeWidth={2.5} connectNulls
+                        dot={(props) => {
+                          if (props.payload.val === null) return null;
+                          const active = props.payload.gid === selGame;
+                          return <circle key={`eff-${props.payload.gid}`} cx={props.cx} cy={props.cy}
+                            r={active ? 6 : 3} fill={active ? C.led : eo.color}
+                            stroke={active ? "#fff" : "none"} strokeWidth={active ? 2 : 0} />;
+                        }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
                 <div className="text-[10px] mt-1" style={{ color: C.sub }}>
-                  ※試投なし(0本)の試合は表示されません。FT%は下の表で確認できます。
+                  ※試投なし(0本)の試合は折れ線に表示されません。ツールチップで試投本数も確認できます。
                 </div>
               </div>
             );
