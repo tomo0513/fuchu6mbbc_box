@@ -608,47 +608,83 @@ export default function App() {
   };
 
   if (!data || showSplash) return (
-    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden" style={{ background: CT.bg, color: CT.text }}>
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
+      style={{ background: theme === "dark" ? "linear-gradient(165deg,#0E1828 0%,#1A2740 50%,#0E1828 100%)" : "linear-gradient(165deg,#EDF2FA 0%,#F8FAFE 50%,#EDF2FA 100%)", color: CT.text }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
-        @keyframes splashIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-        @keyframes splashLine { from { width: 0; opacity: 0; } to { width: 64px; opacity: 1; } }
-        @keyframes splashGlow { 0%,100% { opacity: .35; } 50% { opacity: .6; } }
-        @keyframes splashPulse { 0%,100% { opacity: .13; transform: translate(-50%,-50%) scale(1); } 50% { opacity: .18; transform: translate(-50%,-50%) scale(1.04); } }
+        @keyframes splashIn  { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
+        @keyframes splashLine{ from{width:0;opacity:0} to{width:110px;opacity:1} }
+        @keyframes splashGlowB{ 0%,100%{opacity:.6} 50%{opacity:1} }
       `}</style>
 
-      {/* 背景透かし: 透過PNG(Googleドライブ)を直接使用 */}
-      {(() => {
-        const logoUrl = "https://drive.google.com/uc?export=view&id=1CXtXALgtc3bqV2-NXMMtDWk8LVjLxj3E";
-        return (
-          <img src={logoUrl} alt="" aria-hidden="true"
-            className="absolute pointer-events-none select-none"
-            style={{
-              top: "50%", left: "50%",
-              transform: "translate(-50%, -50%)",
-              width: "min(96vw, 96vh)", height: "min(96vw, 96vh)",
-              objectFit: "contain",
-              opacity: 0.18,
-              animation: "splashPulse 4s ease-in-out infinite",
-            }} />
-        );
-      })()}
-      {/* 中央グロー */}
-      <div className="absolute" style={{ top: "50%", left: "50%", transform: "translate(-50%,-50%)",
-        width: 340, height: 340, borderRadius: "50%",
-        background: `radial-gradient(circle, ${CT.orange}18, transparent 70%)`,
-        animation: "splashGlow 3s ease-in-out infinite" }} />
+      {/* 背景: バスケコート俯瞰SVG */}
+      <svg viewBox="0 0 240 140" fill="none"
+        stroke={theme === "dark" ? "white" : "#1A2740"}
+        strokeWidth="2.2" strokeLinecap="round"
+        className="absolute pointer-events-none select-none"
+        style={{ top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+          width: "min(92vw, 72vh)", opacity: theme === "dark" ? 0.1 : 0.07 }}>
+        <rect x="3" y="3" width="234" height="134" rx="6"/>
+        <line x1="120" y1="3" x2="120" y2="137"/>
+        <circle cx="120" cy="70" r="22"/>
+        <circle cx="120" cy="70" r="4" fill={theme === "dark" ? "white" : "#1A2740"} stroke="none"/>
+        <rect x="3" y="38" width="40" height="64"/>
+        <path d="M43 30 Q78 70 43 110" fill="none"/>
+        <circle cx="18" cy="70" r="10"/>
+        <rect x="197" y="38" width="40" height="64"/>
+        <path d="M197 30 Q162 70 197 110" fill="none"/>
+        <circle cx="222" cy="70" r="10"/>
+        <path d="M3 18 Q56 70 3 122" fill="none" strokeDasharray="4 3"/>
+        <path d="M237 18 Q184 70 237 122" fill="none" strokeDasharray="4 3"/>
+      </svg>
 
-      <div className="relative flex flex-col items-center" style={{ animation: "splashIn .7s ease-out" }}>
+      {/* 下部グロー */}
+      <div className="absolute pointer-events-none" style={{
+        bottom: -30, left: "50%", transform: "translateX(-50%)",
+        width: 220, height: 110, borderRadius: "50%",
+        background: `rgba(232,96,42,${theme === "dark" ? "0.18" : "0.10"})`,
+        filter: "blur(28px)", animation: "splashGlowB 3s ease-in-out infinite" }} />
+
+      {/* メインコンテンツ */}
+      <div className="relative flex flex-col items-center px-6" style={{ animation: "splashIn .7s ease-out" }}>
+        {/* バッジ */}
+        <div className="mb-4 px-4 py-1 rounded text-white text-xs font-bold tracking-widest"
+          style={{ background: CT.orange, fontFamily: "'Bebas Neue',sans-serif", letterSpacing: "0.28em" }}>
+          FUCHUROKU MINIBASKET
+        </div>
+
         {/* チーム名 */}
-        <div className="text-3xl font-bold text-center px-6 mb-3" style={{ letterSpacing: "0.02em" }}>{data?.team?.name || "府中六小ミニバス"}</div>
+        <div className="text-4xl font-black text-center" style={{
+          letterSpacing: "0.02em", lineHeight: 1.2,
+          color: theme === "dark" ? "#fff" : "#1A2740",
+          textShadow: theme === "dark" ? `0 0 40px rgba(232,96,42,0.45), 0 2px 14px rgba(0,0,0,0.9)` : "none" }}>
+          {data?.team?.name || "府中六小ミニバス"}
+        </div>
+
+        {/* サブテキスト */}
+        <div className="mt-2 text-xs tracking-widest" style={{
+          color: theme === "dark" ? "#4A6080" : "#8FA0C0",
+          letterSpacing: "0.18em" }}>
+          TOKYO &nbsp;·&nbsp; MINIBASKETBALL TEAM
+        </div>
 
         {/* 装飾ライン */}
-        <div className="h-[2px] rounded-full mb-3" style={{ background: `linear-gradient(90deg, transparent, ${CT.orange}, transparent)`, animation: "splashLine .9s ease-out .3s both" }} />
+        <div className="rounded-full my-4" style={{
+          height: 1.5,
+          background: `linear-gradient(90deg,transparent,${CT.orange},transparent)`,
+          animation: "splashLine 1s ease-out .3s both" }} />
 
-        {/* タイトル */}
-        <div className="text-lg font-bold" style={{ color: CT.orange, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.34em", paddingLeft: "0.34em" }}>GAME MANAGEMENT</div>
-        <div className="text-xs mt-1" style={{ color: CT.sub, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.5em", paddingLeft: "0.5em" }}>APP</div>
+        {/* GAME MANAGEMENT APP */}
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17,
+          color: theme === "dark" ? "#8FA0C0" : "#8FA0C0",
+          letterSpacing: "0.3em", paddingLeft: "0.3em" }}>
+          GAME MANAGEMENT
+        </div>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 12,
+          color: CT.orange, letterSpacing: "0.38em", paddingLeft: "0.38em", marginTop: 3,
+          textShadow: theme === "dark" ? "0 0 10px rgba(232,96,42,0.6)" : "none" }}>
+          APP
+        </div>
       </div>
 
       {!data && <div className="absolute bottom-12 text-xs" style={{ color: CT.sub }}>読み込み中…</div>}
