@@ -2,24 +2,26 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAJ512cWwu01JSR7X0qYxF7dUJQWRtnUaM",
-  authDomain: "furoku-basketball.firebaseapp.com",
-  projectId: "furoku-basketball",
-  storageBucket: "furoku-basketball.firebasestorage.app",
-  messagingSenderId: "845634120975",
-  appId: "1:845634120975:web:a439ee6ee6455456e6627a"
+  apiKey: "AIzaSyBwQHXKd6F2eL9lEIuwAff_Z8WYVR8veB0",
+  authDomain: "fuchu6mbbc-37e68.firebaseapp.com",
+  projectId: "fuchu6mbbc-37e68",
+  storageBucket: "fuchu6mbbc-37e68.firebasestorage.app",
+  messagingSenderId: "934958575750",
+  appId: "1:934958575750:web:162c860dc5e37a430a6107"
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+const db = getFirestore(app);
+
+const TEAM_DOC = "fuchu6mbbc";
 
 export async function loadData() {
-  const ref = doc(db, "app", "data");
+  const ref = doc(db, "teams", TEAM_DOC);
   const snap = await getDoc(ref);
   return snap.exists() ? snap.data().payload : null;
 }
 
 export async function saveData(data) {
-  const ref = doc(db, "app", "data");
-  await setDoc(ref, { payload: data });
+  const ref = doc(db, "teams", TEAM_DOC);
+  await setDoc(ref, { payload: JSON.stringify(data) });
 }
