@@ -27,30 +27,29 @@ const LIGHT = {
 };
 const ThemeCtx = React.createContext(DARK);
 const useC = () => React.useContext(ThemeCtx);
-// グローバル参照用(関数外で使う箇所の互換)
 let C = DARK;
 const MAX_OPPONENTS = 100;
 const MAX_PLAYERS = 30;
 const MAX_GAMES = 200;
-const STORE_KEY = "fuchu6-minibasket-v1";
+const STORE_KEY = "furoku-u15-basketball-v1";
 const STORAGE_LIMIT = 5 * 1024 * 1024;
 const TEAM_KEY = "TEAM";
-const ADMIN_PASS = "tomo0513"; // ← 管理者パスワード(変更可)
+const ADMIN_PASS = "furoku15";
 
 /* ============ 管理者権限フック ============ */
 function useAdminMode() {
   const [isAdmin, setIsAdmin] = useState(() => {
-    try { return sessionStorage.getItem("minibasket_admin") === "1"; } catch { return false; }
+    try { return sessionStorage.getItem("furoku_admin") === "1"; } catch { return false; }
   });
   const login = (pass) => {
     if (pass === ADMIN_PASS) {
-      try { sessionStorage.setItem("minibasket_admin", "1"); } catch {}
+      try { sessionStorage.setItem("furoku_admin", "1"); } catch {}
       setIsAdmin(true); return true;
     }
     return false;
   };
   const logout = () => {
-    try { sessionStorage.removeItem("minibasket_admin"); } catch {}
+    try { sessionStorage.removeItem("furoku_admin"); } catch {}
     setIsAdmin(false);
   };
   return { isAdmin, login, logout };
@@ -75,8 +74,8 @@ const ACTIONS = [
   { k: "P3_X", label: "3P失敗" },
   { k: "FT_M", label: "FT成功", pts: 1, good: true },
   { k: "FT_X", label: "FT失敗" },
-  { k: "OR", label: "ORﾘﾊﾞｳﾝﾄﾞ", good: true },
-  { k: "DR", label: "DRﾘﾊﾞｳﾝﾄﾞ", good: true },
+  { k: "OR", label: "ORリバウンド", good: true },
+  { k: "DR", label: "DRリバウンド", good: true },
   { k: "AST", label: "アシスト", good: true },
   { k: "STL", label: "スティール", good: true },
   { k: "BLK", label: "ブロック", good: true },
@@ -105,16 +104,14 @@ const INVERSE_STATS = new Set(["to", "pf"]);
 
 /* ============ 相手チームのTier(強さ) ============ */
 const TIERS = [
-  { k: "A", label: "A", desc: "都大会上位レベル", color: "#E25C5C" },
-  { k: "B", label: "B", desc: "府中大会上位レベル", color: "#FF7A3D" },
+  { k: "A", label: "A", desc: "関東大会レベル", color: "#E25C5C" },
+  { k: "B", label: "B", desc: "都大会上位レベル", color: "#FF7A3D" },
   { k: "C", label: "C", desc: "同格", color: "#FFB23E" },
   { k: "D", label: "D", desc: "格下", color: "#3DBE7B" },
 ];
 const tierOf = (k) => TIERS.find((t) => t.k === k);
 
-// あいうえお順ソート(アルファベット→ひらがな・漢字)。日本語ロケール対応
 const nameCompare = (a, b) => (a || "").localeCompare(b || "", "ja");
-// 対戦相手の並び: Tier順(A→D→未設定) → 読み(kana)優先のあいうえお順
 const TIER_RANK = { A: 0, B: 1, C: 2, D: 3 };
 const oppCompare = (a, b) => {
   const ra = TIER_RANK[a.tier] ?? 9, rb = TIER_RANK[b.tier] ?? 9;
@@ -125,7 +122,6 @@ const oppCompare = (a, b) => {
 /* ============ ユーティリティ ============ */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const fmt1 = (n) => (Number.isFinite(n) ? (Math.round(n * 10) / 10).toFixed(1) : "0.0");
-// 整数ならそのまま、小数があれば小数第1位まで
 const fmtSmart = (n) => {
   if (!Number.isFinite(n)) return "0";
   const r = Math.round(n * 10) / 10;
@@ -138,7 +134,7 @@ function parseClock(s, cap) {
   if (!s) return null;
   const m = String(s).match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
-  return Math.min(parseInt(m[1]) * 60 + parseInt(m[2]), cap || 360);
+  return Math.min(parseInt(m[1]) * 60 + parseInt(m[2]), cap || 480);
 }
 
 function shrinkSquare(file, size, cb) {
@@ -163,26 +159,24 @@ function ytId(url) {
   return m ? m[1] : null;
 }
 
-// 画像URLを直接表示可能な形に変換(Googleドライブの共有リンク対応)
 function imgUrl(url) {
   if (!url) return null;
   const s = String(url).trim();
-  // Googleドライブ: /file/d/XXX/view または ?id=XXX → 直接表示URL
   const m = s.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]+)/);
   if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000`;
-  return s; // それ以外(Imgur, iCloud, 直リンク等)はそのまま
+  return s;
 }
 
 /* ============ ピリオドヘルパー ============ */
-const regQOf = (g) => +g?.regQ || 4; // レギュラーピリオド数(3 or 4)
+const regQOf = (g) => +g?.regQ || 4;
 const periodsOf = (g) => regQOf(g) + (+g?.ot || 0);
 const periodLabel2 = (g, i) => (i <= regQOf(g) ? `Q${i}` : `OT${i - regQOf(g)}`);
-const periodLabel = (i) => `Q${i}`; // 後方互換(OTなし簡易表示)
-const periodLen = (g, i) => (i <= regQOf(g) ? (+g?.qLen || 6) * 60 : (+g?.otLen || 3) * 60);
+const periodLabel = (i) => `Q${i}`;
+const periodLen = (g, i) => (i <= regQOf(g) ? (+g?.qLen || 8) * 60 : (+g?.otLen || 3) * 60);
 const padQ = (arr) => { const a = [...(arr || [])]; while (a.length < 6) a.push(""); return a; };
 const normGame = (g) => {
   const { scoreSheet, ...rest } = g;
-  return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0, regQ: +g.regQ || 4, order: +g.order || 0,
+  return { ...rest, qLen: +g.qLen || 8, otLen: +g.otLen || 3, ot: +g.ot || 0, regQ: +g.regQ || 4, order: +g.order || 0,
     qScores: { own: padQ(g.qScores?.own), opp: padQ(g.qScores?.opp) },
     events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
@@ -200,10 +194,7 @@ function courtIntervals(events, side, key, g) {
       .filter((e) => matchKey(e, side, key) && e.q === q && (e.action === "IN" || e.action === "OUT"))
       .map((e) => ({ a: e.action, t: parseClock(e.time, len) ?? (e.action === "IN" ? len : 0) }));
     const inLineup = side === "own" && (lineups[q] || []).includes(key);
-    // まず時系列順(残り時間の降順)に並べる。同時刻はOUT→INの順
     evs.sort((a, b) => (b.t - a.t) || (a.a === "OUT" ? -1 : 1));
-    // 最初のイベントがOUT、またはイベントが無くlineup登録済みなら、Q頭からの出場を補完
-    // (スターター/Q頭から出ていた選手の経過時間を正しく計上。lineup未登録でも救済)
     const firstIsOut = evs.length > 0 && evs[0].a === "OUT";
     const noEventButInLineup = evs.length === 0 && inLineup;
     if (firstIsOut || noEventButInLineup) evs = [{ a: "IN", t: len }, ...evs];
@@ -263,6 +254,7 @@ function sideTotals(events, side, scope) {
   const or = c("OR"), dr = c("DR");
   return {
     pts: ftm + p2m * 2 + p3m * 3, ftm, fta, fgm: p2m + p3m, fga: p2a + p3a,
+    p2m, p2a, p3m, p3a,
     or, dr, reb: or + dr, ast: c("AST"), stl: c("STL"), blk: c("BLK"), to: c("TO"), pf: c("PF"),
     poss: (p2a + p3a) - or + c("TO") + 0.44 * fta, n: e.length,
   };
@@ -271,22 +263,18 @@ const timeoutsOf = (events, side, scope) =>
   (events || []).filter((e) => e.side === side && e.action === "TOT" && (scope === "all" || e.q === scope)).length;
 const gamePts = (g) => ({ own: qSum(g.qScores?.own, periodsOf(g)), opp: qSum(g.qScores?.opp, periodsOf(g)) });
 
-// 試合の並び順: 日付 → 同日内order。descは新しい順
 const gameOrderAsc = (a, b) => (a.date || "").localeCompare(b.date || "") || ((+a.order || 0) - (+b.order || 0));
 const gameOrderDesc = (a, b) => (b.date || "").localeCompare(a.date || "") || ((+b.order || 0) - (+a.order || 0));
 
 function careerStats(games, playerId) {
   const per = games.map((g) => ({ g, s: aggStats(g.events, "own", playerId, "all", g) })).filter((x) => hasStats(x.s));
-  // 平均用: スコアが0-0(まだ未入力)の試合は試合数にカウントしない
   const played = per.filter((x) => { const p = gamePts(x.g); return (p.own + p.opp) > 0; });
   const n = played.length;
   const tot = {};
-  const totAdj = {}; // 平均用: 3Q試合は4/3倍して4Q換算
-  const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
+  const totAdj = {};
+  const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta", "p2m", "p2a", "p3m", "p3a"];
   cntKeys.forEach((k) => {
-    // 合計は全試合(per)を集計。浮動小数点誤差を防ぐため小数第1位に丸める
     tot[k] = Math.round(per.reduce((a, x) => a + (x.s[k] || 0), 0) * 10) / 10;
-    // 平均用の補正合計: 0-0を除いたplayedのみ、3Q試合は4Q換算
     totAdj[k] = played.reduce((a, x) => {
       const factor = regQOf(x.g) === 3 ? 4 / 3 : 1;
       return a + (x.s[k] || 0) * factor;
@@ -323,7 +311,9 @@ function analysisFor(data, game, scope) {
     insights.push(`${scopeLabel}のプレイログが未入力のため、スコアのみで表示しています。`);
   } else {
     const fgp = ownT.fga > 0 ? ownT.fgm / ownT.fga : null;
-    if (fgp !== null) insights.push(`シュート成功率 ${pct(ownT.fgm, ownT.fga)}(${ownT.fgm}/${ownT.fga})。${fgp >= 0.45 ? "効率よく得点できています。" : fgp >= 0.35 ? "平均的な水準です。" : "確率の高いシュート選択が課題です。"}`);
+    const p3p = ownT.p3a > 0 ? ownT.p3m / ownT.p3a : null;
+    if (fgp !== null) insights.push(`フィールドゴール成功率 ${pct(ownT.fgm, ownT.fga)}(${ownT.fgm}/${ownT.fga})。${fgp >= 0.45 ? "効率よく得点できています。" : fgp >= 0.35 ? "平均的な水準です。" : "確率の高いシュート選択が課題です。"}`);
+    if (p3p !== null && ownT.p3a >= 3) insights.push(`3ポイント成功率 ${pct(ownT.p3m, ownT.p3a)}(${ownT.p3m}/${ownT.p3a})。`);
     if (oppT.fga > 0) insights.push(`相手のシュート成功率は ${pct(oppT.fgm, oppT.fga)}。${oppT.fgm / oppT.fga > 0.45 ? "イージーシュートを許しています。" : "ディフェンスは機能しています。"}`);
     if (ownT.reb + oppT.reb > 0) insights.push(`リバウンドは ${ownT.reb} 対 ${oppT.reb}${ownT.reb > oppT.reb ? "で上回りました。" : ownT.reb < oppT.reb ? "で劣勢でした。" : "の互角。"}`);
     insights.push(`TOは自 ${ownT.to}・相手 ${oppT.to}。${ownT.to < oppT.to ? "ボール管理で優位に立ちました。" : ownT.to > oppT.to ? "ボールロストが失点機につながった可能性があります。" : ""}`);
@@ -333,16 +323,16 @@ function analysisFor(data, game, scope) {
       insights.push(`${win ? "勝因" : ownPts === oppPts ? "焦点" : "敗因"}の候補: ${qData[keyQ]?.name} の得失点差(${margins[keyQ] >= 0 ? "+" : ""}${margins[keyQ]})が最も大きい時間帯です。`);
     }
     const ftp = ownT.fta > 0 ? ownT.ftm / ownT.fta : null;
-    if (ftp !== null && ftp < 0.5 && ownT.fta >= 4) tips.push("フリースロー成功率が50%未満。練習前後のルーティンでFT本数を増やしましょう。");
-    if (fgp !== null && fgp < 0.35) tips.push("シュート成功率が低め。ゴール下とミドルの確率が高いエリアでの打ち切りを意識しましょう。");
-    if (ownT.to >= (scope === "all" ? 12 : 4)) tips.push("ターンオーバーが多め。プレッシャー下のパス&キャッチ練習がおすすめです。");
-    if (oppT.or >= (scope === "all" ? 8 : 3)) tips.push("相手にオフェンスリバウンドを許しています。ボックスアウトの徹底を。");
-    if (ownT.ast < ownT.fgm * 0.4 && ownT.fgm > 0) tips.push("アシスト比率が低め。1人で打ち切る前にもう1本パスを回す意識づけを。");
-    if (scope === "all" && qData[2] && qData[2].自チーム - qData[2].相手 < 0) tips.push("Q3の入りで失点が先行。ハーフタイム明けの最初の2分間の集中を声かけしましょう。");
+    if (ftp !== null && ftp < 0.5 && ownT.fta >= 4) tips.push("フリースロー成功率が50%未満。試合終盤の1本が勝敗を分けます。ルーティンを固めてFT練習本数を増やしましょう。");
+    if (fgp !== null && fgp < 0.35) tips.push("シュート成功率が低め。ゴール下・ミドル・3Pの打つエリアを整理し、確率の高いシュートを選択しましょう。");
+    if (ownT.to >= (scope === "all" ? 12 : 4)) tips.push("ターンオーバーが多め。プレッシャーディフェンス対策として、ピボット・ボールミート・強いパスを徹底しましょう。");
+    if (oppT.or >= (scope === "all" ? 8 : 3)) tips.push("相手にオフェンスリバウンドを許しています。ボックスアウトを全員で徹底し、2ndチャンスを与えない守備を。");
+    if (ownT.ast < ownT.fgm * 0.4 && ownT.fgm > 0) tips.push("アシスト比率が低め。もう1本パスを回す意識・スクリーンプレーの活用でオフェンスを組み立てましょう。");
+    if (scope === "all" && qData[2] && qData[2].自チーム - qData[2].相手 < 0) tips.push("Q3の入りで失点が先行。ハーフタイム明けのディフェンスの集中を声かけで引き締めましょう。");
     if (tips.length === 0) tips.push("大きな課題は見当たりません。この内容を継続しましょう。");
   }
 
-  // プロのミニバス分析アナリスト視点: 良かった点・改善点(全体・各Q)
+  // AIアナリスト分析: 良かった点・改善点
   const goodPoints = [];
   const improvePoints = [];
   if (ownT.n > 0) {
@@ -350,47 +340,50 @@ function analysisFor(data, game, scope) {
     const sl = isAll ? "この試合" : `${scopeLabel}`;
     const fgp = ownT.fga > 0 ? ownT.fgm / ownT.fga : 0;
     const ftp = ownT.fta > 0 ? ownT.ftm / ownT.fta : 0;
+    const p3p = ownT.p3a > 0 ? ownT.p3m / ownT.p3a : 0;
     const oppFgp = oppT.fga > 0 ? oppT.fgm / oppT.fga : 0;
     const astRate = ownT.fgm > 0 ? ownT.ast / ownT.fgm : 0;
     const margins = qData.map((x) => x.自チーム - x.相手);
     const topEff = [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff)[0];
 
     // --- 良かった点 ---
-    if (fgp >= 0.45 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は小学生年代では非常に高い水準です。無理のないシュートセレクションができており、ボールを動かして良い形を作れていた証拠です。`);
-    else if (fgp >= 0.38 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は年代の平均を上回ります。シュートチャンスの選び方は概ね良好でした。`);
-    if (oppFgp > 0 && oppFgp < 0.35 && oppT.fga >= (isAll ? 8 : 3)) goodPoints.push(`相手のFG成功率を${pct(oppT.fgm, oppT.fga)}に抑えました。ディフェンスのプレッシャーとヘルプが機能し、イージーシュートを与えていません。`);
-    if (ownT.reb > oppT.reb && ownT.reb + oppT.reb >= (isAll ? 10 : 3)) goodPoints.push(`リバウンドで${ownT.reb}対${oppT.reb}と上回りました(OR${ownT.or}/DR${ownT.dr})。ボックスアウトの意識が数字に表れています。${ownT.or >= (isAll ? 5 : 2) ? "オフェンスリバウンドからのセカンドチャンスも作れていました。" : ""}`);
-    if (ownT.stl >= (isAll ? 6 : 2)) goodPoints.push(`スティール${ownT.stl}本はアクティブなディフェンスの成果です。パスラインを読んで積極的に仕掛けられていました。`);
-    if (astRate >= 0.5 && ownT.fgm >= (isAll ? 4 : 2)) goodPoints.push(`得点のうちアシスト経由が${Math.round(astRate * 100)}%。個人技に頼らず、パスでズレを作って得点する良いバスケットができています。`);
-    if (ftp >= 0.6 && ownT.fta >= (isAll ? 6 : 2)) goodPoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}と確実に決め切りました。競った展開で効いてくる重要な数字です。`);
-    if (isAll && win && margins.filter((m) => m > 0).length >= 3) goodPoints.push(`複数のピリオドで相手を上回り、試合を通して主導権を握れていました。集中力が最後まで続いた点を評価できます。`);
-    if (!isAll && ownPts > oppPts) goodPoints.push(`${scopeLabel}は${ownPts}対${oppPts}とリードを奪えました。この時間帯の戦い方は継続したいところです。`);
-    if (topEff && topEff.s.eff >= (isAll ? 12 : 5)) goodPoints.push(`${topEff.label}がEFF${topEff.s.eff}と高い貢献度を記録。${topEff.s.pts}得点${topEff.s.reb}リバウンド${topEff.s.ast}アシストとチームを支えました。`);
-    if (goodPoints.length === 0) goodPoints.push(`${sl}は数字上の強みは控えめでしたが、最後まで走り切る姿勢が見えました。次につながる内容です。`);
+    if (fgp >= 0.45 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は中学生年代でも非常に高い水準です。無理のないシュートセレクションができており、オフェンスシステムが機能した証拠です。`);
+    else if (fgp >= 0.38 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}はU15年代の平均を上回ります。シュートチャンスの選び方は概ね良好でした。`);
+    if (ownT.p3m >= (isAll ? 3 : 1) && p3p >= 0.33) goodPoints.push(`3ポイント${ownT.p3m}本成功(成功率${pct(ownT.p3m, ownT.p3a)})。アウトサイドシュートの精度が勝利に貢献しました。`);
+    if (oppFgp > 0 && oppFgp < 0.35 && oppT.fga >= (isAll ? 8 : 3)) goodPoints.push(`相手のFG成功率を${pct(oppT.fgm, oppT.fga)}に抑えました。ヘルプディフェンスとローテーションが機能し、イージーシュートを与えませんでした。`);
+    if (ownT.reb > oppT.reb && ownT.reb + oppT.reb >= (isAll ? 10 : 3)) goodPoints.push(`リバウンドで${ownT.reb}対${oppT.reb}と上回りました(OR${ownT.or}/DR${ownT.dr})。ボックスアウトの徹底が数字に表れています。${ownT.or >= (isAll ? 5 : 2) ? "オフェンスリバウンドからのセカンドチャンスも作れていました。" : ""}`);
+    if (ownT.stl >= (isAll ? 6 : 2)) goodPoints.push(`スティール${ownT.stl}本はアクティブなディフェンスの成果です。パスラインを読んでプレッシャーをかけ続けられていました。`);
+    if (astRate >= 0.5 && ownT.fgm >= (isAll ? 4 : 2)) goodPoints.push(`得点のうちアシスト経由が${Math.round(astRate * 100)}%。個人技に頼らず、スクリーンプレーやカットを使ってズレを作る組織的なオフェンスができています。`);
+    if (ftp >= 0.6 && ownT.fta >= (isAll ? 6 : 2)) goodPoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}と確実に決め切りました。競った場面での1本1本の精度が勝敗を左右します。`);
+    if (isAll && win && margins.filter((m) => m > 0).length >= 3) goodPoints.push(`複数のピリオドで相手を上回り、試合を通して主導権を維持できました。ディフェンスの強度を落とさず戦い続けた点が高く評価できます。`);
+    if (!isAll && ownPts > oppPts) goodPoints.push(`${scopeLabel}は${ownPts}対${oppPts}とリードを奪えました。この時間帯のオフェンス・ディフェンスのリズムを継続したいところです。`);
+    if (topEff && topEff.s.eff >= (isAll ? 12 : 5)) goodPoints.push(`${topEff.label}がEFF${topEff.s.eff}と高い貢献度を記録。${topEff.s.pts}得点${topEff.s.reb}リバウンド${topEff.s.ast}アシストとチームを牽引しました。`);
+    if (goodPoints.length === 0) goodPoints.push(`${sl}は数字上の強みは限定的でしたが、最後まで走り切る姿勢が見えました。次の試合につながる経験です。`);
 
     // --- 改善点 ---
-    if (fgp < 0.33 && ownT.fga >= (isAll ? 10 : 4)) improvePoints.push(`FG成功率${pct(ownT.fgm, ownT.fga)}は改善余地があります。遠い位置からの難しいシュートが多くなっていないか、ゴール下やフリーの味方を使えていたか映像で確認したいところです。練習ではレイアップとゴール下フィニッシュの本数を増やしましょう。`);
-    if (ownT.to >= (isAll ? 12 : 4)) improvePoints.push(`ターンオーバー${ownT.to}個は多めです。相手のプレッシャーに対してパスを焦った場面が想定されます。ピボット、ボールミート、強いパスの3点をドリルで徹底すると減らせます。`);
-    if (oppT.or >= (isAll ? 8 : 3)) improvePoints.push(`相手にオフェンスリバウンドを${oppT.or}本許しました。シュートが打たれた瞬間の「ボックスアウト」を全員が徹底することで、相手のセカンドチャンスを減らせます。`);
-    if (ftp < 0.5 && ownT.fta >= (isAll ? 6 : 2)) improvePoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}は勝敗を左右します。練習の最後に、疲れた状態で連続FTを入れることをおすすめします。`);
-    if (astRate < 0.35 && ownT.fgm >= (isAll ? 6 : 3)) improvePoints.push(`アシスト比率が低く、1対1で完結する場面が多かったようです。「もう1本パスを回す」意識と合わせの動き(カット、スクリーン)を増やすと得点が安定します。`);
-    if (oppFgp >= 0.45 && oppT.fga >= (isAll ? 8 : 3)) improvePoints.push(`相手のFG成功率${pct(oppT.fgm, oppT.fga)}を許しました。ボールマンへの間合いとヘルプの戻りに改善余地があります。ゴール下を簡単に使われていないか確認しましょう。`);
-    if (isAll && margins[2] !== undefined && margins[2] < -3) improvePoints.push(`第3ピリオドで失点が先行しました(${margins[2]})。ハーフタイム明けの入りは集中を切らしやすい時間帯です。最初の2分のプレーを声かけで引き締めたいところです。`);
-    if (!isAll && ownPts < oppPts) improvePoints.push(`${scopeLabel}は${ownPts}対${oppPts}とリードを許しました。この時間帯に何が起きたか、失点の形を映像で振り返ると次に活きます。`);
-    if (improvePoints.length === 0) improvePoints.push(`${sl}は大きな穴は見当たりませんでした。強いて言えば、リードした時間帯でも安易なプレーに逃げず、丁寧なバスケットを続けられると盤石になります。`);
+    if (fgp < 0.33 && ownT.fga >= (isAll ? 10 : 4)) improvePoints.push(`FG成功率${pct(ownT.fgm, ownT.fga)}は改善余地があります。ゾーンディフェンスに対してボールをコーナーに動かしてギャップを作る、あるいはドライブからのキックアウトで3Pを狙うなど、質の高いシュートチャンスを作ることを意識しましょう。`);
+    if (ownT.to >= (isAll ? 12 : 4)) improvePoints.push(`ターンオーバー${ownT.to}個は多めです。プレスディフェンス対策として、ハーフコートでのボールの展開を確認しましょう。プレッシャーを受けたときのロールマン・センターへのパスコースを常に意識することが重要です。`);
+    if (oppT.or >= (isAll ? 8 : 3)) improvePoints.push(`相手にオフェンスリバウンドを${oppT.or}本許しました。シュートが打たれた瞬間の「全員ボックスアウト」の徹底と、リバウンドへの飛び込みのタイミングを改善することでセカンドチャンスを大幅に減らせます。`);
+    if (ftp < 0.5 && ownT.fta >= (isAll ? 6 : 2)) improvePoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}は中学バスケでは特に重要です。プレッシャーのかかった場面でのルーティンとメンタル面のトレーニングを取り入れましょう。`);
+    if (astRate < 0.35 && ownT.fgm >= (isAll ? 6 : 3)) improvePoints.push(`アシスト比率が低く、個人で完結する場面が多かったようです。スクリーンアンドロール・カットプレーなどの組織的なオフェンスを増やすとシュート確率が向上します。`);
+    if (oppFgp >= 0.45 && oppT.fga >= (isAll ? 8 : 3)) improvePoints.push(`相手のFG成功率${pct(oppT.fgm, oppT.fga)}を許しました。ゾーンディフェンスの穴を突かれていないか、マンツーマンのヘルプの戻りに課題がないか映像で確認しましょう。`);
+    if (oppT.p3m >= (isAll ? 4 : 2)) improvePoints.push(`相手に3ポイント${oppT.p3m}本を許しました。クローズアウトの距離と手の出し方を見直し、アウトサイドシュートを簡単に打たせないディフェンスポジションを徹底しましょう。`);
+    if (isAll && margins[2] !== undefined && margins[2] < -3) improvePoints.push(`第3ピリオドで失点が先行しました(${margins[2]})。ハーフタイム明けは集中を切らしやすい時間帯です。守備の強度を下げないためのウォームアップとコーチのミーティングを充実させましょう。`);
+    if (!isAll && ownPts < oppPts) improvePoints.push(`${scopeLabel}は${ownPts}対${oppPts}とリードを許しました。この時間帯の失点パターンを映像で振り返ると次の対策に活きます。`);
+    if (improvePoints.length === 0) improvePoints.push(`${sl}は大きな穴は見当たりませんでした。強度を保ったディフェンスと組織的なオフェンスをさらに磨いて、上位カテゴリへの準備をしましょう。`);
   }
 
-  // 旧insights/tipsは残すが画面では未使用(レポート互換のため保持)
   void insights; void tips;
 
   const reviews = scope === "all" ? [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff).map((r, i) => {
     const s = r.s;
-    const parts = [`${s.pts}得点(FG ${s.fgm}/${s.fga}${s.fta > 0 ? `、FT ${s.ftm}/${s.fta}` : ""})`];
+    const parts = [`${s.pts}得点(2P ${s.p2m}/${s.p2a}${s.p3a > 0 ? `・3P ${s.p3m}/${s.p3a}` : ""}${s.fta > 0 ? `・FT ${s.ftm}/${s.fta}` : ""})`];
     const strengths = [];
     if (s.reb >= 5) strengths.push(`リバウンド${s.reb}本`);
     if (s.ast >= 3) strengths.push(`アシスト${s.ast}`);
     if (s.stl >= 3) strengths.push(`スティール${s.stl}`);
     if (s.blk >= 2) strengths.push(`ブロック${s.blk}`);
+    if (s.p3m >= 2) strengths.push(`3P${s.p3m}本`);
     if (strengths.length) parts.push(`${strengths.join("、")}で貢献`);
     parts.push(`EFF ${s.eff}(チーム${i + 1}位)`);
     if (s.pm !== null) parts.push(`出場時間帯の得失点差は ${s.pm >= 0 ? "+" : ""}${s.pm}`);
@@ -402,7 +395,8 @@ function analysisFor(data, game, scope) {
   }) : [];
   const compRows = [
     ["得点", ownPts, oppPts],
-    ["FG", `${ownT.fgm}/${ownT.fga} (${pct(ownT.fgm, ownT.fga)})`, `${oppT.fgm}/${oppT.fga} (${pct(oppT.fgm, oppT.fga)})`],
+    ["2P", `${ownT.p2m}/${ownT.p2a} (${pct(ownT.p2m, ownT.p2a)})`, `${oppT.p2m}/${oppT.p2a} (${pct(oppT.p2m, oppT.p2a)})`],
+    ["3P", `${ownT.p3m}/${ownT.p3a} (${pct(ownT.p3m, ownT.p3a)})`, `${oppT.p3m}/${oppT.p3a} (${pct(oppT.p3m, oppT.p3a)})`],
     ["FT", `${ownT.ftm}/${ownT.fta} (${pct(ownT.ftm, ownT.fta)})`, `${oppT.ftm}/${oppT.fta} (${pct(oppT.ftm, oppT.fta)})`],
     ["リバウンド合計", ownT.reb, oppT.reb],
     ["└ オフェンス(OR)", ownT.or, oppT.or],
@@ -495,7 +489,7 @@ function ScoreBoard({ own, opp, oppName, oppLogo, date, small }) {
     <div className="rounded-xl px-4 py-3 flex items-center justify-between"
       style={{ background: C.board, border: `1px solid ${C.border}`, fontFamily: "'Bebas Neue', sans-serif" }}>
       <div className="text-center flex-1">
-        <div className="text-xs tracking-widest" style={{ fontFamily: "sans-serif", color: C.sub }}>府中六小</div>
+        <div className="text-xs tracking-widest" style={{ fontFamily: "sans-serif", color: C.sub }}>FUROKU</div>
         <div className={small ? "text-5xl" : "text-7xl"} style={{ color: C.led, textShadow: `0 0 16px ${C.led}66`, lineHeight: 1.1 }}>{own}</div>
       </div>
       <div className="text-center px-2">
@@ -547,7 +541,7 @@ export default function App() {
   const pending = useRef(null);
   const retried = useRef(false);
   const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem("minibasket_theme") || "dark"; } catch { return "dark"; }
+    try { return localStorage.getItem("furoku_theme") || "dark"; } catch { return "dark"; }
   });
   const CT = theme === "dark" ? DARK : LIGHT;
   C = CT;
@@ -556,7 +550,7 @@ export default function App() {
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    try { localStorage.setItem("minibasket_theme", next); } catch {}
+    try { localStorage.setItem("furoku_theme", next); } catch {}
   };
   const [showLogin, setShowLogin] = useState(false);
   const [loginInput, setLoginInput] = useState("");
@@ -572,7 +566,7 @@ export default function App() {
         if (json) d = JSON.parse(json);
       } catch (e) { /* 初回 */ }
       const init = d || {
-        team: { name: "府中六小ミニバス", logo: "", homeCourt: "府中第六小学校 体育館" },
+        team: { name: "FUROKU BASKETBALL", logo: "", homeCourt: "" },
         players: [], opponents: [], games: [],
       };
       init.games = (init.games || []).map(normGame);
@@ -617,7 +611,6 @@ export default function App() {
         @keyframes splashGlowB{ 0%,100%{opacity:.6} 50%{opacity:1} }
       `}</style>
 
-      {/* 背景: バスケコート俯瞰SVG */}
       <svg viewBox="0 0 240 140" fill="none"
         stroke={theme === "dark" ? "white" : "#1A2740"}
         strokeWidth="2.2" strokeLinecap="round"
@@ -638,43 +631,36 @@ export default function App() {
         <path d="M237 18 Q184 70 237 122" fill="none" strokeDasharray="4 3"/>
       </svg>
 
-      {/* 下部グロー */}
       <div className="absolute pointer-events-none" style={{
         bottom: -30, left: "50%", transform: "translateX(-50%)",
         width: 220, height: 110, borderRadius: "50%",
         background: `rgba(232,96,42,${theme === "dark" ? "0.18" : "0.10"})`,
         filter: "blur(28px)", animation: "splashGlowB 3s ease-in-out infinite" }} />
 
-      {/* メインコンテンツ */}
       <div className="relative flex flex-col items-center px-6" style={{ animation: "splashIn .7s ease-out" }}>
-        {/* バッジ */}
         <div className="mb-4 px-4 py-1 rounded text-white text-xs font-bold tracking-widest"
           style={{ background: CT.orange, fontFamily: "'Bebas Neue',sans-serif", letterSpacing: "0.28em" }}>
-          FUCHUROKU MINIBASKET
+          FUROKU BASKETBALL
         </div>
 
-        {/* チーム名 */}
         <div className="text-4xl font-black text-center" style={{
           letterSpacing: "0.02em", lineHeight: 1.2,
           color: theme === "dark" ? "#fff" : "#1A2740",
           textShadow: theme === "dark" ? `0 0 40px rgba(232,96,42,0.45), 0 2px 14px rgba(0,0,0,0.9)` : "none" }}>
-          {data?.team?.name || "府中六小ミニバス"}
+          {data?.team?.name || "FUROKU BASKETBALL"}
         </div>
 
-        {/* サブテキスト */}
         <div className="mt-2 text-xs tracking-widest" style={{
           color: theme === "dark" ? "#4A6080" : "#8FA0C0",
           letterSpacing: "0.18em" }}>
-          TOKYO &nbsp;·&nbsp; MINIBASKETBALL TEAM
+          U15 BASKETBALL TEAM
         </div>
 
-        {/* 装飾ライン */}
         <div className="rounded-full my-4" style={{
           height: 1.5,
           background: `linear-gradient(90deg,transparent,${CT.orange},transparent)`,
           animation: "splashLine 1s ease-out .3s both" }} />
 
-        {/* GAME MANAGEMENT APP */}
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17,
           color: theme === "dark" ? "#8FA0C0" : "#8FA0C0",
           letterSpacing: "0.3em", paddingLeft: "0.3em" }}>
@@ -703,7 +689,6 @@ export default function App() {
     ...(isAdmin ? [{ t: "settings", icon: Settings, label: "設定" }] : []),
   ];
 
-  // ログインモーダル
   const loginModal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0008" }}>
       <div className="rounded-2xl p-6 w-72" style={{ background: C.card, border: `1px solid ${C.border}` }}>
@@ -759,11 +744,8 @@ export default function App() {
       {showLogin && loginModal}
 
       {isPC ? (
-        /* ============ PCレイアウト ============ */
         <div className="flex h-screen overflow-hidden">
-          {/* サイドバー */}
           <aside className="w-56 shrink-0 flex flex-col" style={{ background: C.sidebar, borderRight: `1px solid ${C.border}` }}>
-            {/* ロゴ */}
             <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: `1px solid ${C.border}` }}>
               {data.team.logo
                 ? <img src={data.team.logo} alt="" className="w-9 h-9 rounded-full object-cover" />
@@ -776,7 +758,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {/* ナビ */}
             <nav className="flex-1 py-3 space-y-1 px-2">
               {NAV_ITEMS.map(({ t, icon: I, label }) => (
                 <button key={t} onClick={() => { setTab(t); setNav({}); }}
@@ -787,7 +768,6 @@ export default function App() {
                 </button>
               ))}
             </nav>
-            {/* 保存状態 + テーマ切替 */}
             <div className="px-4 py-3 text-xs flex items-center justify-between" style={{ color: saveState.startsWith("error") ? CT.loss : CT.sub, borderTop: `1px solid ${CT.border}` }}>
               <span>{saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : "データ同期済み"}</span>
               <button onClick={toggleTheme} className="ml-2 px-2 py-1 rounded-lg text-xs font-bold"
@@ -797,7 +777,6 @@ export default function App() {
           {mainContent}
         </div>
       ) : (
-        /* ============ スマホレイアウト ============ */
         <>
           <header className="sticky top-0 z-20 px-4 py-3 flex items-center gap-2.5 shadow-lg"
             style={{ background: CT.nav, borderBottom: `1px solid ${CT.border}` }}>
@@ -843,7 +822,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const avgPF = n ? results.reduce((a, r) => a + r.own, 0) / n : 0;
   const avgPA = n ? results.reduce((a, r) => a + r.opp, 0) / n : 0;
   const stars = useMemo(() => {
-    // 直近5試合の平均EFFが高い順に上位5人(0-0の未入力試合は除外)
     const recent5 = [...data.games].filter((g) => { const p = gamePts(g); return (p.own + p.opp) > 0; }).sort(gameOrderDesc).slice(0, 5);
     if (recent5.length === 0) return [];
     const rows = [];
@@ -860,7 +838,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
 
   return (
     <div className={isPC ? "grid grid-cols-2 gap-5" : "space-y-3"}>
-      {/* 成績カード */}
       <Card className={isPC ? "col-span-2" : ""}>
         <SectionTitle>シーズン成績</SectionTitle>
         <div className="flex items-end justify-center gap-8 py-1" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
@@ -875,7 +852,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
         </div>
       </Card>
 
-      {/* 注目選手(上位5人) */}
       {stars.length > 0 && (
         <Card className="h-full">
           <SectionTitle>注目選手(直近5試合の平均EFF)</SectionTitle>
@@ -904,7 +880,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
         </Card>
       )}
 
-      {/* 直近の試合 */}
       <Card className="h-full">
         <div className="flex items-center justify-between mb-2">
           <SectionTitle>直近の試合</SectionTitle>
@@ -930,7 +905,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
 /* ============ 選手フォーム ============ */
 function PlayerForm({ initial, onSave, onCancel }) {
   const C = useC();
-  const [f, setF] = useState(initial || { name: "", codename: "", number: "", bibs: "", grade: "6", photo: "", goal: "", targets: [] });
+  const [f, setF] = useState(initial || { name: "", codename: "", number: "", bibs: "", grade: "3", photo: "", goal: "", targets: [] });
   const set = (k, v) => setF({ ...f, [k]: v });
   const targets = f.targets || [];
   const setTarget = (i, k, v) => set("targets", targets.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
@@ -952,7 +927,7 @@ function PlayerForm({ initial, onSave, onCancel }) {
         <Field label="ビブスNo."><input className={inputCls} style={getInputStyle(C)} inputMode="numeric" value={f.bibs || ""} onChange={(e) => set("bibs", e.target.value)} placeholder="12" /></Field>
         <Field label="学年">
           <select className={inputCls} style={getInputStyle(C)} value={f.grade} onChange={(e) => set("grade", e.target.value)}>
-            {[1,2,3,4,5,6].map((g) => <option key={g} value={g}>{g}年</option>)}
+            {[1,2,3].map((g) => <option key={g} value={g}>中{g}</option>)}
           </select>
         </Field>
       </div>
@@ -976,7 +951,7 @@ function PlayerForm({ initial, onSave, onCancel }) {
           <Plus size={14} /> 目標を追加
         </button>
       )}
-      <Field label="目標メモ(自由記入)"><textarea className={inputCls} style={getInputStyle(C)} rows={2} value={f.goal} onChange={(e) => set("goal", e.target.value)} placeholder="声を出してチームを引っ張る" /></Field>
+      <Field label="目標メモ(自由記入)"><textarea className={inputCls} style={getInputStyle(C)} rows={2} value={f.goal} onChange={(e) => set("goal", e.target.value)} placeholder="3Pシュートを武器にする" /></Field>
       <div className="flex gap-2 mt-1">
         <button className="flex-1 py-3 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }} onClick={onCancel}>キャンセル</button>
         <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange }}
@@ -1013,7 +988,7 @@ function PlayerList({ data, save, setNav, isPC, isAdmin }) {
                 <Avatar p={p} size={44} />
                 <div className="flex-1 min-w-0">
                   <div className="font-bold truncate">{p.name}</div>
-                  <div className="text-xs truncate" style={{ color: C.sub }}>#{p.number}{p.codename ? `・${p.codename}` : ""}{p.bibs ? `・ビブス${p.bibs}` : ""}・{p.grade}年</div>
+                  <div className="text-xs truncate" style={{ color: C.sub }}>#{p.number}{p.codename ? `・${p.codename}` : ""}{p.bibs ? `・ビブス${p.bibs}` : ""}・中{p.grade}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{c.n ? fmt1(c.tot.pts / c.n) : "–"}</div>
@@ -1032,15 +1007,14 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const C = useC();
   const p = data.players.find((x) => x.id === nav.playerId);
   const [editing, setEditing] = useState(false);
-  const [trendStat, setTrendStat] = useState("eff"); // 推移グラフの表示項目
-  const [selGame, setSelGame] = useState(null); // 推移とスタッツの連動用(選択中の試合id)
-  const [effStat, setEffStat] = useState("fgp"); // 効率グラフ: FG% or FT%
+  const [trendStat, setTrendStat] = useState("eff");
+  const [selGame, setSelGame] = useState(null);
+  const [effStat, setEffStat] = useState("p2p");
   if (!p) return null;
   const games = [...data.games].sort(gameOrderAsc);
   const { per, n, tot, totAdj, gamesPlayed } = careerStats(games, p.id);
   const has3Q = per.some((x) => regQOf(x.g) === 3);
   const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
-  // 推移グラフ: EFF/得点/アシスト/リバウンドから選択
   const TREND_OPTS = [
     { k: "eff", label: "EFF", color: "#3DBE7B" },
     { k: "pts", label: "得点", color: "#FF7A3D" },
@@ -1050,9 +1024,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const trendOpt = TREND_OPTS.find((o) => o.k === trendStat);
   const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, value: x.s[trendStat], gid: x.g.id }));
   const trendAvg = chart.length > 0 ? chart.reduce((a, c) => a + (c.value || 0), 0) / chart.length : 0;
-  // キャリアハイ(1試合の最高記録)
   const careerHigh = {};
-  ["pts", "reb", "ast", "stl", "blk", "eff"].forEach((k) => {
+  ["pts", "reb", "ast", "stl", "blk", "eff", "p3m"].forEach((k) => {
     let best = null;
     for (const x of per) { if (best === null || x.s[k] > best.v) best = { v: x.s[k], g: x.g }; }
     careerHigh[k] = best;
@@ -1080,7 +1053,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
           <Avatar p={p} size={64} />
           <div className="flex-1">
             <div className="text-xl font-bold">{p.name}</div>
-            <div className="text-xs" style={{ color: C.sub }}>{p.codename ? `${p.codename}・` : ""}#{p.number}{p.bibs ? `・ビブス${p.bibs}` : ""}・{p.grade}年</div>
+            <div className="text-xs" style={{ color: C.sub }}>{p.codename ? `${p.codename}・` : ""}#{p.number}{p.bibs ? `・ビブス${p.bibs}` : ""}・中{p.grade}</div>
           </div>
         </div>
         {p.goal && (
@@ -1135,15 +1108,18 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
                 </div>
               ))}
             </div>
+            {/* 2P% / 3P% / FT% */}
             <div className="flex justify-around mt-3 pt-3 text-center text-sm" style={{ borderTop: `1px solid ${C.border}` }}>
-              <div><span className="font-bold text-lg">{pct(tot.fgm, tot.fga)}</span><div className="text-[10px]" style={{ color: C.sub }}>FG%</div></div>
-              <div><span className="font-bold text-lg">{pct(tot.ftm, tot.fta)}</span><div className="text-[10px]" style={{ color: C.sub }}>FT%</div></div>
+              <div><span className="font-bold text-lg">{pct(tot.p2m, tot.p2a)}</span><div className="text-[10px]" style={{ color: C.sub }}>2P%</div><div className="text-[9px]" style={{ color: C.sub }}>{tot.p2m}/{tot.p2a}</div></div>
+              <div><span className="font-bold text-lg">{pct(tot.p3m, tot.p3a)}</span><div className="text-[10px]" style={{ color: C.sub }}>3P%</div><div className="text-[9px]" style={{ color: C.sub }}>{tot.p3m}/{tot.p3a}</div></div>
+              <div><span className="font-bold text-lg">{pct(tot.ftm, tot.fta)}</span><div className="text-[10px]" style={{ color: C.sub }}>FT%</div><div className="text-[9px]" style={{ color: C.sub }}>{tot.ftm}/{tot.fta}</div></div>
               <div><span className="font-bold text-lg">{fmt1(totAdj.min / n)}</span><div className="text-[10px]" style={{ color: C.sub }}>平均出場(分)</div></div>
             </div>
+            {/* キャリアハイ */}
             <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
               <div className="text-[10px] font-bold mb-2" style={{ color: C.led }}>🏅 キャリアハイ(1試合最高)</div>
               <div className="grid grid-cols-3 gap-2 text-center">
-                {[["得点", "pts"], ["リバウンド", "reb"], ["アシスト", "ast"], ["スティール", "stl"], ["ブロック", "blk"], ["EFF", "eff"]].map(([l, k]) => {
+                {[["得点", "pts"], ["リバウンド", "reb"], ["アシスト", "ast"], ["スティール", "stl"], ["3P成功", "p3m"], ["EFF", "eff"]].map(([l, k]) => {
                   const ch = careerHigh[k];
                   return (
                     <div key={k} className="rounded-xl py-2" style={{ background: C.card2 }}>
@@ -1162,7 +1138,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
         <Card>
           <SectionTitle>試合ごとの推移とスタッツ</SectionTitle>
 
-          {/* ===== 上段: パフォーマンス推移 ===== */}
+          {/* パフォーマンス推移 */}
           <div className="text-[11px] font-bold mb-2 mt-1" style={{ color: C.sub }}>パフォーマンス推移</div>
           <div className="flex gap-1.5 mb-3">
             {TREND_OPTS.map((o) => (
@@ -1192,11 +1168,12 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
             </LineChart>
           </ResponsiveContainer>
 
-          {/* ===== 下段: シュート効率 FG%/FT% タブ切り替え ===== */}
+          {/* シュート効率: 2P% / 3P% / FT% の3タブ */}
           {(() => {
             const EFF_OPTS = [
-              { k: "fgp", label: "FG%", color: C.orange,   made: "fgm", att: "fga" },
-              { k: "ftp", label: "FT%", color: C.oppBlue,  made: "ftm", att: "fta" },
+              { k: "p2p", label: "2P%", color: C.orange,  made: "p2m", att: "p2a" },
+              { k: "p3p", label: "3P%", color: C.win,     made: "p3m", att: "p3a" },
+              { k: "ftp", label: "FT%", color: C.oppBlue, made: "ftm", att: "fta" },
             ];
             const eo = EFF_OPTS.find((o) => o.k === effStat);
             const effChart = per.map((x, i) => ({
@@ -1212,10 +1189,9 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
               <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${C.border}` }}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-[11px] font-bold" style={{ color: C.sub }}>シュート効率</div>
-                  {/* FG% / FT% タブ */}
                   <div className="flex rounded-lg overflow-hidden text-xs font-bold" style={{ border: `1px solid ${C.border}` }}>
                     {EFF_OPTS.map((o) => (
-                      <button key={o.k} onClick={() => setEffStat(o.k)} className="px-4 py-1.5"
+                      <button key={o.k} onClick={() => setEffStat(o.k)} className="px-3 py-1.5"
                         style={effStat === o.k ? { background: o.color, color: "#fff" } : { background: C.card, color: C.sub }}>
                         {o.label}
                       </button>
@@ -1260,10 +1236,11 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
           })()}
 
           <div className="text-[10px] text-center my-3" style={{ color: C.sub }}>グラフの点や下の表をタップすると、その試合が連動してハイライトされます</div>
+          {/* ボックススコア一覧: 2P/3P分離 */}
           <div className="overflow-x-auto -mx-1">
-            <table className="text-xs w-full min-w-[700px]">
+            <table className="text-xs w-full min-w-[820px]">
               <thead><tr style={{ color: C.sub, borderBottom: `1px solid ${C.border}` }}>
-                {["日付","対戦相手","得点","REB","AST","STL","BLK","TO","PF","分","+/-","EFF","FG%","FT%"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
+                {["日付","対戦相手","得点","2P","2P%","3P","3P%","FT","FT%","REB","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
               </tr></thead>
               <tbody>
                 {[...per].reverse().map(({ g, s }) => {
@@ -1273,13 +1250,18 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
                       style={{ borderBottom: `1px solid ${C.border}44`, background: active ? `${C.led}22` : "transparent", cursor: "pointer" }}>
                       <td className="py-1.5 px-1 whitespace-nowrap" style={active ? { fontWeight: 700, color: C.led } : {}}>{g.date?.slice(5)}</td>
                       <td className="px-1 whitespace-nowrap truncate" style={{ color: C.sub, maxWidth: 90 }}>{oppNm(g)}</td>
-                      <td className="px-1 font-bold" style={{ color: C.orange }}>{s.pts}</td><td className="px-1">{s.reb}</td>
+                      <td className="px-1 font-bold" style={{ color: C.orange }}>{s.pts}</td>
+                      <td className="px-1">{s.p2m}/{s.p2a}</td>
+                      <td className="px-1" style={{ color: C.sub }}>{s.p2a > 0 ? pct(s.p2m, s.p2a) : "–"}</td>
+                      <td className="px-1">{s.p3m}/{s.p3a}</td>
+                      <td className="px-1" style={{ color: C.win }}>{s.p3a > 0 ? pct(s.p3m, s.p3a) : "–"}</td>
+                      <td className="px-1">{s.ftm}/{s.fta}</td>
+                      <td className="px-1" style={{ color: C.oppBlue }}>{s.fta > 0 ? pct(s.ftm, s.fta) : "–"}</td>
+                      <td className="px-1">{s.reb}</td>
                       <td className="px-1">{s.ast}</td><td className="px-1">{s.stl}</td><td className="px-1">{s.blk}</td>
                       <td className="px-1">{s.to}</td><td className="px-1">{s.pf}</td><td className="px-1">{s.min}</td>
                       <td className="px-1" style={{ color: s.pm === null ? C.sub : s.pm >= 0 ? C.win : C.loss }}>{s.pm === null ? "–" : (s.pm >= 0 ? "+" : "") + s.pm}</td>
                       <td className="px-1 font-bold">{s.eff}</td>
-                      <td className="px-1" style={{ color: C.orange }}>{s.fga > 0 ? `${pct(s.fgm, s.fga)}` : "–"}</td>
-                      <td className="px-1" style={{ color: C.oppBlue }}>{s.fta > 0 ? `${pct(s.ftm, s.fta)}` : "–"}</td>
                     </tr>
                   );
                 })}
@@ -1298,17 +1280,15 @@ function GameForm({ data, initial, onSave, onCancel }) {
   const [f, setF] = useState(initial ? { ...normGame(initial), newOpp: "" } : {
     date: new Date().toISOString().slice(0, 10), tournament: "",
     opponentId: data.opponents[0]?.id || "", newOpp: "",
-    qLen: 6, otLen: 3, ot: 0, regQ: 4,
+    qLen: 8, otLen: 3, ot: 0, regQ: 4,
     qScores: { own: padQ([]), opp: padQ([]) },
   });
   const periods = (+f.regQ || 4) + (+f.ot || 0);
   const setQ = (side, i, v) => setF({ ...f, qScores: { ...f.qScores, [side]: f.qScores[side].map((x, j) => (j === i ? v : x)) } });
   const oppFull = !f.opponentId && data.opponents.length >= MAX_OPPONENTS;
-  // 同じ日の試合数(自分以外)
   const sameDayGames = data.games.filter((x) => x.date === f.date && x.id !== initial?.id);
 
   const handleSave = () => {
-    // 4Q→3Qに変更し、Q4にデータがある場合は確認してクリア
     const wasRegQ = initial ? regQOf(initial) : 4;
     if (wasRegQ === 4 && (+f.regQ === 3)) {
       const q4Score = (+f.qScores?.own?.[3] || 0) + (+f.qScores?.opp?.[3] || 0);
@@ -1316,7 +1296,6 @@ function GameForm({ data, initial, onSave, onCancel }) {
       if (q4Score > 0 || q4Events > 0) {
         const msg = `3ピリオド制に変更すると、第4ピリオドの${q4Score > 0 ? "スコア" : ""}${q4Score > 0 && q4Events > 0 ? "と" : ""}${q4Events > 0 ? `プレイログ(${q4Events}件)` : ""}が削除されます。よろしいですか?`;
         if (!confirm(msg)) return;
-        // Q4のスコアとプレイログをクリア
         const own = [...f.qScores.own]; const opp = [...f.qScores.opp];
         own[3] = ""; opp[3] = "";
         const cleared = { ...f, qScores: { own, opp }, _clearQ4: true };
@@ -1336,7 +1315,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
             onChange={(e) => setF({ ...f, order: e.target.value === "" ? "" : +e.target.value })} placeholder="例: 1, 2, 3..." />
         </Field>
       )}
-      <Field label="大会名"><input className={inputCls} style={getInputStyle(C)} value={f.tournament} onChange={(e) => setF({ ...f, tournament: e.target.value })} placeholder="市民大会 予選リーグ" /></Field>
+      <Field label="大会名"><input className={inputCls} style={getInputStyle(C)} value={f.tournament} onChange={(e) => setF({ ...f, tournament: e.target.value })} placeholder="都大会 予選リーグ" /></Field>
       <Field label="対戦相手">
         <select className={inputCls} style={getInputStyle(C)} value={f.opponentId} onChange={(e) => setF({ ...f, opponentId: e.target.value })}>
           <option value="">(新しいチームを入力)</option>
@@ -1344,7 +1323,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
         </select>
       </Field>
       {!f.opponentId && (!oppFull
-        ? <Field label="新しい相手チーム名"><input className={inputCls} style={getInputStyle(C)} value={f.newOpp} onChange={(e) => setF({ ...f, newOpp: e.target.value })} placeholder="◯◯ミニバス" /></Field>
+        ? <Field label="新しい相手チーム名"><input className={inputCls} style={getInputStyle(C)} value={f.newOpp} onChange={(e) => setF({ ...f, newOpp: e.target.value })} placeholder="◯◯中学バスケットボール部" /></Field>
         : <div className="text-xs mb-3" style={{ color: C.loss }}>対戦相手の登録上限({MAX_OPPONENTS}チーム)に達しています。</div>)}
       <Field label="試合形式">
         <select className={inputCls} style={getInputStyle(C)} value={f.regQ} onChange={(e) => setF({ ...f, regQ: +e.target.value })}>
@@ -1355,7 +1334,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
       <div className="grid grid-cols-3 gap-3">
         <Field label="Qの時間">
           <select className={inputCls} style={getInputStyle(C)} value={f.qLen} onChange={(e) => setF({ ...f, qLen: +e.target.value })}>
-            <option value={5}>5分</option><option value={6}>6分</option>
+            <option value={8}>8分</option><option value={10}>10分</option><option value={6}>6分</option><option value={5}>5分</option>
           </select>
         </Field>
         <Field label="オーバータイム">
@@ -1365,7 +1344,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
         </Field>
         <Field label="OTの時間">
           <select className={inputCls} style={getInputStyle(C)} value={f.otLen} disabled={!f.ot} onChange={(e) => setF({ ...f, otLen: +e.target.value })}>
-            <option value={2}>2分</option><option value={3}>3分</option>
+            <option value={3}>3分</option><option value={5}>5分</option>
           </select>
         </Field>
       </div>
@@ -1445,11 +1424,9 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
         <Plus size={18} /> 試合を登録 {games.length >= MAX_GAMES ? `(上限${MAX_GAMES}試合)` : ""}
       </button>}
 
-      {/* 相手レベル別・府中市内の成績 */}
+      {/* 相手レベル別成績 */}
       {games.length > 0 && (() => {
         const wldOf2 = (rs) => ({ w: rs.filter((r) => r.own > r.opp).length, l: rs.filter((r) => r.own < r.opp).length, d: rs.filter((r) => r.own === r.opp).length });
-        const fuchuRs = results.filter((r) => (getOpp(r.g.opponentId)?.area || "").includes("府中"));
-        const fuchu2 = wldOf2(fuchuRs);
         const tierStats2 = TIERS.map((t) => {
           const rs = results.filter((r) => getOpp(r.g.opponentId)?.tier === t.k);
           return { t, ...wldOf2(rs), n: rs.length, rs };
@@ -1457,31 +1434,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
         return (
           <Card>
             <SectionTitle>相手レベル別の成績</SectionTitle>
-            {/* 府中市内 */}
-            <button className="w-full flex items-center gap-3 pb-3 text-left" style={{ borderBottom: `1px solid ${C.border}` }}
-              onClick={() => setOpenKey(openKey === "fuchu" ? null : "fuchu")}>
-              <div className="text-2xl">🏙️</div>
-              <div className="flex-1">
-                <div className="font-bold text-sm">府中市内のチーム</div>
-                <div className="text-[10px]" style={{ color: C.sub }}>{fuchuRs.length}試合</div>
-              </div>
-              <div style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
-                <span className="text-2xl" style={{ color: C.win }}>{fuchu2.w}</span>
-                <span className="text-xs mx-0.5" style={{ color: C.sub }}>勝</span>
-                <span className="text-2xl" style={{ color: C.loss }}>{fuchu2.l}</span>
-                <span className="text-xs ml-0.5" style={{ color: C.sub }}>敗</span>
-                {fuchu2.d > 0 && <span className="text-[10px] ml-1" style={{ color: C.sub, fontFamily: "sans-serif" }}>({fuchu2.d}分)</span>}
-              </div>
-              <ChevronDown size={16} style={{ color: C.sub, transform: openKey === "fuchu" ? "rotate(180deg)" : "none" }} />
-            </button>
-            {openKey === "fuchu" && (
-              <div className="py-2 space-y-2">
-                {fuchuRs.length === 0 ? <div className="text-xs" style={{ color: C.sub }}>対戦なし</div>
-                  : fuchuRs.map((r) => <GameRow key={r.g.id} g={r.g} setNav={setNav} showOpp oppName={oppName} />)}
-              </div>
-            )}
-            {/* Tier別 */}
-            <div className="space-y-2 mt-3">
+            <div className="space-y-2">
               {tierStats2.map(({ t, w, l, d, n, rs }) => (
                 <div key={t.k}>
                   <button className="w-full flex items-center gap-3 text-left py-1"
@@ -1518,7 +1471,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
                 </div>
               ))}
             </div>
-            <div className="text-[10px] mt-2" style={{ color: C.sub }}>Tierは設定タブの対戦相手登録で設定できます。各行をタップで対戦相手を表示。</div>
+            <div className="text-[10px] mt-2" style={{ color: C.sub }}>Tierは設定タブの対戦相手登録で設定できます。</div>
           </Card>
         );
       })()}
@@ -1647,15 +1600,13 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const [q, setQ] = useState(1);
   const [time, setTime] = useState("");
   const [side, setSide] = useState("own");
-  // 相手側はデフォルトでチームを選択
   const [sel, setSel] = useState(null);
   const [insertAfter, setInsertAfter] = useState(null);
   const [showLineup, setShowLineup] = useState(false);
-  const [qLocked, setQLocked] = useState(false); // Q固定モード
-  const [flash, setFlash] = useState(null); // 直近に記録したアクションのフラッシュ表示
+  const [qLocked, setQLocked] = useState(false);
+  const [flash, setFlash] = useState(null);
   const flashTimer = useRef(null);
 
-  // side変更時: 相手ならTEAM_KEYをデフォルト選択
   const changeSide = (k) => {
     setSide(k);
     setSel(k === "opp" ? TEAM_KEY : null);
@@ -1664,7 +1615,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const opponent = data.opponents.find((o) => o.id === game.opponentId);
   const oppNums = (opponent?.numbers || "").split(/[,、\s]+/).filter(Boolean);
   const lineup = game.lineups?.[q] || [];
-  // 選手チップは常に背番号順で固定(入力のたびに並びが動かないように)
   const players = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
   const updGame = (fn) => save({ ...data, games: data.games.map((x) => (x.id === game.id ? fn(x) : x)) });
   const toggleLineup = (pid) => {
@@ -1697,9 +1647,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
       } else { events = [...x.events, ev]; }
       return { ...x, events, qScores: pts ? applyScore(x.qScores, side, q - 1, pts) : x.qScores };
     });
-    // sel・side・timeは保持(前の入力を引き継ぐ)
     if (insertAfter) setInsertAfter(ev.id);
-    // 視覚フィードバック: 記録内容を一瞬表示
     const who = key === TEAM_KEY ? (side === "own" ? "自チーム" : "相手チーム") : (side === "own" ? pName(key) : `相手 #${key}`);
     setFlash({ id: ev.id, text: `${who} – ${ACTION_LABEL[action]}${pts ? ` (+${pts})` : ""}` });
     clearTimeout(flashTimer.current);
@@ -1711,18 +1659,16 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     if (insertAfter === id) setInsertAfter(null);
     updGame((x) => ({ ...x, events: x.events.filter((e) => e.id !== id), qScores: pts ? applyScore(x.qScores, ev.side, ev.q - 1, -pts) : x.qScores }));
   };
-  // 残り時間を取得(入力欄が空ならpromptで聞く)。"M:SS"形式
   const askRemain = (label) => {
     let t = time.trim();
     if (!t) {
-      const len = (q <= regQOf(game) ? (+game.qLen || 6) : (+game.otLen || 3));
+      const len = (q <= regQOf(game) ? (+game.qLen || 8) : (+game.otLen || 3));
       const ans = prompt(`${label}した時点の「残り時間」を入力してください(例: 4:30)\n※${periodLabel2(game, q)}の長さは${len}分です。空欄ならQ満了(${len}:00)として計算します。`, "");
-      if (ans === null) return undefined; // キャンセル
+      if (ans === null) return undefined;
       t = (ans || "").trim();
     }
     return t;
   };
-  // 交代IN: ベンチ選手を投入(INイベント記録 + 出場メンバー追加 + 選択状態に)
   const subInPlayer = (pid) => {
     const p = data.players.find((x) => x.id === pid);
     const t = askRemain(`#${p?.number} ${p?.codename || p?.name} が交代IN`);
@@ -1742,7 +1688,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 1300);
   };
-  // 交代OUT: 出場選手をベンチに戻す(OUTイベント記録 + 出場メンバーから除外)
   const subOutPlayer = (pid) => {
     const p = data.players.find((x) => x.id === pid);
     const t = askRemain(`#${p?.number} ${p?.codename || p?.name} が交代OUT`);
@@ -1767,12 +1712,9 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     return p ? `#${p.number} ${p.codename || p.name}` : "?";
   };
   const events = game.events || [];
-  // ログは降順(新しい順)表示
-  const logEvents = [...events].reverse();
   return (
     <div className="space-y-3">
       {isAdmin && <Card>
-        {/* Q選択 + 固定トグル */}
         <div className="flex items-center gap-2 mb-3">
           <div className="flex gap-1.5 flex-1 overflow-x-auto">
             {Array.from({ length: periods }, (_, i) => i + 1).map((n) => (
@@ -1789,8 +1731,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
           </div>
           <button className="shrink-0 px-3 py-2.5 rounded-lg text-xs font-bold"
             style={qLocked ? { background: C.win, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
-            onClick={() => setQLocked(!qLocked)}
-            title={qLocked ? "クリックで固定解除" : "クリックでQ固定"}>
+            onClick={() => setQLocked(!qLocked)}>
             {qLocked ? "🔒固定中" : "固定"}
           </button>
         </div>
@@ -1805,7 +1746,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         {showLineup && (
           <div className="mb-3 p-3 rounded-xl" style={{ background: C.card2 }}>
             <div className="text-[11px] mb-2 font-bold" style={{ color: lineup.length === 5 ? C.win : C.sub }}>
-              出場中 {lineup.length}人{lineup.length > 5 ? "(5人を超えています)" : lineup.length === 5 ? " ✓" : ` / あと${5 - lineup.length}人選べます`}
+              出場中 {lineup.length}人{lineup.length > 5 ? "(5人を超えています)" : lineup.length === 5 ? " ✓" : ` / あと${5 - lineup.length}人`}
             </div>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {[...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0)).map((p) => (
@@ -1817,7 +1758,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
               ))}
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[10px]" style={{ color: C.sub }}>タップで追加/解除。複数選択できます({periodLabel2(game, q)}フル出場として計算)</span>
+              <span className="text-[10px]" style={{ color: C.sub }}>タップで追加/解除</span>
               {q > 1 && <button className="text-xs font-bold shrink-0 ml-2" style={{ color: C.orange }} onClick={copyPrevLineup}>前と同じ</button>}
             </div>
           </div>
@@ -1838,14 +1779,13 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
             <>
               {lineup.length === 0 && (
                 <div className="text-xs mb-2 px-2 py-1.5 rounded-lg" style={{ background: `${C.led}22`, color: C.led }}>
-                  上の「{periodLabel2(game, q)}の出場メンバー」から出場中の選手を登録してください。登録した選手のみ記録できます。
+                  上の出場メンバーから出場中の選手を登録してください。
                 </div>
               )}
               <div className="flex flex-wrap gap-1.5 mb-2">
                 <button onClick={() => setSel(TEAM_KEY)}
                   className="px-3 py-2 rounded-full text-sm font-bold"
                   style={sel === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}>チーム</button>
-                {/* 出場メンバーのみ表示 */}
                 {players.filter((p) => lineup.includes(p.id)).map((p) => (
                   <button key={p.id} onClick={() => setSel(p.id)}
                     className="px-3 py-2 rounded-full text-sm font-bold"
@@ -1854,7 +1794,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                   </button>
                 ))}
               </div>
-              {/* 交代OUT: 選択中の出場選手をベンチに戻す */}
               {sel && sel !== TEAM_KEY && lineup.includes(sel) && (
                 <button onClick={() => subOutPlayer(sel)}
                   className="mb-2 px-3 py-2 rounded-xl text-xs font-bold w-full flex items-center justify-center gap-1.5"
@@ -1862,10 +1801,9 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                   🔄 {pName(sel)} を交代OUT(ベンチに戻す)
                 </button>
               )}
-              {/* 交代IN: ベンチ選手を投入 */}
               {players.filter((p) => !lineup.includes(p.id)).length > 0 && (
                 <div className="mb-3 p-2 rounded-xl" style={{ background: C.card2 }}>
-                  <div className="text-[10px] font-bold mb-1.5" style={{ color: C.sub }}>🔄 交代IN(ベンチから投入 → 出場メンバーに追加)</div>
+                  <div className="text-[10px] font-bold mb-1.5" style={{ color: C.sub }}>🔄 交代IN(ベンチから投入)</div>
                   <div className="flex flex-wrap gap-1.5">
                     {players.filter((p) => !lineup.includes(p.id)).map((p) => (
                       <button key={p.id} onClick={() => subInPlayer(p.id)}
@@ -1911,11 +1849,10 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
           </button>
         </div>
         <div className="text-xs mt-2 text-center" style={{ color: C.sub }}>
-          {sel === TEAM_KEY ? "チーム全体のプレイとして記録します(24秒TOなど)" : sel ? "得点プレイはスコアボードに自動加算されます" : "選手(またはチーム)を選んでからアクションをタップ"}
+          {sel === TEAM_KEY ? "チーム全体のプレイとして記録します" : sel ? "得点プレイはスコアボードに自動加算されます" : "選手(またはチーム)を選んでからアクションをタップ"}
         </div>
       </Card>}
 
-      {/* 記録トースト: 押したことが視覚的にわかる */}
       {flash && (
         <div className="fixed left-1/2 z-40 px-4 py-2.5 rounded-full text-sm font-bold shadow-lg pointer-events-none flash-toast"
           style={{ bottom: 90, transform: "translateX(-50%)", background: C.win, color: "#fff" }}>
@@ -1959,7 +1896,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   );
 }
 
-/* ============ 資料 ============ */
+/* ============ 資料(メディア) ============ */
 function GameMedia({ data, save, game, oppName, isAdmin }) {
   const C = useC();
   const [copied, setCopied] = useState(false);
@@ -1995,7 +1932,6 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
   };
   const videos = game.videos || {};
   const vidKeys = [...Array.from({ length: periods }, (_, i) => String(i + 1)), "all"];
-  // 各Qのリンクを配列として正規化(旧データの文字列にも対応)
   const vidList = (k) => {
     const v = videos[k];
     if (Array.isArray(v)) return v;
@@ -2012,7 +1948,6 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
             const label = k === "all" ? "フル/その他" : periodLabel2(game, +k);
             const list = vidList(k);
             const playable = list.filter((u) => ytId(u));
-            // 閲覧モードで再生可能な動画がない場合はスキップ
             if (!isAdmin && playable.length === 0) return null;
             return (
               <div key={k}>
@@ -2059,15 +1994,9 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
           {!isAdmin && !vidKeys.some((k) => vidList(k).some((u) => ytId(u))) && (
             <div className="text-sm text-center py-4" style={{ color: C.sub }}>まだ動画が登録されていません。</div>
           )}
-          {isAdmin && (
-            <div className="text-[10px] mt-1 leading-relaxed" style={{ color: C.sub }}>
-              ※同じQでも「動画を追加」で複数のリンクを登録できます。{periods > 4 ? "OTのリンク欄も上に表示されています。" : ""}
-            </div>
-          )}
         </div>
       </Card>
 
-      {/* スコアカード写真 */}
       <Card>
         <SectionTitle>スコアカード(写真)</SectionTitle>
         {(() => {
@@ -2103,7 +2032,7 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
                     <Plus size={16} /> スコアカードを追加
                   </button>
                   <div className="text-[10px] mt-2 leading-relaxed" style={{ color: C.sub }}>
-                    ※写真はGoogleドライブ等にアップして、その共有リンク(「リンクを知っている全員」に設定)を貼ってください。アプリ本体には画像を保存しないので容量を消費しません。Googleドライブのリンクは自動で表示用に変換されます。
+                    ※写真はGoogleドライブ等にアップして共有リンクを貼ってください。
                   </div>
                 </>
               )}
@@ -2116,7 +2045,7 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
       </Card>
 
       <Card>
-        <SectionTitle>TeamHub用 書き出し</SectionTitle>
+        <SectionTitle>書き出し</SectionTitle>
         <div className="flex gap-2">
           <button className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.border}` }} onClick={downloadCSV}><Download size={16} /> CSV</button>
           <button className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.border}` }} onClick={copyText}>{copied ? "コピーしました!" : "テキストをコピー"}</button>
@@ -2151,10 +2080,24 @@ function ReportView({ data, game, mode, oppName, onClose }) {
   const T = ({ children }) => <h2 style={{ fontSize: 15, borderLeft: "4px solid #E8632C", paddingLeft: 8, marginTop: 24, marginBottom: 8, fontWeight: 700 }}>{children}</h2>;
   const BoxTable = ({ rows }) => (
     <table style={{ borderCollapse: "collapse", width: "100%" }}>
-      <thead><tr>{["選手","得点","FG","FT","OR","DR","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+      <thead><tr>{["選手","得点","2P","2P%","3P","3P%","FT","FT%","OR","DR","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
       <tbody>
         {[...rows].sort((x, y) => y.s.eff - x.s.eff).map(({ key, label, s }) => (
-          <tr key={key}><td style={td}>{label}</td><td style={{ ...td, fontWeight: 700 }}>{s.pts}</td><td style={td}>{s.fgm}/{s.fga}</td><td style={td}>{s.ftm}/{s.fta}</td><td style={td}>{s.or}</td><td style={td}>{s.dr}</td><td style={td}>{s.ast}</td><td style={td}>{s.stl}</td><td style={td}>{s.blk}</td><td style={td}>{s.to}</td><td style={td}>{s.pf}</td><td style={td}>{s.min}</td><td style={td}>{s.pm === null ? "–" : (s.pm >= 0 ? "+" : "") + s.pm}</td><td style={{ ...td, fontWeight: 700 }}>{s.eff}</td></tr>
+          <tr key={key}>
+            <td style={td}>{label}</td>
+            <td style={{ ...td, fontWeight: 700 }}>{s.pts}</td>
+            <td style={td}>{s.p2m}/{s.p2a}</td>
+            <td style={td}>{s.p2a > 0 ? pct(s.p2m, s.p2a) : "–"}</td>
+            <td style={td}>{s.p3m}/{s.p3a}</td>
+            <td style={td}>{s.p3a > 0 ? pct(s.p3m, s.p3a) : "–"}</td>
+            <td style={td}>{s.ftm}/{s.fta}</td>
+            <td style={td}>{s.fta > 0 ? pct(s.ftm, s.fta) : "–"}</td>
+            <td style={td}>{s.or}</td><td style={td}>{s.dr}</td>
+            <td style={td}>{s.ast}</td><td style={td}>{s.stl}</td><td style={td}>{s.blk}</td>
+            <td style={td}>{s.to}</td><td style={td}>{s.pf}</td><td style={td}>{s.min}</td>
+            <td style={td}>{s.pm === null ? "–" : (s.pm >= 0 ? "+" : "") + s.pm}</td>
+            <td style={{ ...td, fontWeight: 700 }}>{s.eff}</td>
+          </tr>
         ))}
       </tbody>
     </table>
@@ -2227,20 +2170,25 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
   const [scope, setScope] = useState("all");
   const a = analysisFor(data, game, scope);
   const mips = scope === "all" ? mipOf(game, data.players) : [];
+
+  // ボックススコア: 2P/3P/FT%分離
   const StatTable = ({ rows, accent }) => (
     <div className="overflow-x-auto -mx-1">
-      <table className="text-xs w-full min-w-[600px]">
+      <table className="text-xs w-full min-w-[780px]">
         <thead><tr style={{ color: C.sub, borderBottom: `1px solid ${C.border}` }}>
-          {["選手","得点","FG","FG%","FT","OR","DR","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
+          {["選手","得点","2P","2P%","3P","3P%","FT","FT%","OR","DR","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} className="py-1.5 px-1 text-left whitespace-nowrap">{h}</th>)}
         </tr></thead>
         <tbody>
           {[...rows].sort((x, y) => y.s.eff - x.s.eff).map(({ key, label, s }) => (
             <tr key={key} style={{ borderBottom: `1px solid ${C.border}44` }}>
               <td className="py-1.5 px-1 whitespace-nowrap font-bold">{label}</td>
               <td className="px-1 font-bold" style={{ color: accent }}>{s.pts}</td>
-              <td className="px-1">{s.fgm}/{s.fga}</td>
-              <td className="px-1" style={{ color: C.sub }}>{pct(s.fgm, s.fga)}</td>
+              <td className="px-1">{s.p2m}/{s.p2a}</td>
+              <td className="px-1" style={{ color: C.sub }}>{s.p2a > 0 ? pct(s.p2m, s.p2a) : "–"}</td>
+              <td className="px-1">{s.p3m}/{s.p3a}</td>
+              <td className="px-1" style={{ color: C.win }}>{s.p3a > 0 ? pct(s.p3m, s.p3a) : "–"}</td>
               <td className="px-1">{s.ftm}/{s.fta}</td>
+              <td className="px-1" style={{ color: C.oppBlue }}>{s.fta > 0 ? pct(s.ftm, s.fta) : "–"}</td>
               <td className="px-1">{s.or}</td><td className="px-1">{s.dr}</td><td className="px-1">{s.ast}</td>
               <td className="px-1">{s.stl}</td><td className="px-1">{s.blk}</td><td className="px-1">{s.to}</td>
               <td className="px-1">{s.pf}</td><td className="px-1">{s.min}</td>
@@ -2281,7 +2229,7 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
             {mips.map(({ p, s }) => (
               <div key={p.id} className="flex items-center gap-3">
                 <Avatar p={p} size={44} />
-                <div className="flex-1"><div className="font-bold">#{p.number} {p.codename || p.name}</div><div className="text-xs" style={{ color: C.sub }}>{s.pts}得点・{s.reb}リバウンド・{s.ast}アシスト</div></div>
+                <div className="flex-1"><div className="font-bold">#{p.number} {p.codename || p.name}</div><div className="text-xs" style={{ color: C.sub }}>{s.pts}得点・{s.reb}リバウンド・{s.ast}アシスト・3P{s.p3m}本</div></div>
                 <div className="text-right"><div className="text-4xl font-bold" style={{ color: C.led, fontFamily: "'Bebas Neue', sans-serif" }}>{s.eff}</div><div className="text-[10px]" style={{ color: C.sub }}>EFF</div></div>
               </div>
             ))}
@@ -2331,7 +2279,7 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
                 <span className="w-6 text-center text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
                 <span className="flex-1 font-bold text-sm">{label}</span>
                 <span className="text-2xl font-bold" style={{ color: C.oppText, fontFamily: "'Bebas Neue', sans-serif" }}>{s.pts}</span>
-                <span className="text-xs" style={{ color: C.sub }}>点</span>
+                <span className="text-xs" style={{ color: C.sub }}>点 / 3P{s.p3m}本</span>
               </div>
             ))}
           </div>
@@ -2351,14 +2299,14 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
         </Card>
       )}
 
-      {/* AIアナリスト分析: 全体・各Q */}
+      {/* AIアナリスト分析 */}
       {a.goodPoints.length > 0 && (
         <Card style={{ border: `1px solid ${C.win}44` }}>
           <div className="flex items-center gap-2 mb-3">
             <span className="text-lg">🏀</span>
             <div>
               <div className="text-xs font-bold tracking-widest" style={{ color: C.win }}>AIアナリスト分析{scope === "all" ? "" : ` (${periodLabel2(game, scope)})`}</div>
-              <div className="text-[10px]" style={{ color: C.sub }}>プロのミニバス分析アナリストの視点</div>
+              <div className="text-[10px]" style={{ color: C.sub }}>U15バスケットボール分析アナリストの視点</div>
             </div>
           </div>
           <div className="mb-3">
@@ -2387,7 +2335,6 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
         </Card>
       )}
 
-      {/* 次戦に向けた提言: 全体のみ */}
       {scope === "all" && a.tips.length > 0 && (
         <Card>
           <SectionTitle>次戦に向けた提言</SectionTitle>
@@ -2403,14 +2350,19 @@ function Ranking({ data, setTab, setNav }) {
   const C = useC();
   const [stat, setStat] = useState("pts");
   const [mode, setMode] = useState("total");
-  const isPctStat = stat === "fgp" || stat === "ftp"; // 率系スタッツ
+  const isPctStat = stat === "p2p" || stat === "p3p" || stat === "ftp";
   const rows = data.players.map((p) => {
     const c = careerStats(data.games, p.id);
     if (c.n === 0) return null;
-    if (stat === "fgp") {
-      if ((c.tot.fga || 0) === 0) return null;
-      const v = (c.tot.fgm / c.tot.fga) * 100;
-      return { p, n: c.n, total: v, avg: v, made: c.tot.fgm, att: c.tot.fga };
+    if (stat === "p2p") {
+      if ((c.tot.p2a || 0) === 0) return null;
+      const v = (c.tot.p2m / c.tot.p2a) * 100;
+      return { p, n: c.n, total: v, avg: v, made: c.tot.p2m, att: c.tot.p2a };
+    }
+    if (stat === "p3p") {
+      if ((c.tot.p3a || 0) === 0) return null;
+      const v = (c.tot.p3m / c.tot.p3a) * 100;
+      return { p, n: c.n, total: v, avg: v, made: c.tot.p3m, att: c.tot.p3a };
     }
     if (stat === "ftp") {
       if ((c.tot.fta || 0) === 0) return null;
@@ -2418,15 +2370,25 @@ function Ranking({ data, setTab, setNav }) {
       return { p, n: c.n, total: v, avg: v, made: c.tot.ftm, att: c.tot.fta };
     }
     return { p, n: c.n, total: c.tot[stat], avg: c.totAdj[stat] / c.n };
-  }).filter(Boolean).sort((a, b) => (mode === "total" ? b.total - a.total : b.avg - a.avg));
-  const statOptions = [];
-  for (const d of STAT_DEFS) {
-    statOptions.push([d.k, d.label]);
-    if (d.k === "pts") {
-      statOptions.push(["fgp", "フィールドゴール率(FG%)"]);
-      statOptions.push(["ftp", "フリースロー率(FT%)"]);
-    }
-  }
+  }).filter(Boolean).sort((a, b) => (mode === "total" || isPctStat ? b.total - a.total : b.avg - a.avg));
+
+  const statOptions = [
+    ...STAT_DEFS.map((d) => [d.k, d.label]),
+    ["p3m_total", "3P成功数"],
+    ["p2p", "2P成功率(2P%)"],
+    ["p3p", "3P成功率(3P%)"],
+    ["ftp", "フリースロー率(FT%)"],
+  ];
+
+  // 3P成功数の場合は別扱い
+  const rows3pm = stat === "p3m_total" ? data.players.map((p) => {
+    const c = careerStats(data.games, p.id);
+    if (c.n === 0) return null;
+    return { p, n: c.n, total: c.tot.p3m, avg: c.totAdj.p3m / c.n };
+  }).filter(Boolean).sort((a, b) => mode === "total" ? b.total - a.total : b.avg - a.avg) : null;
+
+  const displayRows = rows3pm || rows;
+
   return (
     <Card>
       <div className="flex gap-2 mb-3">
@@ -2443,14 +2405,16 @@ function Ranking({ data, setTab, setNav }) {
         )}
       </div>
       {isPctStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※成功数／試投数からの通算成功率。試投のある選手のみ表示します。</div>}
-      {rows.length === 0 ? <div className="text-sm py-4 text-center" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
-        <div>{rows.map((r, i) => (
+      {displayRows.length === 0 ? <div className="text-sm py-4 text-center" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
+        <div>{displayRows.map((r, i) => (
           <button key={r.p.id} className="w-full flex items-center gap-3 py-2.5 text-left" style={{ borderBottom: `1px solid ${C.border}44` }}
             onClick={() => { setTab("players"); setNav({ playerId: r.p.id }); }}>
             <div className="w-8 text-center text-2xl" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</div>
             <Avatar p={r.p} size={36} />
-            <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{r.p.codename || r.p.name}</div><div className="text-[10px]" style={{ color: C.sub }}>#{r.p.number}・{isPctStat ? `${r.made}/${r.att}本` : `${r.n}試合`}</div></div>
-            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{isPctStat ? `${fmt1(r.total)}%` : mode === "total" ? fmtSmart(r.total) : fmt1(r.avg)}</div>
+            <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{r.p.codename || r.p.name}</div><div className="text-[10px]" style={{ color: C.sub }}>#{r.p.number}・{isPctStat || stat === "p3m_total" ? `${r.made ?? r.total}/${r.att ?? ""}本` : `${r.n}試合`}</div></div>
+            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
+              {isPctStat ? `${fmt1(r.total)}%` : (mode === "total" || stat === "p3m_total") ? fmtSmart(r.total) : fmt1(r.avg)}
+            </div>
           </button>
         ))}</div>
       )}
@@ -2472,7 +2436,7 @@ function SettingsScreen({ data, save }) {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `minibasket-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    a.href = url; a.download = `furoku-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
     URL.revokeObjectURL(url);
   };
   const importData = (e) => {
@@ -2531,7 +2495,7 @@ function SettingsScreen({ data, save }) {
                 </div>
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppDraft.name} onChange={(e) => setOppDraft({ ...oppDraft, name: e.target.value })} />
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="読み(カタカナ・並べ替え用)" value={oppDraft.kana || ""} onChange={(e) => setOppDraft({ ...oppDraft, kana: e.target.value })} />
-                <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppDraft.area || ""} onChange={(e) => setOppDraft({ ...oppDraft, area: e.target.value })} />
+                <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(区市町村名 または 県名)" value={oppDraft.area || ""} onChange={(e) => setOppDraft({ ...oppDraft, area: e.target.value })} />
                 <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り) 4,5,6,7" value={oppDraft.numbers || ""} onChange={(e) => setOppDraft({ ...oppDraft, numbers: e.target.value })} />
                 <div className="text-xs mb-1" style={{ color: C.sub }}>強さ(Tier)</div>
                 <div className="flex gap-1.5 mb-2">
@@ -2571,8 +2535,8 @@ function SettingsScreen({ data, save }) {
           ) : (
             <>
               <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppForm.name} onChange={(e) => setOppForm({ ...oppForm, name: e.target.value })} />
-              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="読み(カタカナ・並べ替え用)例: フチュウロクショウ" value={oppForm.kana} onChange={(e) => setOppForm({ ...oppForm, kana: e.target.value })} />
-              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppForm.area} onChange={(e) => setOppForm({ ...oppForm, area: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="読み(カタカナ・並べ替え用)" value={oppForm.kana} onChange={(e) => setOppForm({ ...oppForm, kana: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区" value={oppForm.area} onChange={(e) => setOppForm({ ...oppForm, area: e.target.value })} />
               <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り)" value={oppForm.numbers} onChange={(e) => setOppForm({ ...oppForm, numbers: e.target.value })} />
               <div className="text-xs mb-1" style={{ color: C.sub }}>強さ(Tier)</div>
               <div className="flex gap-1.5 mb-1">
@@ -2584,7 +2548,7 @@ function SettingsScreen({ data, save }) {
                 ))}
               </div>
               <div className="text-[10px] mb-2" style={{ color: C.sub }}>
-                {oppForm.tier ? tierOf(oppForm.tier)?.desc : "A:都大会上位 / B:府中上位レベル / C:同格 / D:格下"}
+                {oppForm.tier ? tierOf(oppForm.tier)?.desc : "A:関東大会レベル / B:都大会上位 / C:同格 / D:格下"}
               </div>
               <PrimaryBtn disabled={!oppForm.name} onClick={() => { save({ ...data, opponents: [...data.opponents, { id: uid(), logo: "", ...oppForm }] }); setOppForm({ name: "", kana: "", area: "", numbers: "", tier: "" }); }}>対戦相手を追加</PrimaryBtn>
             </>
@@ -2611,7 +2575,7 @@ function SettingsScreen({ data, save }) {
           </label>
         </div>
         <button className="w-full py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.loss}`, color: C.loss }}
-          onClick={() => { if (confirm("すべてのデータを削除します。よろしいですか?")) save({ team: { name: "府中六小ミニバス", logo: "", homeCourt: "" }, players: [], opponents: [], games: [] }); }}>
+          onClick={() => { if (confirm("すべてのデータを削除します。よろしいですか?")) save({ team: { name: "FUROKU BASKETBALL", logo: "", homeCourt: "" }, players: [], opponents: [], games: [] }); }}>
           すべてのデータを初期化
         </button>
       </Card>
