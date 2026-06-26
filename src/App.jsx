@@ -654,7 +654,7 @@ export default function App() {
 
         {/* チーム名: 「府中六小」で改行 */}
         <div className="font-black text-center" style={{
-          fontSize: "clamp(26px,7vw,36px)", letterSpacing: "0.02em", lineHeight: 1.25,
+          fontSize: "clamp(20px,5.5vw,28px)", letterSpacing: "0.02em", lineHeight: 1.3,
           color: theme === "dark" ? "#fff" : "#1A2740",
           textShadow: theme === "dark" ? "0 0 40px rgba(232,96,42,0.45), 0 2px 14px rgba(0,0,0,0.9)" : "none" }}>
           府中六小<br />ミニバスケットボールクラブ
