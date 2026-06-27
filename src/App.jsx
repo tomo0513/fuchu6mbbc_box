@@ -1478,10 +1478,10 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   const [mode, setMode] = useState("list");
   const [openKey, setOpenKey] = useState(null);
   const [catFilter, setCatFilter] = useState("all"); // カテゴリーフィルター
+  const games = [...data.games].sort(gameOrderDesc);
   // カテゴリーフィルター適用後の試合一覧
   const filteredGames = catFilter === "all" ? games : games.filter((g) => (g.category || "practice") === catFilter);
-  const games = [...data.games].sort(gameOrderDesc);
-  const results = games.map((g) => ({ g, ...gamePts(g) }));
+  const results = filteredGames.map((g) => ({ g, ...gamePts(g) }));
   if (adding) return (
     <GameForm data={data} onCancel={() => setAdding(false)}
       onSave={(f) => {
