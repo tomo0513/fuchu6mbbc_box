@@ -2667,4 +2667,53 @@ function SettingsScreen({ data, save }) {
         <div className="mt-3">
           {oppCount >= MAX_OPPONENTS ? (
             <div className="text-xs" style={{ color: C.loss }}>登録上限({MAX_OPPONENTS}チーム)に達しました。</div>
-          ) 
+          ) : (
+            <>
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="チーム名" value={oppForm.name} onChange={(e) => setOppForm({ ...oppForm, name: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="読み(カタカナ・並べ替え用)例: フチュウロクショウ" value={oppForm.kana} onChange={(e) => setOppForm({ ...oppForm, kana: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="地区(都内は区市町村名、他県は県名)" value={oppForm.area} onChange={(e) => setOppForm({ ...oppForm, area: e.target.value })} />
+              <input className={inputCls + " mb-2"} style={getInputStyle(C)} placeholder="背番号(カンマ区切り)" value={oppForm.numbers} onChange={(e) => setOppForm({ ...oppForm, numbers: e.target.value })} />
+              <div className="text-xs mb-1" style={{ color: C.sub }}>強さ(Tier)</div>
+              <div className="flex gap-1.5 mb-1">
+                {TIERS.map((t) => (
+                  <button key={t.k} onClick={() => setOppForm({ ...oppForm, tier: oppForm.tier === t.k ? "" : t.k })}
+                    className="flex-1 py-2 rounded-lg text-xs font-bold"
+                    style={oppForm.tier === t.k ? { background: t.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                    title={t.desc}>{t.label}</button>
+                ))}
+              </div>
+              <div className="text-[10px] mb-2" style={{ color: C.sub }}>
+                {oppForm.tier ? tierOf(oppForm.tier)?.desc : "A:都大会上位 / B:府中上位レベル / C:同格 / D:格下"}
+              </div>
+              <PrimaryBtn disabled={!oppForm.name} onClick={() => { save({ ...data, opponents: [...data.opponents, { id: uid(), logo: "", ...oppForm }] }); setOppForm({ name: "", kana: "", area: "", numbers: "", tier: "" }); }}>対戦相手を追加</PrimaryBtn>
+            </>
+          )}
+        </div>
+      </Card>
+      <Card>
+        <SectionTitle>データ管理</SectionTitle>
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span style={{ color: C.sub }}>使用容量</span>
+            <span style={{ color: usagePct > 85 ? C.loss : C.sub }}>{(usage / 1024 / 1024).toFixed(2)} MB / 5 MB ({usagePct}%)</span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: C.card2 }}>
+            <div className="h-full rounded-full" style={{ width: `${usagePct}%`, background: usagePct > 85 ? C.loss : usagePct > 60 ? C.led : C.win }} />
+          </div>
+          <div className="text-[10px] mt-1" style={{ color: C.sub }}>データはFirebaseにリアルタイム同期されます。</div>
+        </div>
+        <div className="flex gap-2 mb-2">
+          <button className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.border}` }} onClick={exportData}><Download size={16} /> 書き出し(JSON)</button>
+          <label className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.border}` }}>
+            <Upload size={16} /> 読み込み
+            <input type="file" accept=".json,application/json" className="hidden" onChange={importData} />
+          </label>
+        </div>
+        <button className="w-full py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.loss}`, color: C.loss }}
+          onClick={() => { if (confirm("すべてのデータを削除します。よろしいですか?")) save({ team: { name: "府中六小ミニバス", logo: "", homeCourt: "" }, players: [], opponents: [], games: [] }); }}>
+          すべてのデータを初期化
+        </button>
+      </Card>
+    </div>
+  );
+}
