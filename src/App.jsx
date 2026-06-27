@@ -112,6 +112,15 @@ const TIERS = [
 ];
 const tierOf = (k) => TIERS.find((t) => t.k === k);
 
+/* ============ 試合区分 ============ */
+// countWL: 勝敗集計に含めるか / countQ: 平均計算に使うQ数(regQOf(g)をそのまま使う)
+const GAME_CATS = [
+  { k: "official",  label: "公式戦",   badge: "公式", color: "#E25C5C", countWL: true  },
+  { k: "practice",  label: "練習試合", badge: "練習", color: "#5B74A8", countWL: true  },
+  { k: "ref",       label: "参考試合", badge: "参考", color: "#8FA0C0", countWL: false },
+];
+const gameCatOf = (k) => GAME_CATS.find((c) => c.k === k) || GAME_CATS[1]; // デフォルト練習試合
+
 // あいうえお順ソート(アルファベット→ひらがな・漢字)。日本語ロケール対応
 const nameCompare = (a, b) => (a || "").localeCompare(b || "", "ja");
 // 対戦相手の並び: Tier順(A→D→未設定) → 読み(kana)優先のあいうえお順
@@ -183,6 +192,7 @@ const padQ = (arr) => { const a = [...(arr || [])]; while (a.length < 6) a.push(
 const normGame = (g) => {
   const { scoreSheet, ...rest } = g;
   return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0, regQ: +g.regQ || 4, order: +g.order || 0,
+    category: g.category || "practice",
     qScores: { own: padQ(g.qScores?.own), opp: padQ(g.qScores?.opp) },
     events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
@@ -277,22 +287,25 @@ const gameOrderDesc = (a, b) => (b.date || "").localeCompare(a.date || "") || ((
 
 function careerStats(games, playerId) {
   const per = games.map((g) => ({ g, s: aggStats(g.events, "own", playerId, "all", g) })).filter((x) => hasStats(x.s));
-  // 平均用: スコアが0-0(まだ未入力)の試合は試合数にカウントしない
+  // 平均用: スコアが0-0(まだ未入力)の試合は除外
   const played = per.filter((x) => { const p = gamePts(x.g); return (p.own + p.opp) > 0; });
+  // Q数基準の正規化: 実施Q数合計÷基準Q数(4Q×試合数)
+  // 例: 4Q+3Q+2Q=9Q実施、基準12Q → 平均係数 = 12/9
+  const totalQPlayed = played.reduce((a, x) => a + periodsOf(x.g), 0);
+  const baseQ = played.length * 4; // 全試合4Q換算の基準
+  // n は表示用の試合数(0-0除外)
   const n = played.length;
   const tot = {};
-  const totAdj = {}; // 平均用: 3Q試合は4/3倍して4Q換算
+  const totAdj = {}; // Q数基準の平均用
   const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
   cntKeys.forEach((k) => {
     // 合計は全試合(per)を集計。浮動小数点誤差を防ぐため小数第1位に丸める
     tot[k] = Math.round(per.reduce((a, x) => a + (x.s[k] || 0), 0) * 10) / 10;
-    // 平均用の補正合計: 0-0を除いたplayedのみ、3Q試合は4Q換算
-    totAdj[k] = played.reduce((a, x) => {
-      const factor = regQOf(x.g) === 3 ? 4 / 3 : 1;
-      return a + (x.s[k] || 0) * factor;
-    }, 0);
+    // 平均用: played合計 ÷ 実施Q数 × 基準Q数(4Q換算)
+    const playedTotal = played.reduce((a, x) => a + (x.s[k] || 0), 0);
+    totAdj[k] = totalQPlayed > 0 ? playedTotal / totalQPlayed * baseQ : 0;
   });
-  return { per, n, tot, totAdj, gamesPlayed: per.length };
+  return { per, n, tot, totAdj, gamesPlayed: per.length, totalQPlayed, baseQ };
 }
 
 function mipOf(game, players) {
@@ -872,11 +885,14 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const C = useC();
   const games = [...data.games].sort(gameOrderDesc);
   const results = games.map((g) => ({ g, ...gamePts(g) }));
-  const w = results.filter((r) => r.own > r.opp).length;
-  const l = results.filter((r) => r.own < r.opp).length;
-  const n = results.length;
-  const avgPF = n ? results.reduce((a, r) => a + r.own, 0) / n : 0;
-  const avgPA = n ? results.reduce((a, r) => a + r.opp, 0) / n : 0;
+  // 勝敗集計: 参考試合(countWL=false)を除外
+  const wlResults = results.filter((r) => gameCatOf(r.g.category).countWL);
+  const refCount = results.length - wlResults.length; // 参考試合数
+  const w = wlResults.filter((r) => r.own > r.opp).length;
+  const l = wlResults.filter((r) => r.own < r.opp).length;
+  const n = wlResults.length;
+  const avgPF = n ? wlResults.reduce((a, r) => a + r.own, 0) / n : 0;
+  const avgPA = n ? wlResults.reduce((a, r) => a + r.opp, 0) / n : 0;
   const stars = useMemo(() => {
     // 直近5試合の平均EFFが高い順に上位5人(0-0の未入力試合は除外)
     const recent5 = [...data.games].filter((g) => { const p = gamePts(g); return (p.own + p.opp) > 0; }).sort(gameOrderDesc).slice(0, 5);
@@ -897,7 +913,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
     <div className={isPC ? "grid grid-cols-2 gap-5" : "space-y-3"}>
       {/* 成績カード */}
       <Card className={isPC ? "col-span-2" : ""}>
-        <SectionTitle>シーズン成績</SectionTitle>
+        <SectionTitle>シーズン成績{refCount > 0 ? `(参考試合${refCount}試合を除く)` : ""}</SectionTitle>
         <div className="flex items-end justify-center gap-8 py-1" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
           <div className="text-center"><div className="text-7xl" style={{ color: C.win, lineHeight: 1 }}>{w}</div><div className="text-xs mt-1" style={{ fontFamily: "sans-serif", color: C.sub }}>勝</div></div>
           <div className="text-3xl pb-4" style={{ color: C.border }}>–</div>
@@ -1072,8 +1088,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const [effStat, setEffStat] = useState("fgp"); // 効率グラフ: FG% or FT%
   if (!p) return null;
   const games = [...data.games].sort(gameOrderAsc);
-  const { per, n, tot, totAdj, gamesPlayed } = careerStats(games, p.id);
-  const has3Q = per.some((x) => regQOf(x.g) === 3);
+  const { per, n, tot, totAdj, gamesPlayed, totalQPlayed, baseQ } = careerStats(games, p.id);
+  const hasVaryQ = per.some((x) => regQOf(x.g) !== 4); // Q数が混在しているか
   const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
   // 推移グラフ: EFF/得点/アシスト/リバウンドから選択
   const TREND_OPTS = [
@@ -1158,8 +1174,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
         </Card>
       )}
       <Card>
-        <SectionTitle>通算成績({gamesPlayed}試合{n < gamesPlayed ? `・平均は${n}試合で算出` : ""})</SectionTitle>
-        {has3Q && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※3ピリオド制の試合は、平均値のみ4ピリオド換算(×4/3)で算出しています。合計はそのままです。</div>}
+        <SectionTitle>通算成績({gamesPlayed}試合 / {totalQPlayed}Q)</SectionTitle>
+        {hasVaryQ && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均はQ数基準で算出(実施{totalQPlayed}Q ÷ 基準{baseQ}Q)。全試合4Q換算の平均値です。</div>}
         {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
           <>
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -1333,7 +1349,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
   const [f, setF] = useState(initial ? { ...normGame(initial), newOpp: "" } : {
     date: new Date().toISOString().slice(0, 10), tournament: "",
     opponentId: data.opponents[0]?.id || "", newOpp: "",
-    qLen: 6, otLen: 3, ot: 0, regQ: 4,
+    qLen: 6, otLen: 3, ot: 0, regQ: 4, category: "practice",
     qScores: { own: padQ([]), opp: padQ([]) },
   });
   const periods = (+f.regQ || 4) + (+f.ot || 0);
@@ -1372,6 +1388,18 @@ function GameForm({ data, initial, onSave, onCancel }) {
         </Field>
       )}
       <Field label="大会名"><input className={inputCls} style={getInputStyle(C)} value={f.tournament} onChange={(e) => setF({ ...f, tournament: e.target.value })} placeholder="市民大会 予選リーグ" /></Field>
+      <Field label="試合区分">
+        <div className="flex gap-2">
+          {GAME_CATS.map((c) => (
+            <button key={c.k} type="button" className="flex-1 py-2.5 rounded-xl text-xs font-bold"
+              onClick={() => setF({ ...f, category: c.k })}
+              style={f.category === c.k ? { background: c.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+        {f.category === "ref" && <div className="text-[10px] mt-1" style={{ color: C.sub }}>※参考試合はスタッツを記録しますが、勝敗集計には含まれません。</div>}
+      </Field>
       <Field label="対戦相手">
         <select className={inputCls} style={getInputStyle(C)} value={f.opponentId} onChange={(e) => setF({ ...f, opponentId: e.target.value })}>
           <option value="">(新しいチームを入力)</option>
@@ -1427,10 +1455,15 @@ function GameForm({ data, initial, onSave, onCancel }) {
 function GameRow({ g, setNav, showOpp, oppName }) {
   const C = useC();
   const { own, opp } = gamePts(g);
+  const cat = gameCatOf(g.category);
   return (
     <button className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
       style={{ background: C.card2 }} onClick={() => setNav({ gameId: g.id })}>
       <span className="text-xs w-20 text-left shrink-0" style={{ color: C.sub }}>{g.date}</span>
+      {/* 区分バッジ(参考試合のみ表示) */}
+      {cat.k === "ref" && (
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: cat.color, color: "#fff" }}>{cat.badge}</span>
+      )}
       <span className="flex-1 text-left text-xs truncate" style={{ color: C.sub }}>
         {showOpp && oppName ? oppName(g.opponentId) : (g.tournament || "練習試合")}
       </span>
@@ -1451,7 +1484,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
       onSave={(f) => {
         let oppId = f.opponentId, opponents = data.opponents;
         if (!oppId) { oppId = uid(); opponents = [...opponents, { id: oppId, name: f.newOpp, area: "", numbers: "", logo: "" }]; }
-        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, qScores: f.qScores, events: [] });
+        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: [] });
         save({ ...data, opponents, games: [...data.games, g] });
         setAdding(false); setNav({ gameId: g.id });
       }} />
@@ -1482,7 +1515,10 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
 
       {/* 相手レベル別・府中市内の成績 */}
       {games.length > 0 && (() => {
-        const wldOf2 = (rs) => ({ w: rs.filter((r) => r.own > r.opp).length, l: rs.filter((r) => r.own < r.opp).length, d: rs.filter((r) => r.own === r.opp).length });
+        const wldOf2 = (rs) => {
+          const wl = rs.filter((r) => gameCatOf(r.g?.category).countWL);
+          return { w: wl.filter((r) => r.own > r.opp).length, l: wl.filter((r) => r.own < r.opp).length, d: wl.filter((r) => r.own === r.opp).length };
+        };
         const fuchuRs = results.filter((r) => (getOpp(r.g.opponentId)?.area || "").includes("府中"));
         const fuchu2 = wldOf2(fuchuRs);
         const tierStats2 = TIERS.map((t) => {
@@ -1634,7 +1670,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   if (editing) return (
     <GameForm data={data} initial={g} onCancel={() => setEditing(false)}
       onSave={(f) => {
-        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, qScores: f.qScores, events: f._clearQ4 ? (x.events || []).filter((e) => e.q !== 4) : x.events, lineups: f._clearQ4 ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => +k !== 4)) : x.lineups }) : x) });
+        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: f._clearQ4 ? (x.events || []).filter((e) => e.q !== 4) : x.events, lineups: f._clearQ4 ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => +k !== 4)) : x.lineups }) : x) });
         setEditing(false);
       }} />
   );
