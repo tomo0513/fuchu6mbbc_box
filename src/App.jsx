@@ -488,30 +488,68 @@ const Seg = ({ items, value, onChange }) => {
   );
 };
 
-function ScoreBoard({ own, opp, oppName, oppLogo, date, small }) {
+function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods, game }) {
   const C = useC();
   const win = own > opp, draw = own === opp;
   return (
-    <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+    <div className="rounded-xl px-4 py-3"
       style={{ background: C.board, border: `1px solid ${C.border}`, fontFamily: "'Bebas Neue', sans-serif" }}>
-      <div className="text-center flex-1">
-        <div className="text-xs tracking-widest" style={{ fontFamily: "sans-serif", color: C.sub }}>府中六小</div>
-        <div className={small ? "text-5xl" : "text-7xl"} style={{ color: C.led, textShadow: `0 0 16px ${C.led}66`, lineHeight: 1.1 }}>{own}</div>
-      </div>
-      <div className="text-center px-2">
-        <div className="text-xs" style={{ fontFamily: "sans-serif", color: C.sub }}>{date || ""}</div>
-        <div className="text-sm font-bold px-2.5 py-0.5 rounded mt-1 text-white"
-          style={{ background: draw ? "#444" : win ? C.win : C.loss, fontFamily: "sans-serif" }}>
-          {draw ? "引分" : win ? "WIN" : "LOSE"}
+      {/* メインスコア行 */}
+      <div className="flex items-center justify-between">
+        <div className="text-center flex-1">
+          <div className="text-xs tracking-widest" style={{ fontFamily: "sans-serif", color: C.sub }}>府中六小</div>
+          <div className={small ? "text-5xl" : "text-7xl"} style={{ color: C.led, textShadow: `0 0 16px ${C.led}66`, lineHeight: 1.1 }}>{own}</div>
+        </div>
+        <div className="text-center px-2">
+          <div className="text-xs" style={{ fontFamily: "sans-serif", color: C.sub }}>{date || ""}</div>
+          <div className="text-sm font-bold px-2.5 py-0.5 rounded mt-1 text-white"
+            style={{ background: draw ? "#444" : win ? C.win : C.loss, fontFamily: "sans-serif" }}>
+            {draw ? "引分" : win ? "WIN" : "LOSE"}
+          </div>
+        </div>
+        <div className="text-center flex-1">
+          <div className="flex items-center justify-center gap-1 max-w-28 mx-auto">
+            {oppLogo && <img src={oppLogo} alt="" className="w-4 h-4 rounded-full object-cover" />}
+            <div className="text-xs tracking-widest truncate" style={{ fontFamily: "sans-serif", color: C.sub }}>{oppName}</div>
+          </div>
+          <div className={small ? "text-5xl" : "text-7xl"} style={{ color: C.oppText, lineHeight: 1.1 }}>{opp}</div>
         </div>
       </div>
-      <div className="text-center flex-1">
-        <div className="flex items-center justify-center gap-1 max-w-28 mx-auto">
-          {oppLogo && <img src={oppLogo} alt="" className="w-4 h-4 rounded-full object-cover" />}
-          <div className="text-xs tracking-widest truncate" style={{ fontFamily: "sans-serif", color: C.sub }}>{oppName}</div>
+      {/* Q別スコアテーブル(試合詳細のみ・合計列なし) */}
+      {!small && qScores && periods > 0 && (
+        <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${C.border}44` }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "sans-serif" }}>
+            <thead>
+              <tr>
+                <th style={{ width: "28%", fontSize: 9, color: C.sub, fontWeight: 400, textAlign: "left", paddingBottom: 3 }}></th>
+                {Array.from({ length: periods }, (_, i) => (
+                  <th key={i} style={{ fontSize: 9, color: C.sub, fontWeight: 400, textAlign: "center", paddingBottom: 3 }}>
+                    {periodLabel2(game, i + 1)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={{ fontSize: 9, color: C.sub, fontFamily: "sans-serif", paddingRight: 4 }}>府中六小</td>
+                {Array.from({ length: periods }, (_, i) => (
+                  <td key={i} style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, textAlign: "center", color: C.led, lineHeight: 1.3 }}>
+                    {qScores.own[i] || 0}
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <td style={{ fontSize: 9, color: C.sub, fontFamily: "sans-serif", paddingRight: 4 }}>{oppName}</td>
+                {Array.from({ length: periods }, (_, i) => (
+                  <td key={i} style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, textAlign: "center", color: C.oppText, lineHeight: 1.3 }}>
+                    {qScores.opp[i] || 0}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div className={small ? "text-5xl" : "text-7xl"} style={{ color: C.oppText, lineHeight: 1.1 }}>{opp}</div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1616,7 +1654,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
         </div>
       </div>
       <div className="px-1 text-xs" style={{ color: C.sub }}>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}(${g.otLen}分)` : ""}・Q{g.qLen}分</div>
-      <ScoreBoard own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} />
+      <ScoreBoard own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} qScores={g.qScores} periods={periodsOf(g)} game={g} />
       {mips.length > 0 && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl flex-wrap" style={{ background: C.card, border: `1px solid ${C.led}55` }}>
           <Award size={18} style={{ color: C.led }} />
