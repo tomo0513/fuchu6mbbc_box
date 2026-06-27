@@ -1359,18 +1359,22 @@ function GameForm({ data, initial, onSave, onCancel }) {
   const sameDayGames = data.games.filter((x) => x.date === f.date && x.id !== initial?.id);
 
   const handleSave = () => {
-    // 4Q→3Qに変更し、Q4にデータがある場合は確認してクリア
+    // Qが減る方向への変更で、削除されるQにデータがある場合は確認してクリア
     const wasRegQ = initial ? regQOf(initial) : 4;
-    if (wasRegQ === 4 && (+f.regQ === 3)) {
-      const q4Score = (+f.qScores?.own?.[3] || 0) + (+f.qScores?.opp?.[3] || 0);
-      const q4Events = (initial?.events || []).filter((e) => e.q === 4).length;
-      if (q4Score > 0 || q4Events > 0) {
-        const msg = `3ピリオド制に変更すると、第4ピリオドの${q4Score > 0 ? "スコア" : ""}${q4Score > 0 && q4Events > 0 ? "と" : ""}${q4Events > 0 ? `プレイログ(${q4Events}件)` : ""}が削除されます。よろしいですか?`;
+    const newRegQ = +f.regQ || 4;
+    if (wasRegQ > newRegQ) {
+      // 削除されるQ(newRegQ+1 〜 wasRegQ)にデータがあるか確認
+      const removedQs = Array.from({ length: wasRegQ - newRegQ }, (_, i) => newRegQ + 1 + i);
+      const hasScore = removedQs.some((q) => (+f.qScores?.own?.[q - 1] || 0) + (+f.qScores?.opp?.[q - 1] || 0) > 0);
+      const hasEvents = removedQs.some((q) => (initial?.events || []).some((e) => e.q === q));
+      if (hasScore || hasEvents) {
+        const qLabels = removedQs.map((q) => `Q${q}`).join("・");
+        const msg = `${newRegQ}ピリオド制に変更すると、${qLabels}のデータが削除されます。よろしいですか?`;
         if (!confirm(msg)) return;
-        // Q4のスコアとプレイログをクリア
+        // 削除されるQのスコア・イベント・ラインナップをクリア
         const own = [...f.qScores.own]; const opp = [...f.qScores.opp];
-        own[3] = ""; opp[3] = "";
-        const cleared = { ...f, qScores: { own, opp }, _clearQ4: true };
+        removedQs.forEach((q) => { own[q - 1] = ""; opp[q - 1] = ""; });
+        const cleared = { ...f, qScores: { own, opp }, _clearQs: removedQs };
         onSave(cleared);
         return;
       }
@@ -1413,6 +1417,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
         <select className={inputCls} style={getInputStyle(C)} value={f.regQ} onChange={(e) => setF({ ...f, regQ: +e.target.value })}>
           <option value={4}>4ピリオド制(通常)</option>
           <option value={3}>3ピリオド制</option>
+          <option value={2}>2ピリオド制</option>
         </select>
       </Field>
       <div className="grid grid-cols-3 gap-3">
@@ -1700,7 +1705,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   if (editing) return (
     <GameForm data={data} initial={g} onCancel={() => setEditing(false)}
       onSave={(f) => {
-        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: f._clearQ4 ? (x.events || []).filter((e) => e.q !== 4) : x.events, lineups: f._clearQ4 ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => +k !== 4)) : x.lineups }) : x) });
+        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: f._clearQs ? (x.events || []).filter((e) => !f._clearQs.includes(e.q)) : x.events, lineups: f._clearQs ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => !f._clearQs.includes(+k))) : x.lineups }) : x) });
         setEditing(false);
       }} />
   );
