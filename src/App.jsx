@@ -793,6 +793,7 @@ export default function App() {
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         input::placeholder, textarea::placeholder { color: ${CT.sub}88; }
         select option { background: ${CT.inputBg}; color: ${CT.text}; }
+        select { color-scheme: ${theme === "dark" ? "dark" : "light"}; }
         .play-btn { transition: transform .08s, background .15s, color .15s; -webkit-tap-highlight-color: transparent; }
         .play-btn:not(:disabled):active { transform: scale(0.92); background: var(--btn-col) !important; color: #fff !important; }
         @keyframes flashPop { 0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.9); } 15% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
@@ -965,12 +966,19 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
           <div className="text-center text-sm py-8" style={{ color: C.sub }}>まだ試合がありません。「試合」タブから登録しましょう。</div>
         ) : (
           <div className="space-y-2">
-            {recentGames.map(({ g, own, opp }) => (
-              <button key={g.id} className="w-full text-left" onClick={() => { setTab("games"); setNav({ gameId: g.id }); }}>
-                <div className="mb-1 px-1 text-xs" style={{ color: C.sub }}>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}` : ""}</div>
-                <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} />
-              </button>
-            ))}
+            {recentGames.map(({ g, own, opp }) => {
+              const cat = gameCatOf(g.category);
+              return (
+                <button key={g.id} className="w-full text-left" onClick={() => { setTab("games"); setNav({ gameId: g.id }); }}>
+                  <div className="mb-1 px-1 text-xs flex items-center gap-1.5" style={{ color: C.sub }}>
+                    <span className="font-bold px-1.5 py-0.5 rounded text-white text-[9px] shrink-0"
+                      style={{ background: cat.color }}>{cat.badge}</span>
+                    <span>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}` : ""}</span>
+                  </div>
+                  <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} />
+                </button>
+              );
+            })}
           </div>
         )}
       </Card>
@@ -1087,6 +1095,11 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const [selGame, setSelGame] = useState(null); // 推移とスタッツの連動用(選択中の試合id)
   const [effStat, setEffStat] = useState("fgp"); // 効率グラフ: FG% or FT%
   if (!p) return null;
+  // 前後の選手ナビゲーション(背番号順)
+  const sortedPlayers = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
+  const curIdx = sortedPlayers.findIndex((x) => x.id === p.id);
+  const prevPlayer = curIdx > 0 ? sortedPlayers[curIdx - 1] : null;
+  const nextPlayer = curIdx < sortedPlayers.length - 1 ? sortedPlayers[curIdx + 1] : null;
   const games = [...data.games].sort(gameOrderAsc);
   const { per, n, tot, totAdj, gamesPlayed, totalQPlayed, baseQ } = careerStats(games, p.id);
   const hasVaryQ = per.some((x) => regQOf(x.g) !== 4); // Q数が混在しているか
@@ -1125,6 +1138,23 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
             if (confirm(`「${p.name}」を削除しますか?`)) { save({ ...data, players: data.players.filter((x) => x.id !== p.id) }); setNav({}); }
           }}><Trash2 size={18} /></button>}
         </div>
+      </div>
+      {/* 前後の選手ナビ */}
+      <div className="flex gap-2">
+        <button className="flex-1 flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold truncate"
+          style={{ background: C.card2, color: prevPlayer ? C.text : C.border }}
+          disabled={!prevPlayer}
+          onClick={() => prevPlayer && setNav({ playerId: prevPlayer.id })}>
+          <ChevronLeft size={14} className="shrink-0" />
+          <span className="truncate">{prevPlayer ? `#${prevPlayer.number} ${prevPlayer.codename || prevPlayer.name}` : "–"}</span>
+        </button>
+        <button className="flex-1 flex items-center justify-end gap-1 px-3 py-2 rounded-xl text-xs font-bold truncate"
+          style={{ background: C.card2, color: nextPlayer ? C.text : C.border }}
+          disabled={!nextPlayer}
+          onClick={() => nextPlayer && setNav({ playerId: nextPlayer.id })}>
+          <span className="truncate">{nextPlayer ? `#${nextPlayer.number} ${nextPlayer.codename || nextPlayer.name}` : "–"}</span>
+          <ChevronDown size={14} className="shrink-0" style={{ transform: "rotate(-90deg)" }} />
+        </button>
       </div>
       <Card>
         <div className="flex items-center gap-3">
@@ -2508,7 +2538,7 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
 function Ranking({ data, setTab, setNav }) {
   const C = useC();
   const [stat, setStat] = useState("pts");
-  const [mode, setMode] = useState("total");
+  const [mode, setMode] = useState("avg"); // デフォルトを平均に
   const isPctStat = stat === "fgp" || stat === "ftp"; // 率系スタッツ
   const rows = data.players.map((p) => {
     const c = careerStats(data.games, p.id);
