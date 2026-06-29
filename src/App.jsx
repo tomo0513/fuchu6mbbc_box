@@ -1076,7 +1076,7 @@ function PlayerList({ data, save, setNav, isPC, isAdmin }) {
                   <div className="text-xs truncate" style={{ color: C.sub }}>#{p.number}{p.codename ? `・${p.codename}` : ""}{p.bibs ? `・ビブス${p.bibs}` : ""}・{p.grade}年</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{c.n ? fmt1(c.tot.pts / c.n) : "–"}</div>
+                  <div className="text-2xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{c.n ? fmt1(c.totAdj.pts / c.n) : "–"}</div>
                   <div className="text-[10px]" style={{ color: C.sub }}>平均得点</div>
                 </div>
               </Card>
