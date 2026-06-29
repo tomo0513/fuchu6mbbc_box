@@ -193,6 +193,7 @@ const normGame = (g) => {
   const { scoreSheet, ...rest } = g;
   return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0, regQ: +g.regQ || 4, order: +g.order || 0,
     category: g.category || "practice",
+    memo: g.memo || "",
     qScores: { own: padQ(g.qScores?.own), opp: padQ(g.qScores?.opp) },
     events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
@@ -1770,7 +1771,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
         ))}
       </div>
       {sub === "entry" && isAdmin && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
-      {sub === "analysis" && <GameAnalysis data={data} game={g} oppName={oppName} onReport={setReport} isAdmin={isAdmin} />}
+      {sub === "analysis" && <GameAnalysis data={data} save={save} game={g} oppName={oppName} onReport={setReport} isAdmin={isAdmin} />}
       {sub === "media" && <GameMedia data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
     </div>
   );
@@ -1787,9 +1788,10 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const [sel, setSel] = useState(null);
   const [insertAfter, setInsertAfter] = useState(null);
   const [showLineup, setShowLineup] = useState(false);
-  const [qLocked, setQLocked] = useState(false); // Q固定モード
-  const [flash, setFlash] = useState(null); // 直近に記録したアクションのフラッシュ表示
+  const [qLocked, setQLocked] = useState(false);
+  const [flash, setFlash] = useState(null);
   const flashTimer = useRef(null);
+  const [editEvent, setEditEvent] = useState(null); // 編集中のイベント(null=非表示)
 
   // side変更時: 相手ならTEAM_KEYをデフォルト選択
   const changeSide = (k) => {
@@ -1846,6 +1848,22 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     const pts = ev ? PTS_OF[ev.action] || 0 : 0;
     if (insertAfter === id) setInsertAfter(null);
     updGame((x) => ({ ...x, events: x.events.filter((e) => e.id !== id), qScores: pts ? applyScore(x.qScores, ev.side, ev.q - 1, -pts) : x.qScores }));
+  };
+  // イベントを編集保存: スコアの差分を調整
+  const saveEditEvent = (updated) => {
+    const orig = (game.events || []).find((e) => e.id === updated.id);
+    if (!orig) return;
+    const origPts = PTS_OF[orig.action] || 0;
+    const newPts = PTS_OF[updated.action] || 0;
+    updGame((x) => {
+      let qs = x.qScores;
+      // 元のスコアを取り消し
+      if (origPts) qs = applyScore(qs, orig.side, orig.q - 1, -origPts);
+      // 新スコアを加算
+      if (newPts) qs = applyScore(qs, updated.side, updated.q - 1, newPts);
+      return { ...x, events: x.events.map((e) => e.id === updated.id ? updated : e), qScores: qs };
+    });
+    setEditEvent(null);
   };
   // 残り時間を取得(入力欄が空ならpromptで聞く)。"M:SS"形式
   const askRemain = (label) => {
@@ -2082,6 +2100,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                 </span>
                 {PTS_OF[e.action] ? <span className="text-xs font-bold" style={{ color: C.led }}>+{PTS_OF[e.action]}</span> : null}
                 {isAdmin && <>
+                  <button className="p-1" style={{ color: C.orange }} onClick={() => setEditEvent({ ...e })}><Pencil size={13} /></button>
                   <button className="p-1" style={{ color: insertAfter === e.id ? C.led : C.sub }}
                     onClick={() => setInsertAfter(insertAfter === e.id ? null : e.id)}><CornerDownRight size={14} /></button>
                   <button className="p-1" style={{ color: C.sub }} onClick={() => delEvent(e.id)}><Trash2 size={14} /></button>
@@ -2091,6 +2110,71 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
           </div>
         )}
       </Card>
+
+      {/* ===== プレイログ編集モーダル ===== */}
+      {editEvent && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setEditEvent(null)}>
+          <div className="w-full max-w-lg rounded-t-2xl p-5 space-y-3"
+            style={{ background: C.card, border: `1px solid ${C.border}` }}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="font-bold">プレイを編集</div>
+              <button onClick={() => setEditEvent(null)}><X size={18} style={{ color: C.sub }} /></button>
+            </div>
+            {/* 残り時間 */}
+            <div>
+              <div className="text-xs mb-1" style={{ color: C.sub }}>残り時間</div>
+              <input className={inputCls} style={getInputStyle(C)} placeholder="例: 3:45"
+                value={editEvent.time || ""} onChange={(e) => setEditEvent({ ...editEvent, time: e.target.value })} />
+            </div>
+            {/* 自チーム/相手切り替え */}
+            <div className="flex gap-2">
+              <button className="flex-1 py-2 rounded-xl text-sm font-bold"
+                style={editEvent.side === "own" ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                onClick={() => setEditEvent({ ...editEvent, side: "own", oppNum: undefined })}>自チーム</button>
+              <button className="flex-1 py-2 rounded-xl text-sm font-bold"
+                style={editEvent.side === "opp" ? { background: C.oppBlue, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                onClick={() => setEditEvent({ ...editEvent, side: "opp", playerId: undefined })}>相手</button>
+            </div>
+            {/* 選手選択(自チームのみ) */}
+            {editEvent.side === "own" && (
+              <div>
+                <div className="text-xs mb-1" style={{ color: C.sub }}>選手</div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button className="px-3 py-1.5 rounded-full text-xs font-bold"
+                    style={editEvent.playerId === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}
+                    onClick={() => setEditEvent({ ...editEvent, playerId: TEAM_KEY })}>チーム</button>
+                  {players.map((p) => (
+                    <button key={p.id} className="px-3 py-1.5 rounded-full text-xs font-bold"
+                      style={editEvent.playerId === p.id ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.text }}
+                      onClick={() => setEditEvent({ ...editEvent, playerId: p.id })}>
+                      #{p.number} {p.codename || p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* アクション選択 */}
+            <div>
+              <div className="text-xs mb-1" style={{ color: C.sub }}>アクション</div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {ACTIONS.filter((a) => !a.sub).map((a) => (
+                  <button key={a.k} className="py-2 rounded-xl text-xs font-bold"
+                    style={editEvent.action === a.k ? { background: a.good ? C.win : a.bad ? C.loss : C.orange, color: "#fff" }
+                      : { border: `1px solid ${C.border}`, color: C.sub }}
+                    onClick={() => setEditEvent({ ...editEvent, action: a.k })}>{a.label}</button>
+                ))}
+              </div>
+            </div>
+            {/* 保存 */}
+            <button className="w-full py-3 rounded-xl font-bold text-white mt-2"
+              style={{ background: C.orange }} onClick={() => saveEditEvent(editEvent)}>
+              保存する
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2358,11 +2442,12 @@ function ReportView({ data, game, mode, oppName, onClose }) {
 }
 
 /* ============ 試合分析(画面) ============ */
-function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
+function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
   const C = useC();
   const [scope, setScope] = useState("all");
   const a = analysisFor(data, game, scope);
   const mips = scope === "all" ? mipOf(game, data.players) : [];
+  const updGame = (patch) => save({ ...data, games: data.games.map((x) => x.id === game.id ? { ...x, ...patch } : x) });
   const StatTable = ({ rows, accent }) => (
     <div className="overflow-x-auto -mx-1">
       <table className="text-xs w-full min-w-[600px]">
@@ -2390,6 +2475,21 @@ function GameAnalysis({ data, game, oppName, onReport, isAdmin }) {
   );
   return (
     <div className="space-y-3">
+      {/* 試合メモ */}
+      <Card>
+        <SectionTitle>試合メモ</SectionTitle>
+        {isAdmin ? (
+          <textarea className="w-full rounded-xl px-3 py-2.5 text-sm leading-relaxed resize-none"
+            style={{ ...getInputStyle(C), minHeight: 88 }}
+            placeholder="審判の判定のクセ、選手のメンタル、天候・会場の状態など自由に記録できます"
+            value={game.memo || ""}
+            onChange={(e) => updGame({ memo: e.target.value })} />
+        ) : (
+          game.memo
+            ? <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: C.text }}>{game.memo}</p>
+            : <p className="text-sm" style={{ color: C.sub }}>メモはまだ登録されていません。</p>
+        )}
+      </Card>
       {isAdmin && <div className="flex gap-2">
         <button className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.border}`, color: C.text }} onClick={() => onReport("simple")}><FileText size={15} /> レポート(簡易)</button>
         <button className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.orange}`, color: C.orange }} onClick={() => onReport("detail")}><FileText size={15} /> レポート(詳細)</button>
@@ -2539,7 +2639,8 @@ function Ranking({ data, setTab, setNav }) {
   const C = useC();
   const [stat, setStat] = useState("pts");
   const [mode, setMode] = useState("avg"); // デフォルトを平均に
-  const isPctStat = stat === "fgp" || stat === "ftp"; // 率系スタッツ
+  const isPctStat = stat === "fgp" || stat === "ftp";
+  const isPmStat = stat === "pm"; // +/-専用
   const rows = data.players.map((p) => {
     const c = careerStats(data.games, p.id);
     if (c.n === 0) return null;
@@ -2553,6 +2654,12 @@ function Ranking({ data, setTab, setNav }) {
       const v = (c.tot.ftm / c.tot.fta) * 100;
       return { p, n: c.n, total: v, avg: v, made: c.tot.ftm, att: c.tot.fta };
     }
+    if (stat === "pm") {
+      // +/-は試合ごとのpm合計と平均
+      const pmTotal = c.per.reduce((a, x) => a + (x.s.pm || 0), 0);
+      const pmAvg = c.per.length > 0 ? pmTotal / c.per.length : 0;
+      return { p, n: c.n, total: pmTotal, avg: pmAvg };
+    }
     return { p, n: c.n, total: c.tot[stat], avg: c.totAdj[stat] / c.n };
   }).filter(Boolean).sort((a, b) => (mode === "total" ? b.total - a.total : b.avg - a.avg));
   const statOptions = [];
@@ -2563,6 +2670,7 @@ function Ranking({ data, setTab, setNav }) {
       statOptions.push(["ftp", "フリースロー率(FT%)"]);
     }
   }
+  statOptions.push(["pm", "+/-(出場中の得失点差)"]);
   return (
     <Card>
       <div className="flex gap-2 mb-3">
@@ -2586,7 +2694,12 @@ function Ranking({ data, setTab, setNav }) {
             <div className="w-8 text-center text-2xl" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</div>
             <Avatar p={r.p} size={36} />
             <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{r.p.codename || r.p.name}</div><div className="text-[10px]" style={{ color: C.sub }}>#{r.p.number}・{isPctStat ? `${r.made}/${r.att}本` : `${r.n}試合`}</div></div>
-            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{isPctStat ? `${fmt1(r.total)}%` : mode === "total" ? fmtSmart(r.total) : fmt1(r.avg)}</div>
+            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif",
+              color: isPmStat ? ((mode === "total" ? r.total : r.avg) >= 0 ? C.win : C.loss) : "inherit" }}>
+              {isPctStat ? `${fmt1(r.total)}%`
+                : isPmStat ? (() => { const v = mode === "total" ? r.total : r.avg; return (v >= 0 ? "+" : "") + fmtSmart(v); })()
+                : mode === "total" ? fmtSmart(r.total) : fmt1(r.avg)}
+            </div>
           </button>
         ))}</div>
       )}
