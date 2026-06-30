@@ -1339,7 +1339,10 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
               att: x.s[eo.att],
             }));
             const vals = effChart.map((d) => d.val).filter((v) => v !== null);
-            const avg = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10 : null;
+            // 通算成績と同じ計算方式に統一: 合計成功数 ÷ 合計試投数(加重平均)
+            const totalMade = per.reduce((a, x) => a + (x.s[eo.made] || 0), 0);
+            const totalAtt = per.reduce((a, x) => a + (x.s[eo.att] || 0), 0);
+            const avg = totalAtt > 0 ? Math.round((totalMade / totalAtt) * 1000) / 10 : null;
             const hasData = vals.length > 0;
             return (
               <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${C.border}` }}>
