@@ -1114,7 +1114,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   ];
   const trendOpt = TREND_OPTS.find((o) => o.k === trendStat);
   const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, value: x.s[trendStat], gid: x.g.id }));
-  const trendAvg = chart.length > 0 ? chart.reduce((a, c) => a + (c.value || 0), 0) / chart.length : 0;
+  // 通算成績と同じQ数基準の加重平均: totAdj / n (0-0除外・Q数補正済み)
+  const trendAvg = n > 0 ? totAdj[trendStat] / n : 0;
   // キャリアハイ(1試合の最高記録)
   const careerHigh = {};
   ["pts", "reb", "ast", "stl", "blk", "eff"].forEach((k) => {
