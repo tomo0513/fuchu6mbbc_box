@@ -2759,7 +2759,8 @@ function Ranking({ data, setTab, setNav }) {
   const [stat, setStat] = useState("pts");
   const [mode, setMode] = useState("avg"); // デフォルトを平均に
   const isPctStat = stat === "fgp" || stat === "ftp";
-  const isPmStat = stat === "pm"; // +/-専用
+  const isPmStat = stat === "pm";
+  const isAscStat = stat === "to" || stat === "pf"; // 少ない方が上位
   const rows = data.players.map((p) => {
     const c = careerStats(data.games, p.id);
     if (c.n === 0) return null;
@@ -2774,13 +2775,20 @@ function Ranking({ data, setTab, setNav }) {
       return { p, n: c.n, total: v, avg: v, made: c.tot.ftm, att: c.tot.fta };
     }
     if (stat === "pm") {
-      // +/-は試合ごとのpm合計と平均
       const pmTotal = c.per.reduce((a, x) => a + (x.s.pm || 0), 0);
       const pmAvg = c.per.length > 0 ? pmTotal / c.per.length : 0;
       return { p, n: c.n, total: pmTotal, avg: pmAvg };
     }
-    return { p, n: c.n, total: c.tot[stat], avg: c.totAdj[stat] / c.n };
-  }).filter(Boolean).sort((a, b) => (mode === "total" ? b.total - a.total : b.avg - a.avg));
+    const total = c.tot[stat];
+    const avg = c.totAdj[stat] / c.n;
+    // TO・ファールは0の場合は表示しない
+    if (isAscStat && (mode === "total" ? total : avg) === 0) return null;
+    return { p, n: c.n, total, avg };
+  }).filter(Boolean).sort((a, b) => {
+    const va = mode === "total" ? a.total : a.avg;
+    const vb = mode === "total" ? b.total : b.avg;
+    return isAscStat ? va - vb : vb - va; // 昇順 or 降順
+  });
   const statOptions = [];
   for (const d of STAT_DEFS) {
     statOptions.push([d.k, d.label]);
@@ -2806,6 +2814,7 @@ function Ranking({ data, setTab, setNav }) {
         )}
       </div>
       {isPctStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※成功数／試投数からの通算成功率。試投のある選手のみ表示します。</div>}
+      {isAscStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※少ない方が上位。0の選手は表示しません。</div>}
       {rows.length === 0 ? <div className="text-sm py-4 text-center" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
         <div>{rows.map((r, i) => (
           <button key={r.p.id} className="w-full flex items-center gap-3 py-2.5 text-left" style={{ borderBottom: `1px solid ${C.border}44` }}
