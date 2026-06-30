@@ -1207,21 +1207,70 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
       <Card>
         <SectionTitle>通算成績({gamesPlayed}試合 / {totalQPlayed}Q)</SectionTitle>
         {hasVaryQ && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均はQ数基準で算出(実施{totalQPlayed}Q ÷ 基準{baseQ}Q)。全試合4Q換算の平均値です。</div>}
-        {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
-          <>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              {[["得点", tot.pts, fmt1(totAdj.pts / n)],["リバウンド", tot.reb, fmt1(totAdj.reb / n)],["アシスト", tot.ast, fmt1(totAdj.ast / n)],["スティール", tot.stl, fmt1(totAdj.stl / n)],["EFF", tot.eff, fmt1(totAdj.eff / n)],["TO", tot.to, fmt1(totAdj.to / n)]].map(([l, t, a]) => (
-                <div key={l} className="rounded-xl py-2.5" style={{ background: C.card2 }}>
-                  <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{t}</div>
-                  <div className="text-[10px]" style={{ color: C.sub }}>{l}(平均 {a})</div>
+        {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (() => {
+          // チーム内順位を計算
+          const allGames = [...data.games].sort(gameOrderAsc);
+          const teamAvgs = data.players.map((pl) => {
+            const cs = careerStats(allGames, pl.id);
+            if (cs.n === 0) return null;
+            return {
+              id: pl.id,
+              pts: cs.totAdj.pts / cs.n, reb: cs.totAdj.reb / cs.n,
+              ast: cs.totAdj.ast / cs.n, stl: cs.totAdj.stl / cs.n,
+              blk: cs.totAdj.blk / cs.n, eff: cs.totAdj.eff / cs.n,
+              fgp: cs.tot.fga > 0 ? cs.tot.fgm / cs.tot.fga : null,
+              ftp: cs.tot.fta > 0 ? cs.tot.ftm / cs.tot.fta : null,
+              min: cs.n > 0 ? cs.totAdj.min / cs.n : null,
+            };
+          }).filter(Boolean);
+          const rankOf = (key, desc = true) => {
+            const sorted = [...teamAvgs].filter((x) => x[key] !== null).sort((a, b) => desc ? b[key] - a[key] : a[key] - b[key]);
+            const idx = sorted.findIndex((x) => x.id === p.id);
+            return idx >= 0 ? idx + 1 : null;
+          };
+          const rankLabel = (key, desc = true) => {
+            const r = rankOf(key, desc);
+            if (!r) return null;
+            const rankColors = ["rgba(255,178,62,0.6)", "rgba(143,160,192,0.55)", "rgba(160,112,74,0.5)"];
+            const col = r <= 3 ? rankColors[r - 1] : "rgba(90,122,159,0.3)";
+            return { text: `· ${r}位`, color: col };
+          };
+          const StatLabel = ({ label, rk }) => (
+            <div className="text-[10px]" style={{ color: C.sub }}>
+              {label}{rk ? <span style={{ color: rk.color }}> {rk.text}</span> : ""}
+            </div>
+          );
+          return (
+            <>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[
+                  ["得点", tot.pts, fmt1(totAdj.pts / n), "pts"],
+                  ["リバウンド", tot.reb, fmt1(totAdj.reb / n), "reb"],
+                  ["アシスト", tot.ast, fmt1(totAdj.ast / n), "ast"],
+                  ["スティール", tot.stl, fmt1(totAdj.stl / n), "stl"],
+                  ["ブロック", tot.blk, fmt1(totAdj.blk / n), "blk"],
+                  ["EFF", tot.eff, fmt1(totAdj.eff / n), "eff"],
+                ].map(([l, t, a, key]) => (
+                  <div key={l} className="rounded-xl py-2.5" style={{ background: C.card2 }}>
+                    <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{t}</div>
+                    <StatLabel label={`${l}(平均 ${a})`} rk={rankLabel(key)} />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-around mt-3 pt-3 text-center text-sm" style={{ borderTop: `1px solid ${C.border}` }}>
+                <div>
+                  <span className="font-bold text-lg">{pct(tot.fgm, tot.fga)}</span>
+                  <StatLabel label="FG%" rk={rankLabel("fgp")} />
                 </div>
-              ))}
-            </div>
-            <div className="flex justify-around mt-3 pt-3 text-center text-sm" style={{ borderTop: `1px solid ${C.border}` }}>
-              <div><span className="font-bold text-lg">{pct(tot.fgm, tot.fga)}</span><div className="text-[10px]" style={{ color: C.sub }}>FG%</div></div>
-              <div><span className="font-bold text-lg">{pct(tot.ftm, tot.fta)}</span><div className="text-[10px]" style={{ color: C.sub }}>FT%</div></div>
-              <div><span className="font-bold text-lg">{fmt1(totAdj.min / n)}</span><div className="text-[10px]" style={{ color: C.sub }}>平均出場(分)</div></div>
-            </div>
+                <div>
+                  <span className="font-bold text-lg">{pct(tot.ftm, tot.fta)}</span>
+                  <StatLabel label="FT%" rk={rankLabel("ftp")} />
+                </div>
+                <div>
+                  <span className="font-bold text-lg">{fmt1(totAdj.min / n)}</span>
+                  <StatLabel label="平均出場(分)" rk={rankLabel("min")} />
+                </div>
+              </div>
             <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
               <div className="text-[10px] font-bold mb-2" style={{ color: C.led }}>🏅 キャリアハイ(1試合最高)</div>
               <div className="grid grid-cols-3 gap-2 text-center">
@@ -1238,7 +1287,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
               </div>
             </div>
           </>
-        )}
+          );
+        })()}
       </Card>
       {n > 0 && (
         <Card>
