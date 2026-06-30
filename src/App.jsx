@@ -1233,11 +1233,12 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
             if (!r) return null;
             const rankColors = ["rgba(255,178,62,0.6)", "rgba(143,160,192,0.55)", "rgba(160,112,74,0.5)"];
             const col = r <= 3 ? rankColors[r - 1] : "rgba(90,122,159,0.3)";
-            return { text: `· ${r}位`, color: col };
+            return { text: `${r}位`, color: col };
           };
           const StatLabel = ({ label, rk }) => (
             <div className="text-[10px]" style={{ color: C.sub }}>
-              {label}{rk ? <span style={{ color: rk.color }}> {rk.text}</span> : ""}
+              <div>{label}</div>
+              {rk && <div style={{ color: rk.color }}>{rk.text}</div>}
             </div>
           );
           return (
