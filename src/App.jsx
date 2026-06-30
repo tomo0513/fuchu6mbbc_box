@@ -2612,6 +2612,70 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
           </ResponsiveContainer>
         </Card>
       )}
+      {/* ===== 出場時間 円グラフ(全体スコープのみ) ===== */}
+      {scope === "all" && (() => {
+        // 各選手の出場時間を計算
+        const PLAYER_COLORS = ["#E8602A","#5B74A8","#3DBE7B","#FFB23E","#A855F7","#EC4899","#14B8A6","#F59E0B","#6366F1","#84CC16","#F87171","#67E8F9"];
+        const ptRows = data.players.map((p, i) => {
+          const { map } = courtIntervals(game.events, "own", p.id, game);
+          let mins = 0;
+          for (const [q, ivs] of Object.entries(map)) {
+            const len = periodLen(game, +q);
+            mins += ivs.reduce((a, [s, e]) => a + (s - e), 0) / 60;
+          }
+          return { p, mins: Math.round(mins * 10) / 10, color: PLAYER_COLORS[i % PLAYER_COLORS.length] };
+        }).filter((r) => r.mins > 0).sort((a, b) => b.mins - a.mins);
+        if (ptRows.length === 0) return null;
+        const totalMins = ptRows.reduce((a, r) => a + r.mins, 0);
+        // SVG ドーナツ円グラフ
+        const R = 38, cx = 55, cy = 55, circ = 2 * Math.PI * R;
+        let offset = 0;
+        const slices = ptRows.map((r) => {
+          const dash = (r.mins / totalMins) * circ;
+          const slice = { ...r, dash, offset };
+          offset += dash;
+          return slice;
+        });
+        return (
+          <Card>
+            <div className="flex items-center justify-between mb-2">
+              <SectionTitle>出場時間</SectionTitle>
+              <span className="text-[10px]" style={{ color: C.sub }}>計{fmt1(totalMins)}分 / {ptRows.length}名</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* 円グラフ */}
+              <div className="flex-shrink-0">
+                <svg width="110" height="110" viewBox="0 0 110 110">
+                  {slices.map((s) => (
+                    <circle key={s.p.id} cx={cx} cy={cy} r={R} fill="none"
+                      stroke={s.color} strokeWidth="20"
+                      strokeDasharray={`${s.dash} ${circ}`}
+                      strokeDashoffset={-s.offset}
+                      style={{ transformOrigin: `${cx}px ${cy}px`, transform: "rotate(-90deg)" }} />
+                  ))}
+                  <circle cx={cx} cy={cy} r="27" fill={C.card} />
+                  <text x={cx} y={cy - 4} textAnchor="middle"
+                    style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, fill: C.led }}>{fmt1(ptRows[0].mins)}分</text>
+                  <text x={cx} y={cy + 8} textAnchor="middle"
+                    style={{ fontSize: 7, fill: C.sub }}>最長出場</text>
+                </svg>
+              </div>
+              {/* 凡例 */}
+              <div className="flex-1 flex flex-col gap-1 min-w-0">
+                {ptRows.map((r) => (
+                  <div key={r.p.id} className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: r.color }} />
+                    <div className="text-[9px] flex-1 truncate" style={{ color: C.sub }}>{r.p.codename || r.p.name}</div>
+                    <div className="font-bold text-[11px]" style={{ fontFamily: "'Bebas Neue',sans-serif" }}>{fmt1(r.mins)}</div>
+                    <div className="text-[8px]" style={{ color: C.sub }}>分</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="text-[9px] mt-2 text-center" style={{ color: C.sub + "88" }}>Play by Playの交代記録から自動計算</div>
+          </Card>
+        );
+      })()}
       {a.ownRows.length > 0 && (<Card><SectionTitle>自チーム 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.ownRows} accent={C.orange} /></Card>)}
       {a.oppRows.length > 0 && (
         <Card>
