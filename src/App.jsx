@@ -3012,15 +3012,59 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
               <div className="text-xs mb-2 font-bold" style={{ color: C.sub }}>大会結果</div>
               {/* トーナメント順位 */}
               {!isLeague && (
-                <div className="grid grid-cols-3 gap-1.5">
-                  {TOURNAMENT_RANKS.map((r) => (
-                    <button key={r.k} className="py-2 rounded-xl text-xs font-bold"
-                      style={tourRes.rank === r.k ? { background: cat.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
-                      onClick={() => setTourRank(r.k)}>{r.label}</button>
-                  ))}
-                  <button className="py-2 rounded-xl text-xs"
-                    style={!tourRes.rank ? { border: `1px solid ${C.border}`, color: C.sub } : {}}
-                    onClick={() => setForm({ ...form, result: null })}>未入力</button>
+                <div className="space-y-3">
+                  {/* 自チームの順位 */}
+                  <div>
+                    <div className="text-[10px] mb-1.5 font-bold" style={{ color: C.orange }}>府中六小の順位</div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {TOURNAMENT_RANKS.map((r) => (
+                        <button key={r.k} className="py-2 rounded-xl text-xs font-bold"
+                          style={tourRes.myRank === r.k ? { background: cat.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                          onClick={() => setForm({ ...form, result: { type: "tournament", data: { ...tourRes, myRank: r.k } } })}>{r.label}</button>
+                      ))}
+                      <button className="py-2 rounded-xl text-xs"
+                        style={{ border: `1px solid ${C.border}`, color: C.sub }}
+                        onClick={() => setForm({ ...form, result: { type: "tournament", data: { ...tourRes, myRank: null } } })}>未入力</button>
+                    </div>
+                  </div>
+                  {/* 他チームの順位 */}
+                  <div>
+                    <div className="text-[10px] mb-1.5 font-bold" style={{ color: C.sub }}>他チームの順位(任意)</div>
+                    <div className="space-y-1.5">
+                      {(tourRes.teams || []).map((team, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <select className="flex-shrink-0 rounded-lg px-2 py-1.5 text-xs"
+                            style={{ ...getInputStyle(C), width: 100 }}
+                            value={team.rank || ""}
+                            onChange={(e) => {
+                              const teams = [...(tourRes.teams || [])];
+                              teams[i] = { ...teams[i], rank: e.target.value };
+                              setForm({ ...form, result: { type: "tournament", data: { ...tourRes, teams } } });
+                            }}>
+                            <option value="">順位</option>
+                            {TOURNAMENT_RANKS.map((r) => <option key={r.k} value={r.k}>{r.label}</option>)}
+                          </select>
+                          <input className={inputCls + " flex-1"} style={getInputStyle(C)} placeholder="チーム名"
+                            value={team.name || ""}
+                            onChange={(e) => {
+                              const teams = [...(tourRes.teams || [])];
+                              teams[i] = { ...teams[i], name: e.target.value };
+                              setForm({ ...form, result: { type: "tournament", data: { ...tourRes, teams } } });
+                            }} />
+                          <button onClick={() => {
+                            const teams = (tourRes.teams || []).filter((_, j) => j !== i);
+                            setForm({ ...form, result: { type: "tournament", data: { ...tourRes, teams } } });
+                          }} style={{ color: C.sub, flexShrink: 0 }}><X size={14} /></button>
+                        </div>
+                      ))}
+                      <button className="text-xs py-1.5 w-full rounded-lg"
+                        style={{ border: `1px dashed ${C.border}`, color: C.sub }}
+                        onClick={() => {
+                          const teams = [...(tourRes.teams || []), { name: "", rank: "" }];
+                          setForm({ ...form, result: { type: "tournament", data: { ...tourRes, teams } } });
+                        }}>+ チームを追加</button>
+                    </div>
+                  </div>
                 </div>
               )}
               {/* リーグ戦マトリックス */}
@@ -3054,7 +3098,18 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                   {/* スコアマトリックス */}
                   {leagueData.teams.length >= 2 && (
                     <div className="overflow-x-auto">
-                      <div className="text-[10px] mb-1" style={{ color: C.sub }}>スコア入力(横行=そのチームの得点, 右端=順位)</div>
+                    {/* 府中六小の最終順位(タイムライン表示用) */}
+                  <div>
+                    <div className="text-[10px] mb-1 font-bold" style={{ color: C.orange }}>府中六小の最終順位</div>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min="1" placeholder="例: 1"
+                        style={{ width: 60, ...getInputStyle(C), borderRadius: 8, padding: "6px 8px", fontSize: 13 }}
+                        value={leagueData.myRank ?? ""}
+                        onChange={(e) => setForm({ ...form, result: { type: "league", data: { ...leagueData, myRank: e.target.value } } })} />
+                      <span className="text-xs" style={{ color: C.sub }}>位</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] mb-1" style={{ color: C.sub }}>スコア入力(横行=そのチームの得点, 右端=順位)</div>
                       <table style={{ borderCollapse: "collapse", fontSize: 9 }}>
                         <thead>
                           <tr>
@@ -3119,7 +3174,8 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
   if (selT) {
     const cat = catOf(selT.category);
     const res = selT.result;
-    const tourRank = res?.type === "tournament" ? TOURNAMENT_RANKS.find((r) => r.k === res.data?.rank) : null;
+    const tourRank = res?.type === "tournament" ? TOURNAMENT_RANKS.find((r) => r.k === res.data?.myRank) : null;
+    const tourTeams = res?.type === "tournament" ? (res.data?.teams || []).filter((t) => t.name && t.rank) : [];
     const leagueData = res?.type === "league" ? res.data : null;
     const dateStr = selT.dateFrom && selT.dateTo ? `${selT.dateFrom} 〜 ${selT.dateTo}`
       : selT.dateFrom ? `${selT.dateFrom} 〜`
@@ -3153,9 +3209,32 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
             {tourRank && (
               <div className="flex-shrink-0 flex flex-col items-center justify-center rounded-2xl px-4 py-3"
                 style={{ background: tourRank.k === "1" ? "#FFB23E22" : tourRank.k === "2" ? "#8FA0C022" : tourRank.k === "3" ? "#A0704A22" : C.card2, minWidth: 72 }}>
-                <div className="text-3xl" style={{ fontFamily: "'Bebas Neue',sans-serif", color: tourRank.k === "1" ? "#FFB23E" : tourRank.k === "2" ? "#8FA0C0" : tourRank.k === "3" ? "#C8946A" : C.sub }}>{tourRank.label}</div>
+                <div style={{ fontSize: 10, color: C.sub, marginBottom: 2 }}>府中六小</div>
+                <div className="text-2xl" style={{ fontFamily: "'Bebas Neue',sans-serif", color: tourRank.k === "1" ? "#FFB23E" : tourRank.k === "2" ? "#8FA0C0" : tourRank.k === "3" ? "#C8946A" : C.sub }}>{tourRank.label}</div>
               </div>
             )}
+          </div>
+          {/* 他チームの順位 */}
+          {tourTeams.length > 0 && (
+            <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div className="text-[10px] font-bold mb-2" style={{ color: C.sub }}>順位一覧</div>
+              <div className="space-y-1">
+                {[...tourTeams].sort((a, b) => {
+                  const order = ["1","2","3","best4","best8","best16"];
+                  return order.indexOf(a.rank) - order.indexOf(b.rank);
+                }).map((team, i) => {
+                  const r = TOURNAMENT_RANKS.find((r) => r.k === team.rank);
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span style={{ color: team.rank === "1" ? "#FFB23E" : team.rank === "2" ? "#8FA0C0" : team.rank === "3" ? "#C8946A" : C.sub,
+                        fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, width: 64, flexShrink: 0 }}>{r?.label}</span>
+                      <span style={{ color: C.text }}>{team.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           </div>
           {selT.memo && <div className="mt-3 text-sm whitespace-pre-wrap" style={{ color: C.sub }}>{selT.memo}</div>}
           {selT.auto && isAdmin && (
@@ -3337,7 +3416,7 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                   : C.border;
                 const relCount = data.games.filter((g) => g.tournament === t.name).length;
                 const res = t.result;
-                const tourRank = res?.type === "tournament" ? TOURNAMENT_RANKS.find((r) => r.k === res.data?.rank) : null;
+                const tourRank = res?.type === "tournament" ? TOURNAMENT_RANKS.find((r) => r.k === res.data?.myRank) : null;
 
                 // 期間表示文字列
                 const dateStr = t.dateFrom && t.dateTo ? `${t.dateFrom.slice(5)} 〜 ${t.dateTo.slice(5)}`
@@ -3377,6 +3456,11 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                           {tourRank && (
                             <span className="text-xs font-bold" style={{ color: tourRank.k === "1" ? "#FFB23E" : tourRank.k === "2" ? "#8FA0C0" : tourRank.k === "3" ? "#C8946A" : C.sub }}>
                               {tourRank.label}
+                            </span>
+                          )}
+                          {res?.type === "league" && res.data?.myRank && (
+                            <span className="text-xs font-bold" style={{ color: C.orange }}>
+                              リーグ{res.data.myRank}位
                             </span>
                           )}
                           <ChevronDown size={14} style={{ color: C.sub, transform: "rotate(-90deg)" }} />
