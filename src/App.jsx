@@ -1480,7 +1480,34 @@ function GameForm({ data, initial, onSave, onCancel }) {
             onChange={(e) => setF({ ...f, order: e.target.value === "" ? "" : +e.target.value })} placeholder="例: 1, 2, 3..." />
         </Field>
       )}
-      <Field label="大会名"><input className={inputCls} style={getInputStyle(C)} value={f.tournament} onChange={(e) => setF({ ...f, tournament: e.target.value })} placeholder="市民大会 予選リーグ" /></Field>
+      <Field label="大会名">
+        {(() => {
+          const tournamentNames = [
+            ...(data.tournaments || []).map((t) => t.name),
+            ...[...new Set(data.games.map((g) => g.tournament).filter(Boolean))]
+              .filter((n) => !(data.tournaments || []).some((t) => t.name === n)),
+          ].filter(Boolean);
+          return tournamentNames.length > 0 ? (
+            <div className="space-y-1">
+              <select className={inputCls} style={getInputStyle(C)}
+                value={tournamentNames.includes(f.tournament) ? f.tournament : "__custom__"}
+                onChange={(e) => { if (e.target.value !== "__custom__") setF({ ...f, tournament: e.target.value }); }}>
+                <option value="">（なし）</option>
+                {tournamentNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                <option value="__custom__">その他(直接入力)</option>
+              </select>
+              {(!tournamentNames.includes(f.tournament) || f.tournament === "") && (
+                <input className={inputCls} style={getInputStyle(C)} value={f.tournament}
+                  onChange={(e) => setF({ ...f, tournament: e.target.value })}
+                  placeholder="大会名を直接入力" />
+              )}
+            </div>
+          ) : (
+            <input className={inputCls} style={getInputStyle(C)} value={f.tournament}
+              onChange={(e) => setF({ ...f, tournament: e.target.value })} placeholder="市民大会 予選リーグ" />
+          );
+        })()}
+      </Field>
       <Field label="試合区分">
         <div className="flex gap-2">
           {GAME_CATS.map((c) => (
@@ -2850,7 +2877,7 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({
-    name: "", dateFrom: "", dateTo: "", category: "official",
+    name: "", dateFrom: "", dateTo: "", category: "tournament",
     url: "", participating: true, memo: "",
     result: null, // { type:"tournament"|"league", data:{...} }
   });
@@ -2875,12 +2902,11 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
   const relGames = selT ? [...data.games].filter((g) => g.tournament === selT.name).sort(gameOrderDesc) : [];
 
   const CATS = [
-    { k: "official", label: "公式戦", color: "#E25C5C" },
-    { k: "league", label: "リーグ戦", color: "#3DBE7B" },
-    { k: "practice", label: "練習試合", color: "#5B74A8" },
-    { k: "invitation", label: "招待大会", color: "#FFB23E" },
+    { k: "tournament", label: "トーナメント", color: "#E25C5C" },
+    { k: "league",     label: "リーグ戦",     color: "#3DBE7B" },
+    { k: "other",      label: "その他",        color: "#8FA0C0" },
   ];
-  const catOf = (k) => CATS.find((c) => c.k === k) || CATS[1];
+  const catOf = (k) => CATS.find((c) => c.k === k) || CATS[2];
 
   const TOURNAMENT_RANKS = [
     { k: "1", label: "優勝 🥇" },
