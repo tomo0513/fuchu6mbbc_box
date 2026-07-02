@@ -2846,210 +2846,431 @@ function Ranking({ data, setTab, setNav }) {
 /* ============ 大会情報 ============ */
 function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
   const C = useC();
-  const [selId, setSelId] = useState(null); // 選択中の大会ID
+  const [selId, setSelId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name: "", month: "", category: "official", url: "", participating: true, memo: "" });
+  const [form, setForm] = useState({
+    name: "", dateFrom: "", dateTo: "", category: "official",
+    url: "", participating: true, memo: "",
+    result: null, // { type:"tournament"|"league", data:{...} }
+  });
+  const [leagueTeam, setLeagueTeam] = useState(""); // リーグ追加用
 
-  // 試合に登録された大会名を自動収集
   const gameNames = [...new Set(data.games.map((g) => g.tournament).filter(Boolean))];
-
-  // 手動登録の大会 + 試合の大会名から自動生成(重複しないもの)
   const savedNames = (data.tournaments || []).map((t) => t.name);
   const autoTournaments = gameNames.filter((n) => !savedNames.includes(n)).map((n) => ({
-    id: `auto_${n}`, name: n, month: "", category: "practice", url: "", participating: true, memo: "", auto: true,
+    id: `auto_${n}`, name: n, dateFrom: "", dateTo: "", category: "practice",
+    url: "", participating: true, memo: "", auto: true, result: null,
   }));
   const allTournaments = [...(data.tournaments || []), ...autoTournaments];
-
-  // 月でソート(月未設定は末尾)
-  const sorted = [...allTournaments].sort((a, b) => (+a.month || 99) - (+b.month || 99));
-
+  const sorted = [...allTournaments].sort((a, b) => {
+    const da = a.dateFrom || a.dateTo || "";
+    const db = b.dateFrom || b.dateTo || "";
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return da.localeCompare(db);
+  });
   const selT = sorted.find((t) => t.id === selId);
-  // 大会に紐づく試合一覧
   const relGames = selT ? [...data.games].filter((g) => g.tournament === selT.name).sort(gameOrderDesc) : [];
 
-  const MONTHS = ["1","2","3","4","5","6","7","8","9","10","11","12"];
   const CATS = [
     { k: "official", label: "公式戦", color: "#E25C5C" },
-    { k: "practice", label: "練習試合", color: "#5B74A8" },
     { k: "league", label: "リーグ戦", color: "#3DBE7B" },
+    { k: "practice", label: "練習試合", color: "#5B74A8" },
     { k: "invitation", label: "招待大会", color: "#FFB23E" },
   ];
   const catOf = (k) => CATS.find((c) => c.k === k) || CATS[1];
 
+  const TOURNAMENT_RANKS = [
+    { k: "1", label: "優勝 🥇" },
+    { k: "2", label: "準優勝 🥈" },
+    { k: "3", label: "3位 🥉" },
+    { k: "best4", label: "ベスト4" },
+    { k: "best8", label: "ベスト8" },
+    { k: "best16", label: "ベスト16" },
+  ];
+
   const saveT = (t) => {
-    const list = (data.tournaments || []);
+    const list = data.tournaments || [];
     const exists = list.find((x) => x.id === t.id);
     save({ ...data, tournaments: exists ? list.map((x) => x.id === t.id ? t : x) : [...list, t] });
   };
   const delT = (id) => save({ ...data, tournaments: (data.tournaments || []).filter((x) => x.id !== id) });
 
   const openForm = (t) => {
-    setForm({ name: t?.name || "", month: t?.month || "", category: t?.category || "official",
-      url: t?.url || "", participating: t?.participating !== false, memo: t?.memo || "" });
+    setForm({
+      name: t?.name || "", dateFrom: t?.dateFrom || "", dateTo: t?.dateTo || "",
+      category: t?.category || "official", url: t?.url || "",
+      participating: t?.participating !== false, memo: t?.memo || "",
+      result: t?.result || null,
+    });
     setEditId(t?.id || null);
     setAdding(true);
   };
 
-  // 登録・編集フォーム
-  if (adding) return (
-    <Card>
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => setAdding(false)} style={{ color: C.sub }}><ChevronLeft size={18} /></button>
-        <div className="font-bold">{editId ? "大会を編集" : "大会を登録"}</div>
-      </div>
-      <div className="space-y-3">
-        <div>
-          <div className="text-xs mb-1" style={{ color: C.sub }}>大会名</div>
-          <input className={inputCls} style={getInputStyle(C)} placeholder="大会名を入力"
-            value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          {gameNames.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {gameNames.map((n) => (
-                <button key={n} className="text-[9px] px-2 py-0.5 rounded" style={{ background: C.card2, color: C.sub }}
-                  onClick={() => setForm({ ...form, name: n })}>{n}</button>
+  // ===== 登録・編集フォーム =====
+  if (adding) {
+    const cat = CATS.find((c) => c.k === form.category) || CATS[0];
+    const isLeague = form.category === "league";
+    const res = form.result;
+    const leagueData = (isLeague && res?.type === "league") ? res.data : { teams: [], scores: {}, ranks: {} };
+    const tourRes = (!isLeague && res?.type === "tournament") ? res.data : {};
+
+    const setLeagueTeams = (teams) => setForm({ ...form, result: { type: "league", data: { ...leagueData, teams } } });
+    const setScore = (a, b, v) => {
+      const scores = { ...leagueData.scores, [`${a}_${b}`]: v };
+      setForm({ ...form, result: { type: "league", data: { ...leagueData, scores } } });
+    };
+    const setRank = (team, rank) => {
+      const ranks = { ...leagueData.ranks, [team]: rank };
+      setForm({ ...form, result: { type: "league", data: { ...leagueData, ranks } } });
+    };
+    const setTourRank = (rank) => setForm({ ...form, result: { type: "tournament", data: { rank } } });
+
+    return (
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <button onClick={() => setAdding(false)} style={{ color: C.sub }}><ChevronLeft size={18} /></button>
+          <div className="font-bold">{editId ? "大会を編集" : "大会を登録"}</div>
+        </div>
+        <div className="space-y-3">
+          {/* 大会名 */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: C.sub }}>大会名</div>
+            <input className={inputCls} style={getInputStyle(C)} placeholder="大会名を入力"
+              value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            {gameNames.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {gameNames.map((n) => (
+                  <button key={n} className="text-[9px] px-2 py-0.5 rounded"
+                    style={{ background: C.card2, color: C.sub }} onClick={() => setForm({ ...form, name: n })}>{n}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* 期間 */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: C.sub }}>期間(任意)</div>
+            <div className="flex items-center gap-2">
+              <input type="date" className={inputCls} style={getInputStyle(C)} value={form.dateFrom}
+                onChange={(e) => setForm({ ...form, dateFrom: e.target.value })} />
+              <span className="text-xs" style={{ color: C.sub }}>〜</span>
+              <input type="date" className={inputCls} style={getInputStyle(C)} value={form.dateTo}
+                onChange={(e) => setForm({ ...form, dateTo: e.target.value })} />
+            </div>
+          </div>
+          {/* カテゴリー */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: C.sub }}>カテゴリー</div>
+            <div className="grid grid-cols-2 gap-2">
+              {CATS.map((c) => (
+                <button key={c.k} className="py-2 rounded-xl text-xs font-bold"
+                  style={form.category === c.k ? { background: c.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                  onClick={() => setForm({ ...form, category: c.k })}>{c.label}</button>
               ))}
+            </div>
+          </div>
+          {/* 参加フラグ */}
+          <div className="flex items-center gap-3">
+            <button className="w-10 h-6 rounded-full flex-shrink-0 relative"
+              style={{ background: form.participating ? C.orange : C.border }}
+              onClick={() => setForm({ ...form, participating: !form.participating })}>
+              <div className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
+                style={{ left: form.participating ? "calc(100% - 20px)" : 4 }} />
+            </button>
+            <div className="text-xs" style={{ color: C.sub }}>府中六小が参加</div>
+          </div>
+          {/* 結果入力 */}
+          {form.participating && (
+            <div>
+              <div className="text-xs mb-2 font-bold" style={{ color: C.sub }}>大会結果</div>
+              {/* トーナメント順位 */}
+              {!isLeague && (
+                <div className="grid grid-cols-3 gap-1.5">
+                  {TOURNAMENT_RANKS.map((r) => (
+                    <button key={r.k} className="py-2 rounded-xl text-xs font-bold"
+                      style={tourRes.rank === r.k ? { background: cat.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                      onClick={() => setTourRank(r.k)}>{r.label}</button>
+                  ))}
+                  <button className="py-2 rounded-xl text-xs"
+                    style={!tourRes.rank ? { border: `1px solid ${C.border}`, color: C.sub } : {}}
+                    onClick={() => setForm({ ...form, result: null })}>未入力</button>
+                </div>
+              )}
+              {/* リーグ戦マトリックス */}
+              {isLeague && (
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-[10px] mb-1" style={{ color: C.sub }}>チームを追加</div>
+                    <div className="flex gap-2">
+                      <input className={inputCls + " flex-1"} style={getInputStyle(C)} placeholder="チーム名"
+                        value={leagueTeam} onChange={(e) => setLeagueTeam(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && leagueTeam.trim()) {
+                          setLeagueTeams([...leagueData.teams, leagueTeam.trim()]); setLeagueTeam("");
+                        }}} />
+                      <button className="px-3 py-2 rounded-xl text-xs font-bold text-white"
+                        style={{ background: C.orange }}
+                        onClick={() => { if (leagueTeam.trim()) { setLeagueTeams([...leagueData.teams, leagueTeam.trim()]); setLeagueTeam(""); } }}>
+                        追加
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {leagueData.teams.map((t, i) => (
+                        <div key={i} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full"
+                          style={{ background: C.card2, color: C.text }}>
+                          {t}
+                          <button onClick={() => setLeagueTeams(leagueData.teams.filter((_, j) => j !== i))}
+                            style={{ color: C.sub }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* スコアマトリックス */}
+                  {leagueData.teams.length >= 2 && (
+                    <div className="overflow-x-auto">
+                      <div className="text-[10px] mb-1" style={{ color: C.sub }}>スコア入力(縦=自チーム, 横=相手)</div>
+                      <table style={{ borderCollapse: "collapse", fontSize: 9 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ padding: "3px 5px", color: C.sub, fontWeight: 400 }}></th>
+                            {leagueData.teams.map((t, i) => (
+                              <th key={i} style={{ padding: "3px 5px", color: C.sub, fontWeight: 600, textAlign: "center", maxWidth: 52, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {leagueData.teams.map((row, ri) => (
+                            <tr key={ri}>
+                              <td style={{ padding: "2px 5px", color: C.sub, fontWeight: 600, whiteSpace: "nowrap", maxWidth: 52, overflow: "hidden", textOverflow: "ellipsis" }}>{row}</td>
+                              {leagueData.teams.map((col, ci) => (
+                                <td key={ci} style={{ padding: 2, textAlign: "center" }}>
+                                  {ri === ci
+                                    ? <div style={{ width: 40, height: 24, background: C.border, borderRadius: 4 }} />
+                                    : <input type="number" min="0" placeholder="–"
+                                        style={{ width: 40, height: 24, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, textAlign: "center", fontSize: 11 }}
+                                        value={leagueData.scores[`${ri}_${ci}`] ?? ""}
+                                        onChange={(e) => setScore(ri, ci, e.target.value)} />}
+                                </td>
+                              ))}
+                              <td style={{ padding: "2px 6px" }}>
+                                <input type="number" min="1" placeholder="順位"
+                                  style={{ width: 40, height: 24, background: C.card2, border: `1px solid ${C.border}`, borderRadius: 4, color: C.orange, textAlign: "center", fontSize: 11, fontWeight: 700 }}
+                                  value={leagueData.ranks[row] ?? ""}
+                                  onChange={(e) => setRank(row, e.target.value)} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {/* URL */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: C.sub }}>大会結果URL(公式サイトなど)</div>
+            <input className={inputCls} style={getInputStyle(C)} placeholder="https://..."
+              value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+          </div>
+          {/* メモ */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: C.sub }}>メモ</div>
+            <textarea className={inputCls} style={{ ...getInputStyle(C), minHeight: 60, resize: "none" }}
+              placeholder="大会の記録など自由に"
+              value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+          </div>
+          <PrimaryBtn disabled={!form.name} onClick={() => {
+            const t = { id: editId || uid(), ...form };
+            saveT(t); setAdding(false); setSelId(t.id);
+          }}>保存する</PrimaryBtn>
+        </div>
+      </Card>
+    );
+  }
+
+  // ===== 詳細ページ =====
+  if (selT) {
+    const cat = catOf(selT.category);
+    const res = selT.result;
+    const tourRank = res?.type === "tournament" ? TOURNAMENT_RANKS.find((r) => r.k === res.data?.rank) : null;
+    const leagueData = res?.type === "league" ? res.data : null;
+    const dateStr = selT.dateFrom && selT.dateTo ? `${selT.dateFrom} 〜 ${selT.dateTo}`
+      : selT.dateFrom ? `${selT.dateFrom} 〜`
+      : selT.dateTo ? `〜 ${selT.dateTo}` : "";
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <button className="flex items-center gap-1 text-sm font-bold" style={{ color: C.sub }} onClick={() => setSelId(null)}>
+            <ChevronLeft size={16} /> 大会一覧
+          </button>
+          {isAdmin && !selT.auto && (
+            <div className="flex gap-3">
+              <button style={{ color: C.sub }} onClick={() => openForm(selT)}><Pencil size={18} /></button>
+              <button style={{ color: C.sub }} onClick={() => { if (confirm(`「${selT.name}」を削除しますか?`)) { delT(selT.id); setSelId(null); } }}><Trash2 size={18} /></button>
             </div>
           )}
         </div>
-        <div>
-          <div className="text-xs mb-1" style={{ color: C.sub }}>時期(月)</div>
-          <select className={inputCls} style={getInputStyle(C)} value={form.month}
-            onChange={(e) => setForm({ ...form, month: e.target.value })}>
-            <option value="">未設定</option>
-            {MONTHS.map((m) => <option key={m} value={m}>{m}月</option>)}
-          </select>
-        </div>
-        <div>
-          <div className="text-xs mb-1" style={{ color: C.sub }}>カテゴリー</div>
-          <div className="flex gap-2 flex-wrap">
-            {CATS.map((c) => (
-              <button key={c.k} className="flex-1 py-2 rounded-xl text-xs font-bold"
-                style={form.category === c.k ? { background: c.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
-                onClick={() => setForm({ ...form, category: c.k })}>{c.label}</button>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="w-10 h-6 rounded-full transition-colors flex-shrink-0"
-            style={{ background: form.participating ? C.orange : C.border }}
-            onClick={() => setForm({ ...form, participating: !form.participating })}>
-            <div className="w-4 h-4 rounded-full bg-white mx-auto transition-transform"
-              style={{ transform: form.participating ? "translateX(50%)" : "translateX(-50%)" }} />
-          </button>
-          <div className="text-xs" style={{ color: C.sub }}>府中六小が参加</div>
-        </div>
-        <div>
-          <div className="text-xs mb-1" style={{ color: C.sub }}>大会結果URL(大会公式サイトなど)</div>
-          <input className={inputCls} style={getInputStyle(C)} placeholder="https://..."
-            value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
-        </div>
-        <div>
-          <div className="text-xs mb-1" style={{ color: C.sub }}>メモ</div>
-          <textarea className={inputCls} style={{ ...getInputStyle(C), minHeight: 60, resize: "none" }}
-            placeholder="大会の記録など自由に"
-            value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
-        </div>
-        <PrimaryBtn disabled={!form.name} onClick={() => {
-          const t = { id: editId || uid(), ...form };
-          saveT(t); setAdding(false); setSelId(t.id);
-        }}>保存する</PrimaryBtn>
-      </div>
-    </Card>
-  );
-
-  // 詳細ページ
-  if (selT) return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <button className="flex items-center gap-1 text-sm font-bold" style={{ color: C.sub }} onClick={() => setSelId(null)}>
-          <ChevronLeft size={16} /> 大会一覧
-        </button>
-        {isAdmin && !selT.auto && (
-          <div className="flex gap-3">
-            <button style={{ color: C.sub }} onClick={() => openForm(selT)}><Pencil size={18} /></button>
-            <button style={{ color: C.sub }} onClick={() => { if (confirm(`「${selT.name}」を削除しますか?`)) { delT(selT.id); setSelId(null); } }}><Trash2 size={18} /></button>
-          </div>
-        )}
-      </div>
-      <Card>
-        <div className="flex items-start gap-3">
-          <div className="flex-1">
-            <div className="text-xl font-bold">{selT.name}</div>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {selT.month && <span className="text-xs" style={{ color: C.sub }}>{selT.month}月</span>}
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white"
-                style={{ background: catOf(selT.category).color }}>{catOf(selT.category).label}</span>
-              {selT.participating && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded"
-                  style={{ background: `${C.orange}22`, color: C.orange }}>参加</span>
-              )}
+        {/* ヘッダーカード */}
+        <Card style={{ border: selT.participating ? `2px solid ${cat.color}` : undefined }}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-xl font-bold leading-tight">{selT.name}</div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white" style={{ background: cat.color }}>{cat.label}</span>
+                {selT.participating && <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: `${C.orange}22`, color: C.orange }}>✓ 参加</span>}
+              </div>
+              {dateStr && <div className="text-xs mt-1.5" style={{ color: C.sub }}>📅 {dateStr}</div>}
             </div>
+            {/* 順位バッジ */}
+            {tourRank && (
+              <div className="flex-shrink-0 flex flex-col items-center justify-center rounded-2xl px-4 py-3"
+                style={{ background: tourRank.k === "1" ? "#FFB23E22" : tourRank.k === "2" ? "#8FA0C022" : tourRank.k === "3" ? "#A0704A22" : C.card2, minWidth: 72 }}>
+                <div className="text-3xl" style={{ fontFamily: "'Bebas Neue',sans-serif", color: tourRank.k === "1" ? "#FFB23E" : tourRank.k === "2" ? "#8FA0C0" : tourRank.k === "3" ? "#C8946A" : C.sub }}>{tourRank.label}</div>
+              </div>
+            )}
           </div>
-        </div>
-        {selT.memo && <div className="mt-3 text-sm whitespace-pre-wrap" style={{ color: C.sub }}>{selT.memo}</div>}
-        {selT.auto && isAdmin && (
-          <button className="mt-3 text-xs w-full py-2 rounded-xl" style={{ border: `1px dashed ${C.border}`, color: C.sub }}
-            onClick={() => openForm(selT)}>詳細情報を登録する(URL・メモなど)</button>
-        )}
-      </Card>
-
-      {/* URL埋め込み */}
-      {selT.url && (
-        <Card>
-          <SectionTitle>大会結果・公式サイト</SectionTitle>
-          <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
-            <div className="flex items-center gap-2 px-3 py-2" style={{ background: C.card2 }}>
-              <Link2 size={11} style={{ color: C.sub, flexShrink: 0 }} />
-              <div className="text-[10px] flex-1 truncate" style={{ color: C.sub }}>{selT.url}</div>
-            </div>
-            <iframe src={selT.url} className="w-full" style={{ height: 340, border: "none", display: "block" }}
-              title={selT.name} sandbox="allow-scripts allow-same-origin allow-popups" />
-          </div>
-          <a href={selT.url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1 mt-2 text-xs font-bold py-2 rounded-xl"
-            style={{ border: `1px solid ${C.border}`, color: C.sub }}>
-            <Link2 size={12} /> ブラウザで開く
-          </a>
+          {selT.memo && <div className="mt-3 text-sm whitespace-pre-wrap" style={{ color: C.sub }}>{selT.memo}</div>}
+          {selT.auto && isAdmin && (
+            <button className="mt-3 text-xs w-full py-2 rounded-xl" style={{ border: `1px dashed ${C.border}`, color: C.sub }}
+              onClick={() => openForm(selT)}>詳細情報を登録する(期間・URL・結果など)</button>
+          )}
         </Card>
-      )}
-
-      {/* 試合結果カード */}
-      {relGames.length > 0 && (
-        <Card>
-          <SectionTitle>試合結果({relGames.length}試合)</SectionTitle>
-          <div className="space-y-2">
-            {relGames.map((g) => {
-              const { own, opp } = gamePts(g);
-              const cat = gameCatOf(g.category);
-              return (
-                <button key={g.id} className="w-full text-left" onClick={() => { setTab("games"); setNav({ gameId: g.id }); }}>
-                  <div className="mb-1 px-1 text-xs flex items-center gap-1.5" style={{ color: C.sub }}>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
-                      style={{ background: cat.color }}>{cat.badge}</span>
-                    <span>{g.date}{g.ot ? `・OT${g.ot}` : ""}</span>
+        {/* リーグマトリックス表示 */}
+        {leagueData && leagueData.teams?.length >= 2 && (
+          <Card>
+            <SectionTitle>リーグ結果</SectionTitle>
+            <div className="overflow-x-auto">
+              <table style={{ borderCollapse: "collapse", fontSize: 10, width: "100%" }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: "3px 6px", color: C.sub, fontWeight: 400, textAlign: "left" }}>チーム</th>
+                    {leagueData.teams.map((t, i) => (
+                      <th key={i} style={{ padding: "3px 4px", color: C.sub, fontWeight: 600, textAlign: "center", maxWidth: 48, fontSize: 9 }}>{t}</th>
+                    ))}
+                    <th style={{ padding: "3px 6px", color: C.orange, fontWeight: 700, textAlign: "center" }}>順位</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leagueData.teams.map((row, ri) => (
+                    <tr key={ri} style={{ borderTop: `1px solid ${C.border}` }}>
+                      <td style={{ padding: "4px 6px", fontWeight: 700, fontSize: 10, whiteSpace: "nowrap" }}>{row}</td>
+                      {leagueData.teams.map((col, ci) => {
+                        if (ri === ci) return <td key={ci} style={{ padding: 4, textAlign: "center" }}><span style={{ color: C.border }}>–</span></td>;
+                        const scoreA = leagueData.scores?.[`${ri}_${ci}`];
+                        const scoreB = leagueData.scores?.[`${ci}_${ri}`];
+                        const win = scoreA !== "" && scoreB !== "" && scoreA !== undefined && scoreB !== undefined && +scoreA > +scoreB;
+                        const lose = scoreA !== "" && scoreB !== "" && scoreA !== undefined && scoreB !== undefined && +scoreA < +scoreB;
+                        return (
+                          <td key={ci} style={{ padding: 4, textAlign: "center", fontFamily: "'Bebas Neue',sans-serif", fontSize: 13,
+                            color: win ? C.win : lose ? C.loss : C.sub }}>
+                            {scoreA !== undefined && scoreA !== "" ? scoreA : "–"}
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: C.orange, fontWeight: 700 }}>
+                        {leagueData.ranks?.[row] ? `${leagueData.ranks[row]}位` : "–"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+        {/* URL埋め込み */}
+        {selT.url && (() => {
+          // GoogleドライブのURLをダイレクト表示用に変換
+          const gdMatch = selT.url.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
+          const gdId = gdMatch ? gdMatch[1] : null;
+          const imgUrl = gdId ? `https://drive.google.com/uc?export=view&id=${gdId}` : null;
+          const pdfUrl = gdId ? `https://drive.google.com/file/d/${gdId}/preview` : null;
+          const isGdrive = !!gdId;
+          return (
+            <Card>
+              <SectionTitle>大会結果・公式サイト</SectionTitle>
+              <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+                <div className="flex items-center gap-2 px-3 py-2" style={{ background: C.card2 }}>
+                  <Link2 size={11} style={{ color: C.sub, flexShrink: 0 }} />
+                  <div className="text-[10px] flex-1 truncate" style={{ color: C.sub }}>{selT.url}</div>
+                  {isGdrive && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: "#4A90D922", color: "#4A90D9" }}>Googleドライブ</span>}
+                </div>
+                {/* Googleドライブ: 画像はimgで、それ以外はpdfプレビューで表示 */}
+                {isGdrive ? (
+                  <div>
+                    {/* まず画像として試みる */}
+                    <img src={imgUrl} alt={selT.name}
+                      style={{ width: "100%", display: "block", maxHeight: 400, objectFit: "contain", background: C.card2 }}
+                      onError={(e) => {
+                        // 画像として読めなければPDFプレビューのiframeに切り替え
+                        e.target.style.display = "none";
+                        e.target.nextSibling.style.display = "block";
+                      }} />
+                    <iframe src={pdfUrl}
+                      style={{ width: "100%", height: 400, border: "none", display: "none" }}
+                      title={selT.name} allow="autoplay" />
                   </div>
-                  <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)}
-                    oppLogo={data.opponents.find((o) => o.id === g.opponentId)?.logo} date={g.date} />
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-      {relGames.length === 0 && selT.participating && (
-        <Card>
-          <div className="text-sm text-center py-4" style={{ color: C.sub }}>
+                ) : (
+                  /* 通常サイト: 縮小iframe */
+                  <div style={{ position: "relative", width: "100%", height: 320, background: C.card2, overflow: "hidden" }}>
+                    <iframe
+                      src={selT.url}
+                      style={{ width: "200%", height: "200%", transform: "scale(0.5)", transformOrigin: "top left", border: "none", display: "block" }}
+                      title={selT.name}
+                      sandbox="allow-scripts allow-same-origin allow-popups allow-forms" />
+                  </div>
+                )}
+              </div>
+              <a href={selT.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1 mt-2 text-sm font-bold py-2.5 rounded-xl text-white"
+                style={{ background: C.orange }}>
+                <Link2 size={14} /> ブラウザで開く ↗
+              </a>
+              {!isGdrive && (
+                <div className="text-[10px] mt-1.5 text-center" style={{ color: C.sub }}>
+                  ※サイトによっては埋め込み表示がブロックされます。Googleドライブに画像やPDFをアップして貼り付けると確実に表示できます。
+                </div>
+              )}
+            </Card>
+          );
+        })()}
+        {/* 試合結果 */}
+        {relGames.length > 0 && (
+          <Card>
+            <SectionTitle>試合結果({relGames.length}試合)</SectionTitle>
+            <div className="space-y-2">
+              {relGames.map((g) => {
+                const { own, opp } = gamePts(g);
+                const cat2 = gameCatOf(g.category);
+                return (
+                  <button key={g.id} className="w-full text-left" onClick={() => { setTab("games"); setNav({ gameId: g.id }); }}>
+                    <div className="mb-1 px-1 text-xs flex items-center gap-1.5" style={{ color: C.sub }}>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: cat2.color }}>{cat2.badge}</span>
+                      <span>{g.date}{g.ot ? `・OT${g.ot}` : ""}</span>
+                    </div>
+                    <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)}
+                      oppLogo={data.opponents.find((o) => o.id === g.opponentId)?.logo} date={g.date} />
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+        {relGames.length === 0 && selT.participating && (
+          <Card><div className="text-sm text-center py-4" style={{ color: C.sub }}>
             この大会の試合がまだ登録されていません。<br />
             <span className="text-xs">試合登録時の「大会名」を「{selT.name}」に合わせると自動で表示されます。</span>
-          </div>
-        </Card>
-      )}
-    </div>
-  );
+          </div></Card>
+        )}
+      </div>
+    );
+  }
 
-  // 一覧(タイムライン)
-  const now = new Date().getMonth() + 1;
+  // ===== 一覧(タイムライン) =====
+  const today = new Date().toISOString().slice(0, 10);
   return (
     <div className="space-y-3">
       {isAdmin && (
@@ -3065,38 +3286,63 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
         <Card>
           <SectionTitle>大会カレンダー</SectionTitle>
           <div className="relative pl-5">
-            {/* タイムライン縦線 */}
             <div className="absolute left-[7px] top-2 bottom-2 w-px" style={{ background: C.border }} />
             <div className="space-y-3">
               {sorted.map((t) => {
                 const cat = catOf(t.category);
-                const isNow = t.month && +t.month === now;
-                const isPast = t.month && +t.month < now;
-                const dotColor = t.participating ? (isNow ? C.orange : isPast ? C.sub : cat.color) : C.border;
+                const isOngoing = t.dateFrom && t.dateTo ? (t.dateFrom <= today && today <= t.dateTo)
+                  : t.dateFrom ? t.dateFrom === today : false;
+                const isFuture = t.dateFrom ? t.dateFrom > today : false;
+                const dotColor = t.participating
+                  ? (isOngoing ? C.orange : isFuture ? cat.color : C.sub)
+                  : C.border;
                 const relCount = data.games.filter((g) => g.tournament === t.name).length;
+                const res = t.result;
+                const tourRank = res?.type === "tournament" ? TOURNAMENT_RANKS.find((r) => r.k === res.data?.rank) : null;
+
+                // 期間表示文字列
+                const dateStr = t.dateFrom && t.dateTo ? `${t.dateFrom.slice(5)} 〜 ${t.dateTo.slice(5)}`
+                  : t.dateFrom ? t.dateFrom.slice(5)
+                  : t.dateTo ? `〜 ${t.dateTo.slice(5)}` : "";
+
                 return (
                   <button key={t.id} className="w-full text-left relative" onClick={() => setSelId(t.id)}>
-                    {/* タイムラインドット */}
                     <div className="absolute left-[-14px] top-3 w-3 h-3 rounded-full border-2"
-                      style={{ background: dotColor, borderColor: dotColor, boxShadow: isNow ? `0 0 6px ${C.orange}` : "none" }} />
-                    <div className="rounded-xl px-3 py-2.5 flex items-center gap-3"
-                      style={{ background: isNow ? `${C.orange}15` : C.card2,
-                        border: `1px solid ${isNow ? C.orange + "44" : t.participating ? cat.color + "33" : "transparent"}` }}>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          {t.month && <span className="text-[9px]" style={{ color: isNow ? C.orange : C.sub }}>{t.month}月</span>}
-                          {isNow && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: C.orange, color: "#fff" }}>今月</span>}
-                          {t.auto && <span className="text-[8px] px-1.5 py-0.5 rounded" style={{ background: C.card, color: C.sub, border: `1px dashed ${C.border}` }}>自動取得</span>}
+                      style={{ background: dotColor, borderColor: dotColor,
+                        boxShadow: isOngoing ? `0 0 8px ${C.orange}` : "" }} />
+                    <div className="rounded-xl px-3 py-2.5"
+                      style={{
+                        background: t.participating
+                          ? (isOngoing ? `${C.orange}18` : `${cat.color}10`)
+                          : C.card2,
+                        border: t.participating
+                          ? `1.5px solid ${isOngoing ? C.orange : cat.color}66`
+                          : `1px solid transparent`,
+                      }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                            {dateStr && <span className="text-[9px]" style={{ color: isOngoing ? C.orange : C.sub }}>{dateStr}</span>}
+                            {isOngoing && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: C.orange, color: "#fff" }}>開催中</span>}
+                            {t.auto && <span className="text-[8px] px-1.5 py-0.5 rounded" style={{ background: C.card, color: C.sub, border: `1px dashed ${C.border}` }}>自動</span>}
+                          </div>
+                          <div className="font-bold text-sm truncate">{t.name}</div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-[9px] font-bold" style={{ color: cat.color }}>{cat.label}</span>
+                            {t.participating && <span className="text-[9px] font-bold" style={{ color: C.orange }}>参加</span>}
+                            {relCount > 0 && <span className="text-[9px]" style={{ color: C.sub }}>{relCount}試合</span>}
+                            {t.url && <Link2 size={9} style={{ color: C.sub }} />}
+                          </div>
                         </div>
-                        <div className="font-bold text-sm truncate">{t.name}</div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[9px] font-bold" style={{ color: cat.color }}>{cat.label}</span>
-                          {t.participating && <span className="text-[9px]" style={{ color: C.orange }}>参加</span>}
-                          {relCount > 0 && <span className="text-[9px]" style={{ color: C.sub }}>{relCount}試合</span>}
-                          {t.url && <Link2 size={9} style={{ color: C.sub }} />}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {tourRank && (
+                            <span className="text-xs font-bold" style={{ color: tourRank.k === "1" ? "#FFB23E" : tourRank.k === "2" ? "#8FA0C0" : tourRank.k === "3" ? "#C8946A" : C.sub }}>
+                              {tourRank.label}
+                            </span>
+                          )}
+                          <ChevronDown size={14} style={{ color: C.sub, transform: "rotate(-90deg)" }} />
                         </div>
                       </div>
-                      <ChevronDown size={14} style={{ color: C.sub, transform: "rotate(-90deg)", flexShrink: 0 }} />
                     </div>
                   </button>
                 );
