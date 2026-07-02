@@ -3235,7 +3235,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
               </div>
             </div>
           )}
-          </div>
           {selT.memo && <div className="mt-3 text-sm whitespace-pre-wrap" style={{ color: C.sub }}>{selT.memo}</div>}
           {selT.auto && isAdmin && (
             <button className="mt-3 text-xs w-full py-2 rounded-xl" style={{ border: `1px dashed ${C.border}`, color: C.sub }}
