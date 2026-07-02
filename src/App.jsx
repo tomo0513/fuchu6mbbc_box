@@ -2982,8 +2982,7 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
             <div className="text-xs" style={{ color: C.sub }}>府中六小が参加</div>
           </div>
           {/* 結果入力 */}
-          {form.participating && (
-            <div>
+          <div>
               <div className="text-xs mb-2 font-bold" style={{ color: C.sub }}>大会結果</div>
               {/* トーナメント順位 */}
               {!isLeague && (
@@ -3029,7 +3028,7 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                   {/* スコアマトリックス */}
                   {leagueData.teams.length >= 2 && (
                     <div className="overflow-x-auto">
-                      <div className="text-[10px] mb-1" style={{ color: C.sub }}>スコア入力(縦=自チーム, 横=相手)</div>
+                      <div className="text-[10px] mb-1" style={{ color: C.sub }}>スコア入力(横行=そのチームの得点, 右端=順位)</div>
                       <table style={{ borderCollapse: "collapse", fontSize: 9 }}>
                         <thead>
                           <tr>
@@ -3068,7 +3067,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                 </div>
               )}
             </div>
-          )}
           {/* URL */}
           <div>
             <div className="text-xs mb-1" style={{ color: C.sub }}>大会結果URL(公式サイトなど)</div>
@@ -3143,35 +3141,50 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
         {leagueData && leagueData.teams?.length >= 2 && (
           <Card>
             <SectionTitle>リーグ結果</SectionTitle>
+            <div className="text-[9px] mb-2" style={{ color: C.sub }}>横行=そのチームの得点 / 縦列=相手チームの得点</div>
             <div className="overflow-x-auto">
               <table style={{ borderCollapse: "collapse", fontSize: 10, width: "100%" }}>
                 <thead>
                   <tr>
-                    <th style={{ padding: "3px 6px", color: C.sub, fontWeight: 400, textAlign: "left" }}>チーム</th>
+                    <th style={{ padding: "3px 6px", color: C.sub, fontWeight: 400, textAlign: "left", fontSize: 9 }}>vs →</th>
                     {leagueData.teams.map((t, i) => (
-                      <th key={i} style={{ padding: "3px 4px", color: C.sub, fontWeight: 600, textAlign: "center", maxWidth: 48, fontSize: 9 }}>{t}</th>
+                      <th key={i} style={{ padding: "3px 4px", color: C.sub, fontWeight: 600, textAlign: "center", maxWidth: 44, fontSize: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t}</th>
                     ))}
-                    <th style={{ padding: "3px 6px", color: C.orange, fontWeight: 700, textAlign: "center" }}>順位</th>
+                    <th style={{ padding: "3px 6px", color: C.orange, fontWeight: 700, textAlign: "center", borderLeft: `1px solid ${C.border}` }}>順位</th>
                   </tr>
                 </thead>
                 <tbody>
                   {leagueData.teams.map((row, ri) => (
                     <tr key={ri} style={{ borderTop: `1px solid ${C.border}` }}>
-                      <td style={{ padding: "4px 6px", fontWeight: 700, fontSize: 10, whiteSpace: "nowrap" }}>{row}</td>
+                      <td style={{ padding: "5px 6px", fontWeight: 700, fontSize: 10, whiteSpace: "nowrap" }}>{row}</td>
                       {leagueData.teams.map((col, ci) => {
-                        if (ri === ci) return <td key={ci} style={{ padding: 4, textAlign: "center" }}><span style={{ color: C.border }}>–</span></td>;
-                        const scoreA = leagueData.scores?.[`${ri}_${ci}`];
-                        const scoreB = leagueData.scores?.[`${ci}_${ri}`];
-                        const win = scoreA !== "" && scoreB !== "" && scoreA !== undefined && scoreB !== undefined && +scoreA > +scoreB;
-                        const lose = scoreA !== "" && scoreB !== "" && scoreA !== undefined && scoreB !== undefined && +scoreA < +scoreB;
+                        if (ri === ci) return (
+                          <td key={ci} style={{ padding: 4, textAlign: "center" }}>
+                            <span style={{ color: C.border }}>–</span>
+                          </td>
+                        );
+                        // ri行=そのチームの得点, ci列=相手チーム
+                        const myScore = leagueData.scores?.[`${ri}_${ci}`];   // riがciに入れた点
+                        const oppScore = leagueData.scores?.[`${ci}_${ri}`];  // ciがriに入れた点
+                        const hasScore = myScore !== undefined && myScore !== "" && oppScore !== undefined && oppScore !== "";
+                        const win = hasScore && +myScore > +oppScore;
+                        const lose = hasScore && +myScore < +oppScore;
                         return (
-                          <td key={ci} style={{ padding: 4, textAlign: "center", fontFamily: "'Bebas Neue',sans-serif", fontSize: 13,
-                            color: win ? C.win : lose ? C.loss : C.sub }}>
-                            {scoreA !== undefined && scoreA !== "" ? scoreA : "–"}
+                          <td key={ci} style={{ padding: 4, textAlign: "center" }}>
+                            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 14,
+                              color: win ? C.win : lose ? C.loss : C.sub }}>
+                              {myScore !== undefined && myScore !== "" ? myScore : "–"}
+                            </div>
+                            {hasScore && (
+                              <div style={{ fontSize: 8, color: win ? C.win : lose ? C.loss : C.sub }}>
+                                {win ? "○" : lose ? "●" : "△"}
+                              </div>
+                            )}
                           </td>
                         );
                       })}
-                      <td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: C.orange, fontWeight: 700 }}>
+                      <td style={{ padding: "5px 8px", textAlign: "center", fontFamily: "'Bebas Neue',sans-serif",
+                        fontSize: 18, color: C.orange, fontWeight: 700, borderLeft: `1px solid ${C.border}` }}>
                         {leagueData.ranks?.[row] ? `${leagueData.ranks[row]}位` : "–"}
                       </td>
                     </tr>
