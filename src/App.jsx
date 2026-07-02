@@ -3095,10 +3095,7 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                       ))}
                     </div>
                   </div>
-                  {/* スコアマトリックス */}
-                  {leagueData.teams.length >= 2 && (
-                    <div className="overflow-x-auto">
-                    {/* 府中六小の最終順位(タイムライン表示用) */}
+                  {/* 府中六小の最終順位(タイムライン表示用) */}
                   <div>
                     <div className="text-[10px] mb-1 font-bold" style={{ color: C.orange }}>府中六小の最終順位</div>
                     <div className="flex items-center gap-2">
@@ -3109,7 +3106,10 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                       <span className="text-xs" style={{ color: C.sub }}>位</span>
                     </div>
                   </div>
-                  <div className="text-[10px] mb-1" style={{ color: C.sub }}>スコア入力(横行=そのチームの得点, 右端=順位)</div>
+                  {/* スコアマトリックス */}
+                  {leagueData.teams.length >= 2 && (
+                    <div className="overflow-x-auto">
+                    <div className="text-[10px] mb-1" style={{ color: C.sub }}>スコア入力(横行=そのチームの得点, 右端=順位)</div>
                       <table style={{ borderCollapse: "collapse", fontSize: 9 }}>
                         <thead>
                           <tr>
