@@ -1597,6 +1597,7 @@ function GameRow({ g, setNav, showOpp, oppName }) {
 function TeamStatsCard({ data, oppName }) {
   const C = useC();
   const [trendStat, setTrendStat] = useState("own");
+  // 全試合(参考試合含む)を日付昇順で
   const allGames = [...data.games].sort(gameOrderAsc);
   const n = allGames.length;
   if (n === 0) return null;
@@ -1616,10 +1617,21 @@ function TeamStatsCard({ data, oppName }) {
     };
   });
 
+  // 合計: 全試合
   const sumOf = (k) => perGame.reduce((a, x) => a + (x[k] || 0), 0);
-  const avgOf = (k) => n > 0 ? sumOf(k) / n : 0;
+
+  // 平均: careerStatsと同じQ数基準(0-0除外・Q数補正・参考試合含む)
+  const played = perGame.filter((x) => (x.own + x.opp) > 0);
+  const totalQPlayed = played.reduce((a, x) => a + periodsOf(x.g), 0);
+  const baseQ = played.length * 4;
+  const avgOf = (k) => {
+    if (totalQPlayed === 0 || played.length === 0) return 0;
+    const playedTotal = played.reduce((a, x) => a + (x[k] || 0), 0);
+    return playedTotal / totalQPlayed * baseQ / played.length;
+  };
   const pctOf = (m, a) => a > 0 ? `${Math.round(m / a * 1000) / 10}%` : "–";
   const bestOf = (k) => perGame.reduce((b, x) => (!b || x[k] > b.v) ? { v: x[k], g: x.g } : b, null);
+  const hasVaryQ = perGame.some((x) => regQOf(x.g) !== 4);
 
   const TREND_OPTS = [
     { k: "own", label: "得点", color: C.orange },
@@ -1630,13 +1642,18 @@ function TeamStatsCard({ data, oppName }) {
   ];
   const tOpt = TREND_OPTS.find((o) => o.k === trendStat) || TREND_OPTS[0];
   const chartData = perGame.map((x) => ({ name: x.g.date?.slice(5) || "", val: x[trendStat] }));
-  const tAvg = n > 0 ? chartData.reduce((a, d) => a + (d.val || 0), 0) / n : 0;
+  const tAvg = totalQPlayed > 0 && played.length > 0
+    ? played.reduce((a, x) => a + (x[trendStat] || 0), 0) / totalQPlayed * baseQ / played.length
+    : 0;
 
   return (
     <Card>
-      <SectionTitle>チームスタッツ({n}試合)</SectionTitle>
+      <div className="flex items-center justify-between mb-2">
+        <SectionTitle>チームスタッツ({n}試合)</SectionTitle>
+      </div>
+      {hasVaryQ && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均はQ数基準で算出(全試合4Q換算)</div>}
       {/* 合計・平均グリッド */}
-      <div className="grid grid-cols-3 gap-2 text-center mt-2">
+      <div className="grid grid-cols-3 gap-2 mt-1">
         {[
           ["得点", sumOf("own"), fmt1(avgOf("own"))],
           ["失点", sumOf("opp"), fmt1(avgOf("opp"))],
@@ -1648,10 +1665,16 @@ function TeamStatsCard({ data, oppName }) {
           ["PF",   sumOf("pf"),  fmt1(avgOf("pf"))],
           ["FG%/FT%", pctOf(sumOf("fgm"), sumOf("fga")), pctOf(sumOf("ftm"), sumOf("fta"))],
         ].map(([l, tot, avg]) => (
-          <div key={l} className="rounded-xl py-2.5" style={{ background: C.card2 }}>
-            <div className="text-xl font-bold leading-tight" style={{ fontFamily: "'Bebas Neue',sans-serif" }}>{tot}</div>
-            <div className="text-[11px]" style={{ fontFamily: "'Bebas Neue',sans-serif", color: C.sub }}>{avg}</div>
-            <div className="text-[9px] mt-0.5" style={{ color: C.sub }}>{l}</div>
+          <div key={l} className="rounded-xl overflow-hidden" style={{ background: C.card2 }}>
+            <div className="text-center pt-2 pb-1 px-1">
+              <div className="text-[8px] font-bold mb-0.5" style={{ color: C.sub }}>合計</div>
+              <div className="text-xl font-bold leading-tight" style={{ fontFamily: "'Bebas Neue',sans-serif" }}>{tot}</div>
+            </div>
+            <div className="text-center pb-2 px-1" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div className="text-[8px] font-bold mb-0.5 mt-1" style={{ color: C.sub }}>平均</div>
+              <div className="text-[14px] font-bold leading-tight" style={{ fontFamily: "'Bebas Neue',sans-serif", color: C.orange }}>{avg}</div>
+            </div>
+            <div className="text-[9px] text-center pb-2" style={{ color: C.sub }}>{l}</div>
           </div>
         ))}
       </div>
