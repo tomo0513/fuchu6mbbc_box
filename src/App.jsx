@@ -1739,11 +1739,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
                     <ReferenceLine y={tAvg} stroke={tOpt.color} strokeDasharray="5 4" strokeWidth={1.5}
                       label={{ value: `平均 ${fmt1(tAvg)}`, position: "insideTopRight", fill: tOpt.color, fontSize: 8 }} />
                     <Line type="monotone" dataKey="val" name={tOpt.label} stroke={tOpt.color} strokeWidth={2.5}
-                      dot={(props) => {
-                        const isMax = props.payload.val === bestVal?.v;
-                        return <circle key={props.key} cx={props.cx} cy={props.cy} r={isMax ? 5 : 3.5}
-                          fill={isMax ? "#FFD700" : tOpt.color} stroke={isMax ? "#fff" : "none"} strokeWidth={1.5} />;
-                      }} />
+                      dot={{ fill: tOpt.color, r: 3.5 }} activeDot={{ r: 5 }} />
                   </LineChart>
                 </ResponsiveContainer>
                 <div className="text-[9px] text-center mt-1" style={{ color: C.sub }}>🏅 = チーム最高記録</div>
