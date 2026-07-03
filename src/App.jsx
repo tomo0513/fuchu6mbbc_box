@@ -1597,6 +1597,7 @@ function GameRow({ g, setNav, showOpp, oppName }) {
 function TeamStatsCard({ data, oppName }) {
   const C = useC();
   const [trendStat, setTrendStat] = useState("own");
+  const [effStat, setEffStat] = useState("fgp"); // シュート効率グラフ
   // 全試合(参考試合含む)を日付昇順で
   const allGames = [...data.games].sort(gameOrderAsc);
   const n = allGames.length;
@@ -1663,7 +1664,6 @@ function TeamStatsCard({ data, oppName }) {
           ["BLK",  sumOf("blk"), fmt1(avgOf("blk"))],
           ["TO",   sumOf("to"),  fmt1(avgOf("to"))],
           ["PF",   sumOf("pf"),  fmt1(avgOf("pf"))],
-          ["FG%/FT%", pctOf(sumOf("fgm"), sumOf("fga")), pctOf(sumOf("ftm"), sumOf("fta"))],
         ].map(([l, tot, avg]) => (
           <div key={l} className="rounded-xl overflow-hidden" style={{ background: C.card2 }}>
             <div className="text-center pt-2 pb-1 px-1">
@@ -1677,6 +1677,20 @@ function TeamStatsCard({ data, oppName }) {
             <div className="text-[9px] text-center pb-2" style={{ color: C.sub }}>{l}</div>
           </div>
         ))}
+      </div>
+      {/* FG% / FT% 独立表示 */}
+      <div className="flex gap-2 mt-2">
+        {[
+          ["FG%", sumOf("fgm"), sumOf("fga"), "フィールドゴール"],
+          ["FT%", sumOf("ftm"), sumOf("fta"), "フリースロー"],
+        ].map(([label, made, att, desc]) => (
+          <div key={label} className="flex-1 rounded-xl px-3 py-2.5 text-center" style={{ background: C.card2 }}>
+            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue',sans-serif" }}>{pctOf(made, att)}</div>
+            <div className="text-[9px] mt-0.5" style={{ color: C.sub }}>{label}</div>
+            <div className="text-[8px]" style={{ color: C.sub }}>{att > 0 ? `${made}/${att}` : "–"}</div>
+          </div>
+        ))}
+      </div>
       </div>
       {/* チーム最高記録 */}
       {n >= 2 && (
@@ -1721,6 +1735,48 @@ function TeamStatsCard({ data, oppName }) {
           </ResponsiveContainer>
         </div>
       )}
+      {/* シュート効率グラフ */}
+      {n >= 2 && (() => {
+        const EFF_OPTS = [
+          { k: "fgp", label: "FG%", made: "fgm", att: "fga", color: C.orange },
+          { k: "ftp", label: "FT%", made: "ftm", att: "fta", color: C.oppBlue },
+        ];
+        const eo = EFF_OPTS.find((o) => o.k === effStat) || EFF_OPTS[0];
+        const effData = perGame.map((x) => ({
+          name: x.g.date?.slice(5) || "",
+          val: x[eo.att] > 0 ? Math.round(x[eo.made] / x[eo.att] * 1000) / 10 : null,
+        }));
+        const effVals = effData.map((d) => d.val).filter((v) => v !== null);
+        const totalMade = perGame.reduce((a, x) => a + (x[eo.made] || 0), 0);
+        const totalAtt = perGame.reduce((a, x) => a + (x[eo.att] || 0), 0);
+        const effAvg = totalAtt > 0 ? Math.round(totalMade / totalAtt * 1000) / 10 : 0;
+        return (
+          <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+            <div className="flex gap-1.5 mb-2">
+              {EFF_OPTS.map((o) => (
+                <button key={o.k} className="px-2.5 py-1 rounded-lg text-[10px] font-bold"
+                  style={effStat === o.k ? { background: o.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                  onClick={() => setEffStat(o.k)}>{o.label}</button>
+              ))}
+              <span className="text-[9px] ml-auto self-center" style={{ color: C.sub }}>シュート効率</span>
+            </div>
+            <ResponsiveContainer width="100%" height={130}>
+              <LineChart data={effData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                <XAxis dataKey="name" fontSize={8} stroke={C.sub} />
+                <YAxis fontSize={8} stroke={C.sub} unit="%" domain={[0, 100]} />
+                <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, color: C.text, fontSize: 11 }}
+                  formatter={(v) => [`${v}%`, eo.label]} />
+                <ReferenceLine y={effAvg} stroke={eo.color} strokeDasharray="5 4" strokeWidth={1.5}
+                  label={{ value: `平均 ${effAvg}%`, position: "insideTopRight", fill: eo.color, fontSize: 8 }} />
+                <Line type="monotone" dataKey="val" name={eo.label} stroke={eo.color} strokeWidth={2.5}
+                  connectNulls={false} dot={{ fill: eo.color, r: 3.5 }} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+            <div className="text-[9px] text-center mt-1" style={{ color: C.sub }}>※試投0の試合は折れ線に表示されません</div>
+          </div>
+        );
+      })()}
     </Card>
   );
 }
