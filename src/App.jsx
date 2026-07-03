@@ -1005,7 +1005,7 @@ function PlayerForm({ initial, onSave, onCancel }) {
         <label className="text-sm font-bold px-3 py-2 rounded-xl" style={{ border: `1px solid ${C.border}` }}>
           写真を選ぶ
           <input type="file" accept="image/*" className="hidden"
-            onChange={(e) => { const file = e.target.files?.[0]; if (file) shrinkSquare(file, 96, (d) => set("photo", d)); }} />
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) shrinkSquare(file, 256, (d) => set("photo", d)); }} />
         </label>
       </div>
       <Field label="名前(フルネーム)"><input className={inputCls} style={getInputStyle(C)} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="山田 太郎" /></Field>
@@ -1598,7 +1598,8 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState("list");
   const [openKey, setOpenKey] = useState(null);
-  const [catFilter, setCatFilter] = useState("all"); // カテゴリーフィルター
+  const [catFilter, setCatFilter] = useState("all");
+  const [teamTrendStat, setTeamTrendStat] = useState("pts");
   const games = [...data.games].sort(gameOrderDesc);
   // カテゴリーフィルター適用後の試合一覧
   const filteredGames = catFilter === "all" ? games : games.filter((g) => (g.category || "practice") === catFilter);
@@ -1636,6 +1637,113 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
         disabled={games.length >= MAX_GAMES}>
         <Plus size={18} /> 試合を登録 {games.length >= MAX_GAMES ? `(上限${MAX_GAMES}試合)` : ""}
       </button>}
+
+      {/* ===== チームスタッツカード ===== */}
+      {games.length > 0 && (() => {
+        // 全試合の集計
+        const allGames = [...data.games].sort(gameOrderAsc);
+        const n = allGames.length;
+        // 試合ごとのチームスタッツ集計
+        const perGame = allGames.map((g) => {
+          const p = gamePts(g);
+          const s = aggStats(g.events, "own", null, "all", g);
+          return { g, own: p.own, opp: p.opp, reb: s.reb || 0, ast: s.ast || 0, stl: s.stl || 0, blk: s.blk || 0, to: s.to || 0, pf: s.pf || 0, fgm: s.fgm || 0, fga: s.fga || 0, ftm: s.ftm || 0, fta: s.fta || 0 };
+        });
+        const sum = (k) => perGame.reduce((a, x) => a + (x[k] || 0), 0);
+        const avg = (k) => n > 0 ? sum(k) / n : 0;
+        const pct = (m, a) => a > 0 ? `${Math.round(m / a * 1000) / 10}%` : "–";
+        // キャリアハイ(チーム最高記録)
+        const best = (k) => perGame.reduce((best, x) => (!best || x[k] > best.v) ? { v: x[k], g: x.g } : best, null);
+        // グラフデータ
+        const TREND_OPTS = [
+          { k: "own", label: "得点", color: C.orange },
+          { k: "opp", label: "失点", color: C.loss },
+          { k: "reb", label: "REB", color: C.oppBlue },
+          { k: "ast", label: "AST", color: "#3DBE7B" },
+          { k: "stl", label: "STL", color: "#A855F7" },
+        ];
+        const tOpt = TREND_OPTS.find((o) => o.k === teamTrendStat);
+        const chartData = perGame.map((x) => ({ name: x.g.date?.slice(5) || "", val: x[teamTrendStat], gid: x.g.id }));
+        const tVals = chartData.map((d) => d.val);
+        const tAvg = n > 0 ? tVals.reduce((a, b) => a + b, 0) / n : 0;
+        const bestVal = best(teamTrendStat);
+
+        return (
+          <Card>
+            <SectionTitle>チームスタッツ({n}試合)</SectionTitle>
+            {/* 合計・平均グリッド */}
+            <div className="grid grid-cols-3 gap-2 text-center mt-2">
+              {[
+                ["得点", sum("own"), fmt1(avg("own"))],
+                ["失点", sum("opp"), fmt1(avg("opp"))],
+                ["REB", sum("reb"), fmt1(avg("reb"))],
+                ["AST", sum("ast"), fmt1(avg("ast"))],
+                ["STL", sum("stl"), fmt1(avg("stl"))],
+                ["BLK", sum("blk"), fmt1(avg("blk"))],
+                ["TO", sum("to"), fmt1(avg("to"))],
+                ["PF", sum("pf"), fmt1(avg("pf"))],
+                ["FG% / FT%", pct(sum("fgm"), sum("fga")), pct(sum("ftm"), sum("fta"))],
+              ].map(([l, tot, a]) => (
+                <div key={l} className="rounded-xl py-2.5" style={{ background: C.card2 }}>
+                  <div className="text-xl font-bold leading-tight" style={{ fontFamily: "'Bebas Neue',sans-serif" }}>{tot}</div>
+                  <div className="text-[11px]" style={{ fontFamily: "'Bebas Neue',sans-serif", color: C.sub }}>{a}</div>
+                  <div className="text-[9px] mt-0.5" style={{ color: C.sub }}>{l}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* チーム最高記録 */}
+            {n >= 2 && (
+              <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+                <div className="text-[10px] font-bold mb-2" style={{ color: C.led }}>🏅 チーム最高記録(1試合)</div>
+                <div className="grid grid-cols-4 gap-1.5 text-center">
+                  {[["得点","own"],["REB","reb"],["AST","ast"],["STL","stl"]].map(([l, k]) => {
+                    const b = best(k);
+                    return (
+                      <div key={k} className="rounded-xl py-2" style={{ background: C.card2 }}>
+                        <div className="text-xl font-bold" style={{ fontFamily: "'Bebas Neue',sans-serif", color: C.led }}>{b?.v ?? "–"}</div>
+                        <div className="text-[9px]" style={{ color: C.sub }}>{l}</div>
+                        {b && <div className="text-[8px] truncate px-1" style={{ color: C.sub }}>vs {oppName(b.g.opponentId)}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 折れ線グラフ */}
+            {n >= 2 && (
+              <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+                <div className="flex gap-1.5 mb-2 flex-wrap">
+                  {TREND_OPTS.map((o) => (
+                    <button key={o.k} className="px-2.5 py-1 rounded-lg text-[10px] font-bold"
+                      style={teamTrendStat === o.k ? { background: o.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                      onClick={() => setTeamTrendStat(o.k)}>{o.label}</button>
+                  ))}
+                </div>
+                <ResponsiveContainer width="100%" height={150}>
+                  <LineChart data={chartData} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="name" fontSize={8} stroke={C.sub} />
+                    <YAxis fontSize={8} stroke={C.sub} allowDecimals={false} />
+                    <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, color: C.text, fontSize: 11 }}
+                      formatter={(v) => [v, tOpt.label]} />
+                    <ReferenceLine y={tAvg} stroke={tOpt.color} strokeDasharray="5 4" strokeWidth={1.5}
+                      label={{ value: `平均 ${fmt1(tAvg)}`, position: "insideTopRight", fill: tOpt.color, fontSize: 8 }} />
+                    <Line type="monotone" dataKey="val" name={tOpt.label} stroke={tOpt.color} strokeWidth={2.5}
+                      dot={(props) => {
+                        const isMax = props.payload.val === bestVal?.v;
+                        return <circle key={props.key} cx={props.cx} cy={props.cy} r={isMax ? 5 : 3.5}
+                          fill={isMax ? "#FFD700" : tOpt.color} stroke={isMax ? "#fff" : "none"} strokeWidth={1.5} />;
+                      }} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="text-[9px] text-center mt-1" style={{ color: C.sub }}>🏅 = チーム最高記録</div>
+              </div>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* カテゴリーフィルタータブ */}
       <div className="flex gap-1.5">
