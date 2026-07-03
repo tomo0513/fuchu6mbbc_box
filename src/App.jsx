@@ -1646,8 +1646,16 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
         // 試合ごとのチームスタッツ集計
         const perGame = allGames.map((g) => {
           const p = gamePts(g);
-          const s = aggStats(g.events, "own", null, "all", g);
-          return { g, own: p.own, opp: p.opp, reb: s.reb || 0, ast: s.ast || 0, stl: s.stl || 0, blk: s.blk || 0, to: s.to || 0, pf: s.pf || 0, fgm: s.fgm || 0, fga: s.fga || 0, ftm: s.ftm || 0, fta: s.fta || 0 };
+          const evs = (g.events || []).filter((e) => e.side === "own");
+          const c = (k) => evs.filter((e) => e.action === k).length;
+          const ftm = c("FT_M"), fta = ftm + c("FT_X");
+          const p2m = c("P2_M"), p2a = p2m + c("P2_X");
+          const p3m = c("P3_M"), p3a = p3m + c("P3_X");
+          return {
+            g, own: p.own, opp: p.opp,
+            reb: c("OR") + c("DR"), ast: c("AST"), stl: c("STL"), blk: c("BLK"), to: c("TO"), pf: c("PF"),
+            fgm: p2m + p3m, fga: p2a + p3a, ftm, fta,
+          };
         });
         const sum = (k) => perGame.reduce((a, x) => a + (x[k] || 0), 0);
         const avg = (k) => n > 0 ? sum(k) / n : 0;
