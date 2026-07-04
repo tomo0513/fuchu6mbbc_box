@@ -27,7 +27,6 @@ const LIGHT = {
 };
 const ThemeCtx = React.createContext(DARK);
 const useC = () => React.useContext(ThemeCtx);
-// グローバル参照用(関数外で使う箇所の互換)
 let C = DARK;
 const MAX_OPPONENTS = 100;
 const MAX_PLAYERS = 30;
@@ -35,9 +34,8 @@ const MAX_GAMES = 200;
 const STORE_KEY = "fuchu6-minibasket-v1";
 const STORAGE_LIMIT = 5 * 1024 * 1024;
 const TEAM_KEY = "TEAM";
-const ADMIN_PASS = "tomo0513"; // ← 管理者パスワード(変更可)
+const ADMIN_PASS = "tomo0513";
 
-/* ============ 管理者権限フック ============ */
 function useAdminMode() {
   const [isAdmin, setIsAdmin] = useState(() => {
     try { return sessionStorage.getItem("minibasket_admin") === "1"; } catch { return false; }
@@ -56,7 +54,6 @@ function useAdminMode() {
   return { isAdmin, login, logout };
 }
 
-/* ============ レスポンシブフック ============ */
 function useIsPC() {
   const [isPC, setIsPC] = useState(() => window.innerWidth >= 768);
   useEffect(() => {
@@ -67,7 +64,6 @@ function useIsPC() {
   return isPC;
 }
 
-/* ============ アクション定義 ============ */
 const ACTIONS = [
   { k: "P2_M", label: "2P成功", pts: 2, good: true },
   { k: "P2_X", label: "2P失敗" },
@@ -103,7 +99,6 @@ const STAT_DEFS = [
 ];
 const INVERSE_STATS = new Set(["to", "pf"]);
 
-/* ============ 相手チームのTier(強さ) ============ */
 const TIERS = [
   { k: "A", label: "A", desc: "都大会上位レベル", color: "#E25C5C" },
   { k: "B", label: "B", desc: "府中大会上位レベル", color: "#FF7A3D" },
@@ -112,18 +107,14 @@ const TIERS = [
 ];
 const tierOf = (k) => TIERS.find((t) => t.k === k);
 
-/* ============ 試合区分 ============ */
-// countWL: 勝敗集計に含めるか / countQ: 平均計算に使うQ数(regQOf(g)をそのまま使う)
 const GAME_CATS = [
   { k: "official",  label: "公式戦",   badge: "公式", color: "#E25C5C", countWL: true  },
   { k: "practice",  label: "練習試合", badge: "練習", color: "#5B74A8", countWL: true  },
   { k: "ref",       label: "参考試合", badge: "参考", color: "#8FA0C0", countWL: false },
 ];
-const gameCatOf = (k) => GAME_CATS.find((c) => c.k === k) || GAME_CATS[1]; // デフォルト練習試合
+const gameCatOf = (k) => GAME_CATS.find((c) => c.k === k) || GAME_CATS[1];
 
-// あいうえお順ソート(アルファベット→ひらがな・漢字)。日本語ロケール対応
 const nameCompare = (a, b) => (a || "").localeCompare(b || "", "ja");
-// 対戦相手の並び: Tier順(A→D→未設定) → 読み(kana)優先のあいうえお順
 const TIER_RANK = { A: 0, B: 1, C: 2, D: 3 };
 const oppCompare = (a, b) => {
   const ra = TIER_RANK[a.tier] ?? 9, rb = TIER_RANK[b.tier] ?? 9;
@@ -131,10 +122,8 @@ const oppCompare = (a, b) => {
   return nameCompare(a.kana || a.name, b.kana || b.name);
 };
 
-/* ============ ユーティリティ ============ */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const fmt1 = (n) => (Number.isFinite(n) ? (Math.round(n * 10) / 10).toFixed(1) : "0.0");
-// 整数ならそのまま、小数があれば小数第1位まで
 const fmtSmart = (n) => {
   if (!Number.isFinite(n)) return "0";
   const r = Math.round(n * 10) / 10;
@@ -172,21 +161,18 @@ function ytId(url) {
   return m ? m[1] : null;
 }
 
-// 画像URLを直接表示可能な形に変換(Googleドライブの共有リンク対応)
 function imgUrl(url) {
   if (!url) return null;
   const s = String(url).trim();
-  // Googleドライブ: /file/d/XXX/view または ?id=XXX → 直接表示URL
   const m = s.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]+)/);
   if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000`;
-  return s; // それ以外(Imgur, iCloud, 直リンク等)はそのまま
+  return s;
 }
 
-/* ============ ピリオドヘルパー ============ */
-const regQOf = (g) => +g?.regQ || 4; // レギュラーピリオド数(3 or 4)
+const regQOf = (g) => +g?.regQ || 4;
 const periodsOf = (g) => regQOf(g) + (+g?.ot || 0);
 const periodLabel2 = (g, i) => (i <= regQOf(g) ? `Q${i}` : `OT${i - regQOf(g)}`);
-const periodLabel = (i) => `Q${i}`; // 後方互換(OTなし簡易表示)
+const periodLabel = (i) => `Q${i}`;
 const periodLen = (g, i) => (i <= regQOf(g) ? (+g?.qLen || 6) * 60 : (+g?.otLen || 3) * 60);
 const padQ = (arr) => { const a = [...(arr || [])]; while (a.length < 6) a.push(""); return a; };
 const normGame = (g) => {
@@ -198,7 +184,6 @@ const normGame = (g) => {
     events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
 
-/* ============ スタッツ計算 ============ */
 const matchKey = (e, side, key) =>
   e.side === side && (side === "own" ? e.playerId === key : e.oppNum === key);
 
@@ -211,10 +196,7 @@ function courtIntervals(events, side, key, g) {
       .filter((e) => matchKey(e, side, key) && e.q === q && (e.action === "IN" || e.action === "OUT"))
       .map((e) => ({ a: e.action, t: parseClock(e.time, len) ?? (e.action === "IN" ? len : 0) }));
     const inLineup = side === "own" && (lineups[q] || []).includes(key);
-    // まず時系列順(残り時間の降順)に並べる。同時刻はOUT→INの順
     evs.sort((a, b) => (b.t - a.t) || (a.a === "OUT" ? -1 : 1));
-    // 最初のイベントがOUT、またはイベントが無くlineup登録済みなら、Q頭からの出場を補完
-    // (スターター/Q頭から出ていた選手の経過時間を正しく計上。lineup未登録でも救済)
     const firstIsOut = evs.length > 0 && evs[0].a === "OUT";
     const noEventButInLineup = evs.length === 0 && inLineup;
     if (firstIsOut || noEventButInLineup) evs = [{ a: "IN", t: len }, ...evs];
@@ -282,27 +264,20 @@ const timeoutsOf = (events, side, scope) =>
   (events || []).filter((e) => e.side === side && e.action === "TOT" && (scope === "all" || e.q === scope)).length;
 const gamePts = (g) => ({ own: qSum(g.qScores?.own, periodsOf(g)), opp: qSum(g.qScores?.opp, periodsOf(g)) });
 
-// 試合の並び順: 日付 → 同日内order。descは新しい順
 const gameOrderAsc = (a, b) => (a.date || "").localeCompare(b.date || "") || ((+a.order || 0) - (+b.order || 0));
 const gameOrderDesc = (a, b) => (b.date || "").localeCompare(a.date || "") || ((+b.order || 0) - (+a.order || 0));
 
 function careerStats(games, playerId) {
   const per = games.map((g) => ({ g, s: aggStats(g.events, "own", playerId, "all", g) })).filter((x) => hasStats(x.s));
-  // 平均用: スコアが0-0(まだ未入力)の試合は除外
   const played = per.filter((x) => { const p = gamePts(x.g); return (p.own + p.opp) > 0; });
-  // Q数基準の正規化: 実施Q数合計÷基準Q数(4Q×試合数)
-  // 例: 4Q+3Q+2Q=9Q実施、基準12Q → 平均係数 = 12/9
   const totalQPlayed = played.reduce((a, x) => a + periodsOf(x.g), 0);
-  const baseQ = played.length * 4; // 全試合4Q換算の基準
-  // n は表示用の試合数(0-0除外)
+  const baseQ = played.length * 4;
   const n = played.length;
   const tot = {};
-  const totAdj = {}; // Q数基準の平均用
+  const totAdj = {};
   const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
   cntKeys.forEach((k) => {
-    // 合計は全試合(per)を集計。浮動小数点誤差を防ぐため小数第1位に丸める
     tot[k] = Math.round(per.reduce((a, x) => a + (x.s[k] || 0), 0) * 10) / 10;
-    // 平均用: played合計 ÷ 実施Q数 × 基準Q数(4Q換算)
     const playedTotal = played.reduce((a, x) => a + (x.s[k] || 0), 0);
     totAdj[k] = totalQPlayed > 0 ? playedTotal / totalQPlayed * baseQ : 0;
   });
@@ -356,7 +331,6 @@ function analysisFor(data, game, scope) {
     if (tips.length === 0) tips.push("大きな課題は見当たりません。この内容を継続しましょう。");
   }
 
-  // プロのミニバス分析アナリスト視点: 良かった点・改善点(全体・各Q)
   const goodPoints = [];
   const improvePoints = [];
   if (ownT.n > 0) {
@@ -369,7 +343,6 @@ function analysisFor(data, game, scope) {
     const margins = qData.map((x) => x.自チーム - x.相手);
     const topEff = [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff)[0];
 
-    // --- 良かった点 ---
     if (fgp >= 0.45 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は小学生年代では非常に高い水準です。無理のないシュートセレクションができており、ボールを動かして良い形を作れていた証拠です。`);
     else if (fgp >= 0.38 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は年代の平均を上回ります。シュートチャンスの選び方は概ね良好でした。`);
     if (oppFgp > 0 && oppFgp < 0.35 && oppT.fga >= (isAll ? 8 : 3)) goodPoints.push(`相手のFG成功率を${pct(oppT.fgm, oppT.fga)}に抑えました。ディフェンスのプレッシャーとヘルプが機能し、イージーシュートを与えていません。`);
@@ -382,7 +355,6 @@ function analysisFor(data, game, scope) {
     if (topEff && topEff.s.eff >= (isAll ? 12 : 5)) goodPoints.push(`${topEff.label}がEFF${topEff.s.eff}と高い貢献度を記録。${topEff.s.pts}得点${topEff.s.reb}リバウンド${topEff.s.ast}アシストとチームを支えました。`);
     if (goodPoints.length === 0) goodPoints.push(`${sl}は数字上の強みは控えめでしたが、最後まで走り切る姿勢が見えました。次につながる内容です。`);
 
-    // --- 改善点 ---
     if (fgp < 0.33 && ownT.fga >= (isAll ? 10 : 4)) improvePoints.push(`FG成功率${pct(ownT.fgm, ownT.fga)}は改善余地があります。遠い位置からの難しいシュートが多くなっていないか、ゴール下やフリーの味方を使えていたか映像で確認したいところです。練習ではレイアップとゴール下フィニッシュの本数を増やしましょう。`);
     if (ownT.to >= (isAll ? 12 : 4)) improvePoints.push(`ターンオーバー${ownT.to}個は多めです。相手のプレッシャーに対してパスを焦った場面が想定されます。ピボット、ボールミート、強いパスの3点をドリルで徹底すると減らせます。`);
     if (oppT.or >= (isAll ? 8 : 3)) improvePoints.push(`相手にオフェンスリバウンドを${oppT.or}本許しました。シュートが打たれた瞬間の「ボックスアウト」を全員が徹底することで、相手のセカンドチャンスを減らせます。`);
@@ -394,7 +366,6 @@ function analysisFor(data, game, scope) {
     if (improvePoints.length === 0) improvePoints.push(`${sl}は大きな穴は見当たりませんでした。強いて言えば、リードした時間帯でも安易なプレーに逃げず、丁寧なバスケットを続けられると盤石になります。`);
   }
 
-  // 旧insights/tipsは残すが画面では未使用(レポート互換のため保持)
   void insights; void tips;
 
   const reviews = scope === "all" ? [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff).map((r, i) => {
@@ -462,7 +433,6 @@ function flowAnalysis(data, game) {
   return { periodNotes, leadChanges, sorted };
 }
 
-/* ============ 共通UI ============ */
 const Card = ({ children, className = "", style }) => {
   const C = useC();
   return <div className={`rounded-2xl p-4 ${className}`} style={{ background: C.card, border: `1px solid ${C.border}`, ...style }}>{children}</div>;
@@ -508,7 +478,6 @@ function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods,
   return (
     <div className="rounded-xl px-4 py-3"
       style={{ background: C.board, border: `1px solid ${C.border}`, fontFamily: "'Bebas Neue', sans-serif" }}>
-      {/* メインスコア行 */}
       <div className="flex items-center justify-between">
         <div className="text-center flex-1">
           <div className="text-xs tracking-widest" style={{ fontFamily: "sans-serif", color: C.sub }}>府中六小</div>
@@ -529,7 +498,6 @@ function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods,
           <div className={small ? "text-5xl" : "text-7xl"} style={{ color: C.oppText, lineHeight: 1.1 }}>{opp}</div>
         </div>
       </div>
-      {/* Q別スコアテーブル(試合詳細のみ・合計列なし) */}
       {!small && qScores && periods > 0 && (
         <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${C.border}44` }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "sans-serif" }}>
@@ -589,7 +557,6 @@ function OppLogo({ o, size = 36 }) {
   );
 }
 
-/* ============ メイン ============ */
 export default function App() {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("home");
@@ -670,8 +637,6 @@ export default function App() {
         @keyframes accentLine { from{height:0;opacity:0} to{height:60%;opacity:1} }
         @keyframes splashGlow { 0%,100%{opacity:.6} 50%{opacity:1} }
       `}</style>
-
-      {/* 背景: U12を右側に斜め大きく(案C) */}
       <div className="absolute pointer-events-none select-none"
         style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: "clamp(160px,45vw,220px)",
           lineHeight: .85, letterSpacing: "-.02em",
@@ -681,51 +646,35 @@ export default function App() {
           userSelect: "none" }}>
         U12
       </div>
-
-      {/* 左縦アクセントライン */}
       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full"
         style={{ background: `linear-gradient(180deg,transparent,${CT.orange},transparent)`,
           animation: "accentLine 1s ease-out .2s both", height: "60%" }} />
-
-      {/* 下部グロー */}
       <div className="absolute pointer-events-none"
         style={{ bottom: -30, left: "50%", transform: "translateX(-50%)",
           width: 220, height: 110, borderRadius: "50%",
           background: `rgba(232,96,42,${theme === "dark" ? "0.16" : "0.08"})`,
           filter: "blur(28px)", animation: "splashGlow 3s ease-in-out infinite" }} />
-
-      {/* メインコンテンツ */}
       <div className="relative flex flex-col items-center px-8 w-full"
         style={{ animation: "splashIn .7s ease-out" }}>
-
-        {/* バッジ */}
         <div className="mb-4 px-4 py-1 rounded text-white font-bold"
           style={{ background: CT.orange, fontFamily: "'Bebas Neue',sans-serif",
             fontSize: 11, letterSpacing: "0.28em" }}>
           FUCHUROKU MINIBASKET
         </div>
-
-        {/* チーム名: 「府中六小」で改行 */}
         <div className="font-black text-center" style={{
           fontSize: "clamp(20px,5.5vw,28px)", letterSpacing: "0.02em", lineHeight: 1.3,
           color: theme === "dark" ? "#fff" : "#1A2740",
           textShadow: theme === "dark" ? "0 0 40px rgba(232,96,42,0.45), 0 2px 14px rgba(0,0,0,0.9)" : "none" }}>
           府中六小<br />ミニバスケットボールクラブ
         </div>
-
-        {/* サブテキスト */}
         <div className="mt-2" style={{ fontSize: 10, letterSpacing: "0.18em",
           color: theme === "dark" ? "#4A6080" : "#8FA0C0" }}>
           TOKYO &nbsp;·&nbsp; MINIBASKETBALL TEAM
         </div>
-
-        {/* 装飾ライン */}
         <div className="rounded-full my-4"
           style={{ height: 1.5,
             background: `linear-gradient(90deg,transparent,${CT.orange},transparent)`,
             animation: "splashLine 1s ease-out .3s both" }} />
-
-        {/* GAME MANAGEMENT APP */}
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17,
           color: "#8FA0C0", letterSpacing: "0.3em", paddingLeft: "0.3em" }}>
           GAME MANAGEMENT
@@ -736,7 +685,6 @@ export default function App() {
           APP
         </div>
       </div>
-
       {!data && <div className="absolute bottom-12 text-xs" style={{ color: CT.sub }}>読み込み中…</div>}
     </div>
   );
@@ -754,7 +702,6 @@ export default function App() {
     ...(isAdmin ? [{ t: "settings", icon: Settings, label: "設定" }] : []),
   ];
 
-  // ログインモーダル
   const loginModal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0008" }}>
       <div className="rounded-2xl p-6 w-72" style={{ background: C.card, border: `1px solid ${C.border}` }}>
@@ -812,11 +759,8 @@ export default function App() {
       {showLogin && loginModal}
 
       {isPC ? (
-        /* ============ PCレイアウト ============ */
         <div className="flex h-screen overflow-hidden">
-          {/* サイドバー */}
           <aside className="w-56 shrink-0 flex flex-col" style={{ background: C.sidebar, borderRight: `1px solid ${C.border}` }}>
-            {/* ロゴ */}
             <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: `1px solid ${C.border}` }}>
               {data.team.logo
                 ? <img src={data.team.logo} alt="" className="w-9 h-9 rounded-full object-cover" />
@@ -829,7 +773,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {/* ナビ */}
             <nav className="flex-1 py-3 space-y-1 px-2">
               {NAV_ITEMS.map(({ t, icon: I, label }) => (
                 <button key={t} onClick={() => { setTab(t); setNav({}); }}
@@ -840,7 +783,6 @@ export default function App() {
                 </button>
               ))}
             </nav>
-            {/* 保存状態 + テーマ切替 */}
             <div className="px-4 py-3 text-xs flex items-center justify-between" style={{ color: saveState.startsWith("error") ? CT.loss : CT.sub, borderTop: `1px solid ${CT.border}` }}>
               <span>{saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : "データ同期済み"}</span>
               <button onClick={toggleTheme} className="ml-2 px-2 py-1 rounded-lg text-xs font-bold"
@@ -850,7 +792,6 @@ export default function App() {
           {mainContent}
         </div>
       ) : (
-        /* ============ スマホレイアウト ============ */
         <>
           <header className="sticky top-0 z-20 px-4 py-3 flex items-center gap-2.5 shadow-lg"
             style={{ background: CT.nav, borderBottom: `1px solid ${CT.border}` }}>
@@ -885,21 +826,18 @@ export default function App() {
   );
 }
 
-/* ============ ダッシュボード ============ */
 function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const C = useC();
   const games = [...data.games].sort(gameOrderDesc);
   const results = games.map((g) => ({ g, ...gamePts(g) }));
-  // 勝敗集計: 参考試合(countWL=false)を除外
   const wlResults = results.filter((r) => gameCatOf(r.g.category).countWL);
-  const refCount = results.length - wlResults.length; // 参考試合数
+  const refCount = results.length - wlResults.length;
   const w = wlResults.filter((r) => r.own > r.opp).length;
   const l = wlResults.filter((r) => r.own < r.opp).length;
   const n = wlResults.length;
   const avgPF = n ? wlResults.reduce((a, r) => a + r.own, 0) / n : 0;
   const avgPA = n ? wlResults.reduce((a, r) => a + r.opp, 0) / n : 0;
   const stars = useMemo(() => {
-    // 直近5試合の平均EFFが高い順に上位5人(0-0の未入力試合は除外)
     const recent5 = [...data.games].filter((g) => { const p = gamePts(g); return (p.own + p.opp) > 0; }).sort(gameOrderDesc).slice(0, 5);
     if (recent5.length === 0) return [];
     const rows = [];
@@ -916,7 +854,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
 
   return (
     <div className={isPC ? "grid grid-cols-2 gap-5" : "space-y-3"}>
-      {/* 成績カード */}
       <Card className={isPC ? "col-span-2" : ""}>
         <SectionTitle>シーズン成績{refCount > 0 ? `(参考試合${refCount}試合を除く)` : ""}</SectionTitle>
         <div className="flex items-end justify-center gap-8 py-1" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
@@ -931,7 +868,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
         </div>
       </Card>
 
-      {/* 注目選手(上位5人) */}
       {stars.length > 0 && (
         <Card className="h-full">
           <SectionTitle>注目選手(直近5試合の平均EFF)</SectionTitle>
@@ -960,7 +896,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
         </Card>
       )}
 
-      {/* 直近の試合 */}
       <Card className="h-full">
         <div className="flex items-center justify-between mb-2">
           <SectionTitle>直近の試合</SectionTitle>
@@ -990,7 +925,6 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   );
 }
 
-/* ============ 選手フォーム ============ */
 function PlayerForm({ initial, onSave, onCancel }) {
   const C = useC();
   const [f, setF] = useState(initial || { name: "", codename: "", number: "", bibs: "", grade: "6", photo: "", goal: "", targets: [] });
@@ -1095,20 +1029,18 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   const C = useC();
   const p = data.players.find((x) => x.id === nav.playerId);
   const [editing, setEditing] = useState(false);
-  const [trendStat, setTrendStat] = useState("eff"); // 推移グラフの表示項目
-  const [selGame, setSelGame] = useState(null); // 推移とスタッツの連動用(選択中の試合id)
-  const [effStat, setEffStat] = useState("fgp"); // 効率グラフ: FG% or FT%
+  const [trendStat, setTrendStat] = useState("eff");
+  const [selGame, setSelGame] = useState(null);
+  const [effStat, setEffStat] = useState("fgp");
   if (!p) return null;
-  // 前後の選手ナビゲーション(背番号順)
   const sortedPlayers = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
   const curIdx = sortedPlayers.findIndex((x) => x.id === p.id);
   const prevPlayer = curIdx > 0 ? sortedPlayers[curIdx - 1] : null;
   const nextPlayer = curIdx < sortedPlayers.length - 1 ? sortedPlayers[curIdx + 1] : null;
   const games = [...data.games].sort(gameOrderAsc);
   const { per, n, tot, totAdj, gamesPlayed, totalQPlayed, baseQ } = careerStats(games, p.id);
-  const hasVaryQ = per.some((x) => regQOf(x.g) !== 4); // Q数が混在しているか
+  const hasVaryQ = per.some((x) => regQOf(x.g) !== 4);
   const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
-  // 推移グラフ: EFF/得点/アシスト/リバウンドから選択
   const TREND_OPTS = [
     { k: "eff", label: "EFF", color: "#3DBE7B" },
     { k: "pts", label: "得点", color: "#FF7A3D" },
@@ -1117,9 +1049,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   ];
   const trendOpt = TREND_OPTS.find((o) => o.k === trendStat);
   const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, value: x.s[trendStat], gid: x.g.id }));
-  // 通算成績と同じQ数基準の加重平均: totAdj / n (0-0除外・Q数補正済み)
   const trendAvg = n > 0 ? totAdj[trendStat] / n : 0;
-  // キャリアハイ(1試合の最高記録)
   const careerHigh = {};
   ["pts", "reb", "ast", "stl", "blk", "eff"].forEach((k) => {
     let best = null;
@@ -1144,7 +1074,6 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
           }}><Trash2 size={18} /></button>}
         </div>
       </div>
-      {/* 前後の選手ナビ */}
       <div className="flex gap-2">
         <button className="flex-1 flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold truncate"
           style={{ background: C.card2, color: prevPlayer ? C.text : C.border }}
@@ -1212,7 +1141,6 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
         <SectionTitle>通算成績({gamesPlayed}試合 / {totalQPlayed}Q)</SectionTitle>
         {hasVaryQ && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均はQ数基準で算出(実施{totalQPlayed}Q ÷ 基準{baseQ}Q)。全試合4Q換算の平均値です。</div>}
         {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (() => {
-          // チーム内順位を計算
           const allGames = [...data.games].sort(gameOrderAsc);
           const teamAvgs = data.players.map((pl) => {
             const cs = careerStats(allGames, pl.id);
@@ -1298,8 +1226,6 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
       {n > 0 && (
         <Card>
           <SectionTitle>試合ごとの推移とスタッツ</SectionTitle>
-
-          {/* ===== 上段: パフォーマンス推移 ===== */}
           <div className="text-[11px] font-bold mb-2 mt-1" style={{ color: C.sub }}>パフォーマンス推移</div>
           <div className="flex gap-1.5 mb-3">
             {TREND_OPTS.map((o) => (
@@ -1328,8 +1254,6 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
                 }} />
             </LineChart>
           </ResponsiveContainer>
-
-          {/* ===== 下段: シュート効率 FG%/FT% タブ切り替え ===== */}
           {(() => {
             const EFF_OPTS = [
               { k: "fgp", label: "FG%", color: C.orange,   made: "fgm", att: "fga" },
@@ -1343,7 +1267,6 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
               att: x.s[eo.att],
             }));
             const vals = effChart.map((d) => d.val).filter((v) => v !== null);
-            // 通算成績と同じ計算方式に統一: 合計成功数 ÷ 合計試投数(加重平均)
             const totalMade = per.reduce((a, x) => a + (x.s[eo.made] || 0), 0);
             const totalAtt = per.reduce((a, x) => a + (x.s[eo.att] || 0), 0);
             const avg = totalAtt > 0 ? Math.round((totalMade / totalAtt) * 1000) / 10 : null;
@@ -1352,7 +1275,6 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
               <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${C.border}` }}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-[11px] font-bold" style={{ color: C.sub }}>シュート効率</div>
-                  {/* FG% / FT% タブ */}
                   <div className="flex rounded-lg overflow-hidden text-xs font-bold" style={{ border: `1px solid ${C.border}` }}>
                     {EFF_OPTS.map((o) => (
                       <button key={o.k} onClick={() => setEffStat(o.k)} className="px-4 py-1.5"
@@ -1398,7 +1320,6 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
               </div>
             );
           })()}
-
           <div className="text-[10px] text-center my-3" style={{ color: C.sub }}>グラフの点や下の表をタップすると、その試合が連動してハイライトされます</div>
           <div className="overflow-x-auto -mx-1">
             <table className="text-xs w-full min-w-[700px]">
@@ -1432,7 +1353,6 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
   );
 }
 
-/* ============ 試合フォーム ============ */
 function GameForm({ data, initial, onSave, onCancel }) {
   const C = useC();
   const [f, setF] = useState(initial ? { ...normGame(initial), newOpp: "" } : {
@@ -1444,15 +1364,12 @@ function GameForm({ data, initial, onSave, onCancel }) {
   const periods = (+f.regQ || 4) + (+f.ot || 0);
   const setQ = (side, i, v) => setF({ ...f, qScores: { ...f.qScores, [side]: f.qScores[side].map((x, j) => (j === i ? v : x)) } });
   const oppFull = !f.opponentId && data.opponents.length >= MAX_OPPONENTS;
-  // 同じ日の試合数(自分以外)
   const sameDayGames = data.games.filter((x) => x.date === f.date && x.id !== initial?.id);
 
   const handleSave = () => {
-    // Qが減る方向への変更で、削除されるQにデータがある場合は確認してクリア
     const wasRegQ = initial ? regQOf(initial) : 4;
     const newRegQ = +f.regQ || 4;
     if (wasRegQ > newRegQ) {
-      // 削除されるQ(newRegQ+1 〜 wasRegQ)にデータがあるか確認
       const removedQs = Array.from({ length: wasRegQ - newRegQ }, (_, i) => newRegQ + 1 + i);
       const hasScore = removedQs.some((q) => (+f.qScores?.own?.[q - 1] || 0) + (+f.qScores?.opp?.[q - 1] || 0) > 0);
       const hasEvents = removedQs.some((q) => (initial?.events || []).some((e) => e.q === q));
@@ -1460,7 +1377,6 @@ function GameForm({ data, initial, onSave, onCancel }) {
         const qLabels = removedQs.map((q) => `Q${q}`).join("・");
         const msg = `${newRegQ}ピリオド制に変更すると、${qLabels}のデータが削除されます。よろしいですか?`;
         if (!confirm(msg)) return;
-        // 削除されるQのスコア・イベント・ラインナップをクリア
         const own = [...f.qScores.own]; const opp = [...f.qScores.opp];
         removedQs.forEach((q) => { own[q - 1] = ""; opp[q - 1] = ""; });
         const cleared = { ...f, qScores: { own, opp }, _clearQs: removedQs };
@@ -1572,7 +1488,6 @@ function GameForm({ data, initial, onSave, onCancel }) {
   );
 }
 
-/* ============ 試合一覧 ============ */
 function GameRow({ g, setNav, showOpp, oppName }) {
   const C = useC();
   const { own, opp } = gamePts(g);
@@ -1581,7 +1496,6 @@ function GameRow({ g, setNav, showOpp, oppName }) {
     <button className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
       style={{ background: C.card2 }} onClick={() => setNav({ gameId: g.id })}>
       <span className="text-xs w-20 text-left shrink-0" style={{ color: C.sub }}>{g.date}</span>
-      {/* 区分バッジ(参考試合のみ表示) */}
       {cat.k === "ref" && (
         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: cat.color, color: "#fff" }}>{cat.badge}</span>
       )}
@@ -1593,12 +1507,10 @@ function GameRow({ g, setNav, showOpp, oppName }) {
   );
 }
 
-/* ============ チームスタッツ ============ */
 function TeamStatsCard({ data, oppName }) {
   const C = useC();
   const [trendStat, setTrendStat] = useState("own");
-  const [effStat, setEffStat] = useState("fgp"); // シュート効率グラフ
-  // 全試合(参考試合含む)を日付昇順で
+  const [effStat, setEffStat] = useState("fgp");
   const allGames = [...data.games].sort(gameOrderAsc);
   const n = allGames.length;
   if (n === 0) return null;
@@ -1618,10 +1530,8 @@ function TeamStatsCard({ data, oppName }) {
     };
   });
 
-  // 合計: 全試合
   const sumOf = (k) => perGame.reduce((a, x) => a + (x[k] || 0), 0);
 
-  // 平均: careerStatsと同じQ数基準(0-0除外・Q数補正・参考試合含む)
   const played = perGame.filter((x) => (x.own + x.opp) > 0);
   const totalQPlayed = played.reduce((a, x) => a + periodsOf(x.g), 0);
   const baseQ = played.length * 4;
@@ -1647,51 +1557,45 @@ function TeamStatsCard({ data, oppName }) {
     ? played.reduce((a, x) => a + (x[trendStat] || 0), 0) / totalQPlayed * baseQ / played.length
     : 0;
 
+  const SubBox = ({ label, main, corner }) => (
+    <div className="rounded-lg py-2 px-1 text-center relative" style={{ background: C.card2 }}>
+      <div className="absolute top-1 right-1.5 text-[6px]" style={{ color: C.border }}>{corner}</div>
+      <div className="text-base font-bold mt-1" style={{ fontFamily: "'Bebas Neue',sans-serif" }}>{main}</div>
+      <div className="text-[8px]" style={{ color: C.sub }}>{label}</div>
+    </div>
+  );
+
   return (
     <Card>
-      <div className="flex items-center justify-between mb-2">
-        <SectionTitle>チームスタッツ({n}試合)</SectionTitle>
-      </div>
-      {hasVaryQ && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均はQ数基準で算出(全試合4Q換算)</div>}
-      {/* 合計・平均グリッド */}
-      <div className="grid grid-cols-3 gap-2 mt-1">
-        {[
-          ["得点", sumOf("own"), fmt1(avgOf("own"))],
-          ["失点", sumOf("opp"), fmt1(avgOf("opp"))],
-          ["REB",  sumOf("reb"), fmt1(avgOf("reb"))],
-          ["AST",  sumOf("ast"), fmt1(avgOf("ast"))],
-          ["STL",  sumOf("stl"), fmt1(avgOf("stl"))],
-          ["BLK",  sumOf("blk"), fmt1(avgOf("blk"))],
-          ["TO",   sumOf("to"),  fmt1(avgOf("to"))],
-          ["PF",   sumOf("pf"),  fmt1(avgOf("pf"))],
-        ].map(([l, tot, avg]) => (
-          <div key={l} className="rounded-xl overflow-hidden" style={{ background: C.card2 }}>
-            <div className="text-center pt-2 pb-1 px-1">
-              <div className="text-[8px] font-bold mb-0.5" style={{ color: C.sub }}>合計</div>
-              <div className="text-xl font-bold leading-tight" style={{ fontFamily: "'Bebas Neue',sans-serif" }}>{tot}</div>
-            </div>
-            <div className="text-center pb-2 px-1" style={{ borderTop: `1px solid ${C.border}` }}>
-              <div className="text-[8px] font-bold mb-0.5 mt-1" style={{ color: C.sub }}>平均</div>
-              <div className="text-[14px] font-bold leading-tight" style={{ fontFamily: "'Bebas Neue',sans-serif", color: C.orange }}>{avg}</div>
-            </div>
-            <div className="text-[9px] text-center pb-2" style={{ color: C.sub }}>{l}</div>
-          </div>
-        ))}
-      </div>
-      {/* FG% / FT% 独立表示 */}
+      <SectionTitle>チームスタッツ({n}試合)</SectionTitle>
+      {hasVaryQ && <div className="text-[10px] mt-1 mb-1" style={{ color: C.sub }}>※平均はQ数基準で算出(全試合4Q換算)</div>}
+
       <div className="flex gap-2 mt-2">
-        {[
-          ["FG%", sumOf("fgm"), sumOf("fga"), "フィールドゴール"],
-          ["FT%", sumOf("ftm"), sumOf("fta"), "フリースロー"],
-        ].map(([label, made, att, desc]) => (
-          <div key={label} className="flex-1 rounded-xl px-3 py-2.5 text-center" style={{ background: C.card2 }}>
-            <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue',sans-serif" }}>{pctOf(made, att)}</div>
-            <div className="text-[9px] mt-0.5" style={{ color: C.sub }}>{label}</div>
-            <div className="text-[8px]" style={{ color: C.sub }}>{att > 0 ? `${made}/${att}` : "–"}</div>
-          </div>
-        ))}
+        <div className="flex-1 rounded-2xl px-3 py-3 text-center relative overflow-hidden"
+          style={{ background: `linear-gradient(135deg, ${C.orange}22, ${C.orange}08)`, border: `1px solid ${C.orange}33` }}>
+          <div className="text-[10px] font-bold" style={{ color: C.orange }}>得点</div>
+          <div className="text-4xl font-bold leading-none mt-1" style={{ fontFamily: "'Bebas Neue',sans-serif", color: C.orange }}>{fmt1(avgOf("own"))}</div>
+          <div className="text-[9px] mt-1" style={{ color: C.sub }}>合計 {sumOf("own")}</div>
+        </div>
+        <div className="flex-1 rounded-2xl px-3 py-3 text-center relative overflow-hidden"
+          style={{ background: `linear-gradient(135deg, ${C.loss}22, ${C.loss}08)`, border: `1px solid ${C.loss}33` }}>
+          <div className="text-[10px] font-bold" style={{ color: C.loss }}>失点</div>
+          <div className="text-4xl font-bold leading-none mt-1" style={{ fontFamily: "'Bebas Neue',sans-serif", color: C.loss }}>{fmt1(avgOf("opp"))}</div>
+          <div className="text-[9px] mt-1" style={{ color: C.sub }}>合計 {sumOf("opp")}</div>
+        </div>
       </div>
-      {/* チーム最高記録 */}
+
+      <div className="grid grid-cols-4 gap-1.5 mt-2">
+        <SubBox label="FG%" main={pctOf(sumOf("fgm"), sumOf("fga"))} corner={sumOf("fga") > 0 ? `${sumOf("fgm")}/${sumOf("fga")}` : ""} />
+        <SubBox label="FT%" main={pctOf(sumOf("ftm"), sumOf("fta"))} corner={sumOf("fta") > 0 ? `${sumOf("ftm")}/${sumOf("fta")}` : ""} />
+        <SubBox label="REB" main={fmt1(avgOf("reb"))} corner={`計${sumOf("reb")}`} />
+        <SubBox label="AST" main={fmt1(avgOf("ast"))} corner={`計${sumOf("ast")}`} />
+        <SubBox label="STL" main={fmt1(avgOf("stl"))} corner={`計${sumOf("stl")}`} />
+        <SubBox label="BLK" main={fmt1(avgOf("blk"))} corner={`計${sumOf("blk")}`} />
+        <SubBox label="TO" main={fmt1(avgOf("to"))} corner={`計${sumOf("to")}`} />
+        <SubBox label="PF" main={fmt1(avgOf("pf"))} corner={`計${sumOf("pf")}`} />
+      </div>
+
       {n >= 2 && (
         <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
           <div className="text-[10px] font-bold mb-2" style={{ color: C.led }}>🏅 チーム最高記録(1試合)</div>
@@ -1709,7 +1613,6 @@ function TeamStatsCard({ data, oppName }) {
           </div>
         </div>
       )}
-      {/* 折れ線グラフ */}
       {n >= 2 && (
         <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
           <div className="flex gap-1.5 mb-2 flex-wrap">
@@ -1734,7 +1637,6 @@ function TeamStatsCard({ data, oppName }) {
           </ResponsiveContainer>
         </div>
       )}
-      {/* シュート効率グラフ */}
       {n >= 2 && (() => {
         const EFF_OPTS = [
           { k: "fgp", label: "FG%", made: "fgm", att: "fga", color: C.orange },
@@ -1745,7 +1647,6 @@ function TeamStatsCard({ data, oppName }) {
           name: x.g.date?.slice(5) || "",
           val: x[eo.att] > 0 ? Math.round(x[eo.made] / x[eo.att] * 1000) / 10 : null,
         }));
-        const effVals = effData.map((d) => d.val).filter((v) => v !== null);
         const totalMade = perGame.reduce((a, x) => a + (x[eo.made] || 0), 0);
         const totalAtt = perGame.reduce((a, x) => a + (x[eo.att] || 0), 0);
         const effAvg = totalAtt > 0 ? Math.round(totalMade / totalAtt * 1000) / 10 : 0;
@@ -1787,7 +1688,6 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   const [openKey, setOpenKey] = useState(null);
   const [catFilter, setCatFilter] = useState("all");
   const games = [...data.games].sort(gameOrderDesc);
-  // カテゴリーフィルター適用後の試合一覧
   const filteredGames = catFilter === "all" ? games : games.filter((g) => (g.category || "practice") === catFilter);
   const results = filteredGames.map((g) => ({ g, ...gamePts(g) }));
   if (adding) return (
@@ -1824,10 +1724,8 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
         <Plus size={18} /> 試合を登録 {games.length >= MAX_GAMES ? `(上限${MAX_GAMES}試合)` : ""}
       </button>}
 
-      {/* ===== チームスタッツカード ===== */}
       {games.length > 0 && <TeamStatsCard data={data} oppName={oppName} />}
 
-      {/* カテゴリーフィルタータブ */}
       <div className="flex gap-1.5">
         <button className="flex-1 py-2 rounded-xl text-xs font-bold"
           style={catFilter === "all" ? { background: C.text, color: C.bg } : { border: `1px solid ${C.border}`, color: C.sub }}
@@ -1846,9 +1744,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
         })}
       </div>
 
-      {/* 相手レベル別・府中市内の成績: 全てタブのみ・公式戦のみ集計 */}
       {catFilter === "all" && games.length > 0 && (() => {
-        // 公式戦のみ集計
         const officialResults = games.map((g) => ({ g, ...gamePts(g) })).filter((r) => (r.g.category || "practice") === "official");
         const wldOf2 = (rs) => ({ w: rs.filter((r) => r.own > r.opp).length, l: rs.filter((r) => r.own < r.opp).length, d: rs.filter((r) => r.own === r.opp).length });
         const fuchuRs = officialResults.filter((r) => (getOpp(r.g.opponentId)?.area || "").includes("府中"));
@@ -1863,10 +1759,9 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
               <SectionTitle>相手レベル別の成績</SectionTitle>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: GAME_CATS[0].color, color: "#fff" }}>公式戦のみ</span>
             </div>
-            {/* 府中市内 */}
             <button className="w-full flex items-center gap-3 pb-3 text-left" style={{ borderBottom: `1px solid ${C.border}` }}
               onClick={() => setOpenKey(openKey === "fuchu" ? null : "fuchu")}>
-              <img src="data:image/jpeg;base64,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" alt="府中市" className="w-9 h-9 rounded-full object-cover shrink-0" />
+              <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: C.card2 }}>🏀</div>
               <div className="flex-1">
                 <div className="font-bold text-sm">府中市内のチーム</div>
                 <div className="text-[10px]" style={{ color: C.sub }}>{fuchuRs.length}試合</div>
@@ -1886,7 +1781,6 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
                   : fuchuRs.map((r) => <GameRow key={r.g.id} g={r.g} setNav={setNav} showOpp oppName={oppName} />)}
               </div>
             )}
-            {/* Tier別 */}
             <div className="space-y-2 mt-3">
               {tierStats2.map(({ t, w, l, d, n, rs }) => (
                 <div key={t.k}>
@@ -1991,7 +1885,6 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   );
 }
 
-/* ============ 試合詳細 ============ */
 function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   const C = useC();
   const g = data.games.find((x) => x.id === nav.gameId);
@@ -2052,23 +1945,20 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   );
 }
 
-/* ============ Play by Play 入力 ============ */
 function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const C = useC();
   const periods = periodsOf(game);
   const [q, setQ] = useState(1);
   const [time, setTime] = useState("");
   const [side, setSide] = useState("own");
-  // 相手側はデフォルトでチームを選択
   const [sel, setSel] = useState(null);
   const [insertAfter, setInsertAfter] = useState(null);
   const [showLineup, setShowLineup] = useState(false);
   const [qLocked, setQLocked] = useState(false);
   const [flash, setFlash] = useState(null);
   const flashTimer = useRef(null);
-  const [editEvent, setEditEvent] = useState(null); // 編集中のイベント(null=非表示)
+  const [editEvent, setEditEvent] = useState(null);
 
-  // side変更時: 相手ならTEAM_KEYをデフォルト選択
   const changeSide = (k) => {
     setSide(k);
     setSel(k === "opp" ? TEAM_KEY : null);
@@ -2077,7 +1967,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const opponent = data.opponents.find((o) => o.id === game.opponentId);
   const oppNums = (opponent?.numbers || "").split(/[,、\s]+/).filter(Boolean);
   const lineup = game.lineups?.[q] || [];
-  // 選手チップは常に背番号順で固定(入力のたびに並びが動かないように)
   const players = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
   const updGame = (fn) => save({ ...data, games: data.games.map((x) => (x.id === game.id ? fn(x) : x)) });
   const toggleLineup = (pid) => {
@@ -2110,9 +1999,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
       } else { events = [...x.events, ev]; }
       return { ...x, events, qScores: pts ? applyScore(x.qScores, side, q - 1, pts) : x.qScores };
     });
-    // sel・side・timeは保持(前の入力を引き継ぐ)
     if (insertAfter) setInsertAfter(ev.id);
-    // 視覚フィードバック: 記録内容を一瞬表示
     const who = key === TEAM_KEY ? (side === "own" ? "自チーム" : "相手チーム") : (side === "own" ? pName(key) : `相手 #${key}`);
     setFlash({ id: ev.id, text: `${who} – ${ACTION_LABEL[action]}${pts ? ` (+${pts})` : ""}` });
     clearTimeout(flashTimer.current);
@@ -2124,7 +2011,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     if (insertAfter === id) setInsertAfter(null);
     updGame((x) => ({ ...x, events: x.events.filter((e) => e.id !== id), qScores: pts ? applyScore(x.qScores, ev.side, ev.q - 1, -pts) : x.qScores }));
   };
-  // イベントを編集保存: スコアの差分を調整
   const saveEditEvent = (updated) => {
     const orig = (game.events || []).find((e) => e.id === updated.id);
     if (!orig) return;
@@ -2132,26 +2018,22 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     const newPts = PTS_OF[updated.action] || 0;
     updGame((x) => {
       let qs = x.qScores;
-      // 元のスコアを取り消し
       if (origPts) qs = applyScore(qs, orig.side, orig.q - 1, -origPts);
-      // 新スコアを加算
       if (newPts) qs = applyScore(qs, updated.side, updated.q - 1, newPts);
       return { ...x, events: x.events.map((e) => e.id === updated.id ? updated : e), qScores: qs };
     });
     setEditEvent(null);
   };
-  // 残り時間を取得(入力欄が空ならpromptで聞く)。"M:SS"形式
   const askRemain = (label) => {
     let t = time.trim();
     if (!t) {
       const len = (q <= regQOf(game) ? (+game.qLen || 6) : (+game.otLen || 3));
       const ans = prompt(`${label}した時点の「残り時間」を入力してください(例: 4:30)\n※${periodLabel2(game, q)}の長さは${len}分です。空欄ならQ満了(${len}:00)として計算します。`, "");
-      if (ans === null) return undefined; // キャンセル
+      if (ans === null) return undefined;
       t = (ans || "").trim();
     }
     return t;
   };
-  // 交代IN: ベンチ選手を投入(INイベント記録 + 出場メンバー追加 + 選択状態に)
   const subInPlayer = (pid) => {
     const p = data.players.find((x) => x.id === pid);
     const t = askRemain(`#${p?.number} ${p?.codename || p?.name} が交代IN`);
@@ -2171,7 +2053,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 1300);
   };
-  // 交代OUT: 出場選手をベンチに戻す(OUTイベント記録 + 出場メンバーから除外)
   const subOutPlayer = (pid) => {
     const p = data.players.find((x) => x.id === pid);
     const t = askRemain(`#${p?.number} ${p?.codename || p?.name} が交代OUT`);
@@ -2196,12 +2077,10 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
     return p ? `#${p.number} ${p.codename || p.name}` : "?";
   };
   const events = game.events || [];
-  // ログは降順(新しい順)表示
   const logEvents = [...events].reverse();
   return (
     <div className="space-y-3">
       {isAdmin && <Card>
-        {/* Q選択 + 固定トグル */}
         <div className="flex items-center gap-2 mb-3">
           <div className="flex gap-1.5 flex-1 overflow-x-auto">
             {Array.from({ length: periods }, (_, i) => i + 1).map((n) => (
@@ -2274,7 +2153,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                 <button onClick={() => setSel(TEAM_KEY)}
                   className="px-3 py-2 rounded-full text-sm font-bold"
                   style={sel === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}>チーム</button>
-                {/* 出場メンバーのみ表示 */}
                 {players.filter((p) => lineup.includes(p.id)).map((p) => (
                   <button key={p.id} onClick={() => setSel(p.id)}
                     className="px-3 py-2 rounded-full text-sm font-bold"
@@ -2283,7 +2161,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                   </button>
                 ))}
               </div>
-              {/* 交代OUT: 選択中の出場選手をベンチに戻す */}
               {sel && sel !== TEAM_KEY && lineup.includes(sel) && (
                 <button onClick={() => subOutPlayer(sel)}
                   className="mb-2 px-3 py-2 rounded-xl text-xs font-bold w-full flex items-center justify-center gap-1.5"
@@ -2291,7 +2168,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                   🔄 {pName(sel)} を交代OUT(ベンチに戻す)
                 </button>
               )}
-              {/* 交代IN: ベンチ選手を投入 */}
               {players.filter((p) => !lineup.includes(p.id)).length > 0 && (
                 <div className="mb-3 p-2 rounded-xl" style={{ background: C.card2 }}>
                   <div className="text-[10px] font-bold mb-1.5" style={{ color: C.sub }}>🔄 交代IN(ベンチから投入 → 出場メンバーに追加)</div>
@@ -2344,7 +2220,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         </div>
       </Card>}
 
-      {/* 記録トースト: 押したことが視覚的にわかる */}
       {flash && (
         <div className="fixed left-1/2 z-40 px-4 py-2.5 rounded-full text-sm font-bold shadow-lg pointer-events-none flash-toast"
           style={{ bottom: 90, transform: "translateX(-50%)", background: C.win, color: "#fff" }}>
@@ -2386,7 +2261,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         )}
       </Card>
 
-      {/* ===== プレイログ編集モーダル ===== */}
       {editEvent && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.6)" }}
           onClick={() => setEditEvent(null)}>
@@ -2397,13 +2271,11 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
               <div className="font-bold">プレイを編集</div>
               <button onClick={() => setEditEvent(null)}><X size={18} style={{ color: C.sub }} /></button>
             </div>
-            {/* 残り時間 */}
             <div>
               <div className="text-xs mb-1" style={{ color: C.sub }}>残り時間</div>
               <input className={inputCls} style={getInputStyle(C)} placeholder="例: 3:45"
                 value={editEvent.time || ""} onChange={(e) => setEditEvent({ ...editEvent, time: e.target.value })} />
             </div>
-            {/* 自チーム/相手切り替え */}
             <div className="flex gap-2">
               <button className="flex-1 py-2 rounded-xl text-sm font-bold"
                 style={editEvent.side === "own" ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
@@ -2412,7 +2284,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                 style={editEvent.side === "opp" ? { background: C.oppBlue, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
                 onClick={() => setEditEvent({ ...editEvent, side: "opp", playerId: undefined })}>相手</button>
             </div>
-            {/* 選手選択(自チームのみ) */}
             {editEvent.side === "own" && (
               <div>
                 <div className="text-xs mb-1" style={{ color: C.sub }}>選手</div>
@@ -2430,7 +2301,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                 </div>
               </div>
             )}
-            {/* アクション選択 */}
             <div>
               <div className="text-xs mb-1" style={{ color: C.sub }}>アクション</div>
               <div className="grid grid-cols-4 gap-1.5">
@@ -2442,7 +2312,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                 ))}
               </div>
             </div>
-            {/* 保存 */}
             <button className="w-full py-3 rounded-xl font-bold text-white mt-2"
               style={{ background: C.orange }} onClick={() => saveEditEvent(editEvent)}>
               保存する
@@ -2454,7 +2323,6 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   );
 }
 
-/* ============ 資料 ============ */
 function GameMedia({ data, save, game, oppName, isAdmin }) {
   const C = useC();
   const [copied, setCopied] = useState(false);
@@ -2490,7 +2358,6 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
   };
   const videos = game.videos || {};
   const vidKeys = [...Array.from({ length: periods }, (_, i) => String(i + 1)), "all"];
-  // 各Qのリンクを配列として正規化(旧データの文字列にも対応)
   const vidList = (k) => {
     const v = videos[k];
     if (Array.isArray(v)) return v;
@@ -2507,7 +2374,6 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
             const label = k === "all" ? "フル/その他" : periodLabel2(game, +k);
             const list = vidList(k);
             const playable = list.filter((u) => ytId(u));
-            // 閲覧モードで再生可能な動画がない場合はスキップ
             if (!isAdmin && playable.length === 0) return null;
             return (
               <div key={k}>
@@ -2562,7 +2428,6 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
         </div>
       </Card>
 
-      {/* スコアカード写真 */}
       <Card>
         <SectionTitle>スコアカード(写真)</SectionTitle>
         {(() => {
@@ -2624,7 +2489,6 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
   );
 }
 
-/* ============ レポート ============ */
 function ReportView({ data, game, mode, oppName, onClose }) {
   const a = analysisFor(data, game, "all");
   const flow = mode === "detail" ? flowAnalysis(data, game) : null;
@@ -2716,7 +2580,6 @@ function ReportView({ data, game, mode, oppName, onClose }) {
   );
 }
 
-/* ============ 試合分析(画面) ============ */
 function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
   const C = useC();
   const [scope, setScope] = useState("all");
@@ -2750,7 +2613,6 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
   );
   return (
     <div className="space-y-3">
-      {/* 試合メモ */}
       <Card>
         <SectionTitle>試合メモ</SectionTitle>
         {isAdmin ? (
@@ -2832,9 +2694,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
           </ResponsiveContainer>
         </Card>
       )}
-      {/* ===== 出場時間 円グラフ(全体スコープのみ) ===== */}
       {scope === "all" && (() => {
-        // 各選手の出場時間を計算
         const PLAYER_COLORS = ["#E8602A","#5B74A8","#3DBE7B","#FFB23E","#A855F7","#EC4899","#14B8A6","#F59E0B","#6366F1","#84CC16","#F87171","#67E8F9"];
         const ptRows = data.players.map((p, i) => {
           const { map } = courtIntervals(game.events, "own", p.id, game);
@@ -2847,7 +2707,6 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
         }).filter((r) => r.mins > 0).sort((a, b) => b.mins - a.mins);
         if (ptRows.length === 0) return null;
         const totalMins = ptRows.reduce((a, r) => a + r.mins, 0);
-        // SVG ドーナツ円グラフ
         const R = 38, cx = 55, cy = 55, circ = 2 * Math.PI * R;
         let offset = 0;
         const slices = ptRows.map((r) => {
@@ -2863,7 +2722,6 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
               <span className="text-[10px]" style={{ color: C.sub }}>計{fmt1(totalMins)}分 / {ptRows.length}名</span>
             </div>
             <div className="flex items-center gap-3">
-              {/* 円グラフ */}
               <div className="flex-shrink-0">
                 <svg width="110" height="110" viewBox="0 0 110 110">
                   {slices.map((s) => (
@@ -2880,7 +2738,6 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
                     style={{ fontSize: 7, fill: C.sub }}>最長出場</text>
                 </svg>
               </div>
-              {/* 凡例 */}
               <div className="flex-1 flex flex-col gap-1 min-w-0">
                 {ptRows.map((r) => (
                   <div key={r.p.id} className="flex items-center gap-1.5">
@@ -2926,7 +2783,6 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
         </Card>
       )}
 
-      {/* AIアナリスト分析: 全体・各Q */}
       {a.goodPoints.length > 0 && (
         <Card style={{ border: `1px solid ${C.win}44` }}>
           <div className="flex items-center gap-2 mb-3">
@@ -2962,7 +2818,6 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
         </Card>
       )}
 
-      {/* 次戦に向けた提言: 全体のみ */}
       {scope === "all" && a.tips.length > 0 && (
         <Card>
           <SectionTitle>次戦に向けた提言</SectionTitle>
@@ -2973,15 +2828,13 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
   );
 }
 
-/* ============ ランキング ============ */
 function Ranking({ data, setTab, setNav }) {
   const C = useC();
   const [stat, setStat] = useState("pts");
-  const [mode, setMode] = useState("avg"); // デフォルトを平均に
+  const [mode, setMode] = useState("avg");
   const isPctStat = stat === "fgp" || stat === "ftp";
   const isPmStat = stat === "pm";
-  const isAscStat = stat === "to" || stat === "pf"; // 少ない方が上位
-  // TO・ファールは5年以上のみ、それ以外は全学年
+  const isAscStat = stat === "to" || stat === "pf";
   const rankPlayers = isAscStat
     ? data.players.filter((p) => (+p.grade || 0) >= 5)
     : data.players;
@@ -3005,7 +2858,6 @@ function Ranking({ data, setTab, setNav }) {
     }
     const total = c.tot[stat];
     const avg = c.totAdj[stat] / c.n;
-    // 値が0の選手は除外
     if ((mode === "total" ? total : avg) === 0) return null;
     return { p, n: c.n, total, avg };
   }).filter(Boolean).sort((a, b) => {
@@ -3060,7 +2912,6 @@ function Ranking({ data, setTab, setNav }) {
   );
 }
 
-/* ============ 大会情報 ============ */
 function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
   const C = useC();
   const [selId, setSelId] = useState(null);
@@ -3069,9 +2920,9 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
   const [form, setForm] = useState({
     name: "", dateFrom: "", dateTo: "", category: "tournament",
     url: "", participating: true, memo: "",
-    result: null, // { type:"tournament"|"league", data:{...} }
+    result: null,
   });
-  const [leagueTeam, setLeagueTeam] = useState(""); // リーグ追加用
+  const [leagueTeam, setLeagueTeam] = useState("");
 
   const gameNames = [...new Set(data.games.map((g) => g.tournament).filter(Boolean))];
   const savedNames = (data.tournaments || []).map((t) => t.name);
@@ -3125,7 +2976,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
     setAdding(true);
   };
 
-  // ===== 登録・編集フォーム =====
   if (adding) {
     const cat = CATS.find((c) => c.k === form.category) || CATS[0];
     const isLeague = form.category === "league";
@@ -3151,7 +3001,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
           <div className="font-bold">{editId ? "大会を編集" : "大会を登録"}</div>
         </div>
         <div className="space-y-3">
-          {/* 大会名 */}
           <div>
             <div className="text-xs mb-1" style={{ color: C.sub }}>大会名</div>
             <input className={inputCls} style={getInputStyle(C)} placeholder="大会名を入力"
@@ -3165,7 +3014,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
               </div>
             )}
           </div>
-          {/* 期間 */}
           <div>
             <div className="text-xs mb-1" style={{ color: C.sub }}>期間(任意)</div>
             <div className="flex items-center gap-2">
@@ -3176,7 +3024,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                 onChange={(e) => setForm({ ...form, dateTo: e.target.value })} />
             </div>
           </div>
-          {/* カテゴリー */}
           <div>
             <div className="text-xs mb-1" style={{ color: C.sub }}>カテゴリー</div>
             <div className="grid grid-cols-2 gap-2">
@@ -3187,7 +3034,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
               ))}
             </div>
           </div>
-          {/* 参加フラグ */}
           <div className="flex items-center gap-3">
             <button className="w-10 h-6 rounded-full flex-shrink-0 relative"
               style={{ background: form.participating ? C.orange : C.border }}
@@ -3197,13 +3043,10 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
             </button>
             <div className="text-xs" style={{ color: C.sub }}>府中六小が参加</div>
           </div>
-          {/* 結果入力 */}
           <div>
               <div className="text-xs mb-2 font-bold" style={{ color: C.sub }}>大会結果</div>
-              {/* トーナメント順位 */}
               {!isLeague && (
                 <div className="space-y-3">
-                  {/* 自チームの順位 */}
                   <div>
                     <div className="text-[10px] mb-1.5 font-bold" style={{ color: C.orange }}>府中六小の順位</div>
                     <div className="grid grid-cols-3 gap-1.5">
@@ -3217,7 +3060,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                         onClick={() => setForm({ ...form, result: { type: "tournament", data: { ...tourRes, myRank: null } } })}>未入力</button>
                     </div>
                   </div>
-                  {/* 他チームの順位 */}
                   <div>
                     <div className="text-[10px] mb-1.5 font-bold" style={{ color: C.sub }}>他チームの順位(任意)</div>
                     <div className="space-y-1.5">
@@ -3257,7 +3099,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                   </div>
                 </div>
               )}
-              {/* リーグ戦マトリックス */}
               {isLeague && (
                 <div className="space-y-3">
                   <div>
@@ -3285,7 +3126,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                       ))}
                     </div>
                   </div>
-                  {/* 府中六小の最終順位(タイムライン表示用) */}
                   <div>
                     <div className="text-[10px] mb-1 font-bold" style={{ color: C.orange }}>府中六小の最終順位</div>
                     <div className="flex items-center gap-2">
@@ -3296,7 +3136,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                       <span className="text-xs" style={{ color: C.sub }}>位</span>
                     </div>
                   </div>
-                  {/* スコアマトリックス */}
                   {leagueData.teams.length >= 2 && (
                     <div className="overflow-x-auto">
                     <div className="text-[10px] mb-1" style={{ color: C.sub }}>スコア入力(横行=そのチームの得点, 右端=順位)</div>
@@ -3338,13 +3177,11 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                 </div>
               )}
             </div>
-          {/* URL */}
           <div>
             <div className="text-xs mb-1" style={{ color: C.sub }}>大会結果URL(公式サイトなど)</div>
             <input className={inputCls} style={getInputStyle(C)} placeholder="https://..."
               value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
           </div>
-          {/* メモ */}
           <div>
             <div className="text-xs mb-1" style={{ color: C.sub }}>メモ</div>
             <textarea className={inputCls} style={{ ...getInputStyle(C), minHeight: 60, resize: "none" }}
@@ -3360,7 +3197,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
     );
   }
 
-  // ===== 詳細ページ =====
   if (selT) {
     const cat = catOf(selT.category);
     const res = selT.result;
@@ -3384,7 +3220,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
             </div>
           )}
         </div>
-        {/* ヘッダーカード */}
         <Card style={{ border: selT.participating ? `2px solid ${cat.color}` : undefined }}>
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
@@ -3395,7 +3230,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
               </div>
               {dateStr && <div className="text-xs mt-1.5" style={{ color: C.sub }}>📅 {dateStr}</div>}
             </div>
-            {/* 順位バッジ */}
             {tourRank && (
               <div className="flex-shrink-0 flex flex-col items-center justify-center rounded-2xl px-4 py-3"
                 style={{ background: tourRank.k === "1" ? "#FFB23E22" : tourRank.k === "2" ? "#8FA0C022" : tourRank.k === "3" ? "#A0704A22" : C.card2, minWidth: 72 }}>
@@ -3404,7 +3238,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
               </div>
             )}
           </div>
-          {/* 他チームの順位 */}
           {tourTeams.length > 0 && (
             <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
               <div className="text-[10px] font-bold mb-2" style={{ color: C.sub }}>順位一覧</div>
@@ -3431,7 +3264,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
               onClick={() => openForm(selT)}>詳細情報を登録する(期間・URL・結果など)</button>
           )}
         </Card>
-        {/* リーグマトリックス表示 */}
         {leagueData && leagueData.teams?.length >= 2 && (
           <Card>
             <SectionTitle>リーグ結果</SectionTitle>
@@ -3457,9 +3289,8 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                             <span style={{ color: C.border }}>–</span>
                           </td>
                         );
-                        // ri行=そのチームの得点, ci列=相手チーム
-                        const myScore = leagueData.scores?.[`${ri}_${ci}`];   // riがciに入れた点
-                        const oppScore = leagueData.scores?.[`${ci}_${ri}`];  // ciがriに入れた点
+                        const myScore = leagueData.scores?.[`${ri}_${ci}`];
+                        const oppScore = leagueData.scores?.[`${ci}_${ri}`];
                         const hasScore = myScore !== undefined && myScore !== "" && oppScore !== undefined && oppScore !== "";
                         const win = hasScore && +myScore > +oppScore;
                         const lose = hasScore && +myScore < +oppScore;
@@ -3488,9 +3319,7 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
             </div>
           </Card>
         )}
-        {/* URL埋め込み */}
         {selT.url && (() => {
-          // GoogleドライブのURLをダイレクト表示用に変換
           const gdMatch = selT.url.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
           const gdId = gdMatch ? gdMatch[1] : null;
           const imgUrl = gdId ? `https://drive.google.com/uc?export=view&id=${gdId}` : null;
@@ -3505,14 +3334,11 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                   <div className="text-[10px] flex-1 truncate" style={{ color: C.sub }}>{selT.url}</div>
                   {isGdrive && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: "#4A90D922", color: "#4A90D9" }}>Googleドライブ</span>}
                 </div>
-                {/* Googleドライブ: 画像はimgで、それ以外はpdfプレビューで表示 */}
                 {isGdrive ? (
                   <div>
-                    {/* まず画像として試みる */}
                     <img src={imgUrl} alt={selT.name}
                       style={{ width: "100%", display: "block", maxHeight: 400, objectFit: "contain", background: C.card2 }}
                       onError={(e) => {
-                        // 画像として読めなければPDFプレビューのiframeに切り替え
                         e.target.style.display = "none";
                         e.target.nextSibling.style.display = "block";
                       }} />
@@ -3521,7 +3347,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                       title={selT.name} allow="autoplay" />
                   </div>
                 ) : (
-                  /* 通常サイト: 縮小iframe */
                   <div style={{ position: "relative", width: "100%", height: 320, background: C.card2, overflow: "hidden" }}>
                     <iframe
                       src={selT.url}
@@ -3544,7 +3369,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
             </Card>
           );
         })()}
-        {/* 試合結果 */}
         {relGames.length > 0 && (
           <Card>
             <SectionTitle>試合結果({relGames.length}試合)</SectionTitle>
@@ -3576,7 +3400,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
     );
   }
 
-  // ===== 一覧(タイムライン) =====
   const today = new Date().toISOString().slice(0, 10);
   return (
     <div className="space-y-3">
@@ -3607,7 +3430,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                 const res = t.result;
                 const tourRank = res?.type === "tournament" ? TOURNAMENT_RANKS.find((r) => r.k === res.data?.myRank) : null;
 
-                // 期間表示文字列
                 const dateStr = t.dateFrom && t.dateTo ? `${t.dateFrom.slice(5)} 〜 ${t.dateTo.slice(5)}`
                   : t.dateFrom ? t.dateFrom.slice(5)
                   : t.dateTo ? `〜 ${t.dateTo.slice(5)}` : "";
@@ -3670,7 +3492,6 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
   );
 }
 
-/* ============ 設定 ============ */
 function SettingsScreen({ data, save }) {
   const C = useC();
   const [team, setTeam] = useState(data.team);
