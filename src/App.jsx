@@ -1691,7 +1691,6 @@ function TeamStatsCard({ data, oppName }) {
           </div>
         ))}
       </div>
-      </div>
       {/* チーム最高記録 */}
       {n >= 2 && (
         <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
