@@ -835,8 +835,13 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const w = wlResults.filter((r) => r.own > r.opp).length;
   const l = wlResults.filter((r) => r.own < r.opp).length;
   const n = wlResults.length;
-  const avgPF = n ? wlResults.reduce((a, r) => a + r.own, 0) / n : 0;
-  const avgPA = n ? wlResults.reduce((a, r) => a + r.opp, 0) / n : 0;
+  // 試合タブと同じQ数基準の加重平均(0-0未入力除外)
+  const wlPlayed = wlResults.filter((r) => (r.own + r.opp) > 0);
+  const wlTotalQ = wlPlayed.reduce((a, r) => a + periodsOf(r.g), 0);
+  const wlBaseQ = wlPlayed.length * 4;
+  const wlAvg = (k) => wlTotalQ > 0 ? wlPlayed.reduce((a, r) => a + r[k], 0) / wlTotalQ * wlBaseQ / wlPlayed.length : 0;
+  const avgPF = wlAvg("own");
+  const avgPA = wlAvg("opp");
   const stars = useMemo(() => {
     const recent5 = [...data.games].filter((g) => { const p = gamePts(g); return (p.own + p.opp) > 0; }).sort(gameOrderDesc).slice(0, 5);
     if (recent5.length === 0) return [];
@@ -1545,7 +1550,7 @@ function TeamStatsCard({ data, oppName }) {
   const hasVaryQ = perGame.some((x) => regQOf(x.g) !== 4);
 
   const TREND_OPTS = [
-    { k: "own", label: "得点", color: C.orange },
+    { k: "own", label: "得点", color: C.win },
     { k: "opp", label: "失点", color: C.loss },
     { k: "reb", label: "REB", color: C.oppBlue },
     { k: "ast", label: "AST", color: "#3DBE7B" },
@@ -1632,7 +1637,7 @@ function TeamStatsCard({ data, oppName }) {
               <ReferenceLine y={tAvg} stroke={tOpt.color} strokeDasharray="5 4" strokeWidth={1.5}
                 label={{ value: `平均 ${fmt1(tAvg)}`, position: "insideTopRight", fill: tOpt.color, fontSize: 8 }} />
               <Line type="monotone" dataKey="val" name={tOpt.label}
-                stroke={tOpt.color} strokeWidth={2.5} dot={{ fill: tOpt.color, r: 3.5 }} activeDot={{ r: 5 }} />
+                stroke={tOpt.color} strokeWidth={2.5} dot={{ fill: tOpt.color, r: 3 }} activeDot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -1670,7 +1675,7 @@ function TeamStatsCard({ data, oppName }) {
                 <ReferenceLine y={effAvg} stroke={eo.color} strokeDasharray="5 4" strokeWidth={1.5}
                   label={{ value: `平均 ${effAvg}%`, position: "insideTopRight", fill: eo.color, fontSize: 8 }} />
                 <Line type="monotone" dataKey="val" name={eo.label} stroke={eo.color} strokeWidth={2.5}
-                  connectNulls={false} dot={{ fill: eo.color, r: 3.5 }} activeDot={{ r: 5 }} />
+                  connectNulls={false} dot={{ fill: eo.color, r: 3 }} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
             <div className="text-[9px] text-center mt-1" style={{ color: C.sub }}>※試投0の試合は折れ線に表示されません</div>
