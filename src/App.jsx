@@ -835,13 +835,13 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
   const w = wlResults.filter((r) => r.own > r.opp).length;
   const l = wlResults.filter((r) => r.own < r.opp).length;
   const n = wlResults.length;
-  // 試合タブと同じQ数基準の加重平均(0-0未入力除外)
-  const wlPlayed = wlResults.filter((r) => (r.own + r.opp) > 0);
-  const wlTotalQ = wlPlayed.reduce((a, r) => a + periodsOf(r.g), 0);
-  const wlBaseQ = wlPlayed.length * 4;
-  const wlAvg = (k) => wlTotalQ > 0 ? wlPlayed.reduce((a, r) => a + r[k], 0) / wlTotalQ * wlBaseQ / wlPlayed.length : 0;
-  const avgPF = wlAvg("own");
-  const avgPA = wlAvg("opp");
+  // 試合タブと完全に同じ: 全試合(参考含む)・Q数基準の加重平均(0-0除外)
+  const allPlayed = results.filter((r) => (r.own + r.opp) > 0);
+  const allTotalQ = allPlayed.reduce((a, r) => a + periodsOf(r.g), 0);
+  const allBaseQ = allPlayed.length * 4;
+  const allAvg = (k) => allTotalQ > 0 ? allPlayed.reduce((a, r) => a + r[k], 0) / allTotalQ * allBaseQ / allPlayed.length : 0;
+  const avgPF = allAvg("own");
+  const avgPA = allAvg("opp");
   const stars = useMemo(() => {
     const recent5 = [...data.games].filter((g) => { const p = gamePts(g); return (p.own + p.opp) > 0; }).sort(gameOrderDesc).slice(0, 5);
     if (recent5.length === 0) return [];
@@ -1637,7 +1637,12 @@ function TeamStatsCard({ data, oppName }) {
               <ReferenceLine y={tAvg} stroke={tOpt.color} strokeDasharray="5 4" strokeWidth={1.5}
                 label={{ value: `平均 ${fmt1(tAvg)}`, position: "insideTopRight", fill: tOpt.color, fontSize: 8 }} />
               <Line type="monotone" dataKey="val" name={tOpt.label}
-                stroke={tOpt.color} strokeWidth={2.5} dot={{ fill: tOpt.color, r: 3 }} activeDot={{ r: 4 }} />
+                stroke={tOpt.color} strokeWidth={2.5}
+                dot={(props) => {
+                  return <circle key={props.index} cx={props.cx} cy={props.cy} r={3}
+                    fill={tOpt.color} stroke="none" strokeWidth={0} />;
+                }}
+                activeDot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -1675,7 +1680,13 @@ function TeamStatsCard({ data, oppName }) {
                 <ReferenceLine y={effAvg} stroke={eo.color} strokeDasharray="5 4" strokeWidth={1.5}
                   label={{ value: `平均 ${effAvg}%`, position: "insideTopRight", fill: eo.color, fontSize: 8 }} />
                 <Line type="monotone" dataKey="val" name={eo.label} stroke={eo.color} strokeWidth={2.5}
-                  connectNulls={false} dot={{ fill: eo.color, r: 3 }} activeDot={{ r: 4 }} />
+                  connectNulls={false}
+                  dot={(props) => {
+                    if (props.payload.val === null) return null;
+                    return <circle key={props.index} cx={props.cx} cy={props.cy} r={3}
+                      fill={eo.color} stroke="none" strokeWidth={0} />;
+                  }}
+                  activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
             <div className="text-[9px] text-center mt-1" style={{ color: C.sub }}>※試投0の試合は折れ線に表示されません</div>
@@ -1750,7 +1761,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
       </div>
 
       {catFilter === "all" && games.length > 0 && (() => {
-        const officialResults = games.map((g) => ({ g, ...gamePts(g) })).filter((r) => (r.g.category || "practice") === "official");
+        const officialResults = games.map((g) => ({ g, ...gamePts(g) })).filter((r) => (r.g.category || "practice") !== "ref");
         const wldOf2 = (rs) => ({ w: rs.filter((r) => r.own > r.opp).length, l: rs.filter((r) => r.own < r.opp).length, d: rs.filter((r) => r.own === r.opp).length });
         const fuchuRs = officialResults.filter((r) => (getOpp(r.g.opponentId)?.area || "").includes("府中"));
         const fuchu2 = wldOf2(fuchuRs);
@@ -1762,7 +1773,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
           <Card>
             <div className="flex items-center justify-between mb-2">
               <SectionTitle>相手レベル別の成績</SectionTitle>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: GAME_CATS[0].color, color: "#fff" }}>公式戦のみ</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: C.card2, color: C.sub }}>参考試合を除く</span>
             </div>
             <button className="w-full flex items-center gap-3 pb-3 text-left" style={{ borderBottom: `1px solid ${C.border}` }}
               onClick={() => setOpenKey(openKey === "fuchu" ? null : "fuchu")}>
