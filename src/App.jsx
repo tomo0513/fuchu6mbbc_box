@@ -2267,7 +2267,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         {events.filter((e) => e.q === q).length === 0 ? (
           <div className="text-sm" style={{ color: C.sub }}>{periodLabel2(game, q)}に記録されたプレイはまだありません。</div>
         ) : (
-          {(() => {
+          (() => {
             // 表示用: このQのイベントを元のevents配列順で取り出し、降順(新着上)表示
             const qEvs = events.map((e, i) => ({ e, origIdx: i })).filter(({ e }) => e.q === q).reverse();
             // 並び替え関数(origIdx基準でeventsを入れ替え)
@@ -2362,7 +2362,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                 ))}
               </div>
             );
-          })()}
+          })()
         )}
       </Card>
 
