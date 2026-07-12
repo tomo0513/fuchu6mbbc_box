@@ -1974,6 +1974,9 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
   const [flash, setFlash] = useState(null);
   const flashTimer = useRef(null);
   const [editEvent, setEditEvent] = useState(null);
+  const [sortMode, setSortMode] = useState(false);
+  const dragItem = useRef(null);
+  const dragOver = useRef(null);
 
   const changeSide = (k) => {
     setSide(k);
@@ -2251,29 +2254,115 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
         </div>
       )}
       <Card>
-        <SectionTitle>{periodLabel2(game, q)}のプレイログ({events.filter((e) => e.q === q).length})</SectionTitle>
+        <div className="flex items-center justify-between mb-2">
+          <SectionTitle>{periodLabel2(game, q)}のプレイログ({events.filter((e) => e.q === q).length})</SectionTitle>
+          {isAdmin && events.filter((e) => e.q === q).length > 1 && (
+            <button className="text-xs font-bold px-3 py-1.5 rounded-lg"
+              style={sortMode ? { background: C.win, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+              onClick={() => setSortMode(!sortMode)}>
+              {sortMode ? "✓ 完了" : "↕ 並替"}
+            </button>
+          )}
+        </div>
         {events.filter((e) => e.q === q).length === 0 ? (
           <div className="text-sm" style={{ color: C.sub }}>{periodLabel2(game, q)}に記録されたプレイはまだありません。</div>
         ) : (
-          <div className="space-y-1 max-h-[500px] overflow-y-auto">
-            {[...events].filter((e) => e.q === q).reverse().map((e) => (
-              <div key={e.id} className="flex items-center gap-1.5 text-sm py-1.5 rounded-lg px-1"
-                style={{ borderBottom: `1px solid ${C.border}44`, background: insertAfter === e.id ? "#3A2A1466" : "transparent" }}>
-                <span className="text-xs w-9" style={{ color: C.sub }}>{e.time || "–"}</span>
-                <span className="flex-1 truncate">
-                  {e.side === "own" ? pName(e.playerId) : (e.oppNum === TEAM_KEY ? "相手チーム" : `相手 #${e.oppNum}`)}
-                  <span style={{ color: e.side === "own" ? C.sub : C.oppText }}> – {ACTION_LABEL[e.action]}</span>
-                </span>
-                {PTS_OF[e.action] ? <span className="text-xs font-bold" style={{ color: C.led }}>+{PTS_OF[e.action]}</span> : null}
-                {isAdmin && <>
-                  <button className="p-1" style={{ color: C.orange }} onClick={() => setEditEvent({ ...e })}><Pencil size={13} /></button>
-                  <button className="p-1" style={{ color: insertAfter === e.id ? C.led : C.sub }}
-                    onClick={() => setInsertAfter(insertAfter === e.id ? null : e.id)}><CornerDownRight size={14} /></button>
-                  <button className="p-1" style={{ color: C.sub }} onClick={() => delEvent(e.id)}><Trash2 size={14} /></button>
-                </>}
+          {(() => {
+            // 表示用: このQのイベントを元のevents配列順で取り出し、降順(新着上)表示
+            const qEvs = events.map((e, i) => ({ e, origIdx: i })).filter(({ e }) => e.q === q).reverse();
+            // 並び替え関数(origIdx基準でeventsを入れ替え)
+            const moveEvent = (fromOrigIdx, toOrigIdx) => {
+              updGame((x) => {
+                const evs = [...x.events];
+                const a = evs[fromOrigIdx], b = evs[toOrigIdx];
+                evs[fromOrigIdx] = b; evs[toOrigIdx] = a;
+                return { ...x, events: evs };
+              });
+            };
+            // タッチドラッグ処理
+            const onTouchStart = (origIdx) => (ev) => {
+              dragItem.current = origIdx;
+              ev.currentTarget.style.opacity = '0.5';
+            };
+            const onTouchMove = (ev) => {
+              ev.preventDefault();
+              const touch = ev.touches[0];
+              const el = document.elementFromPoint(touch.clientX, touch.clientY);
+              const row = el?.closest('[data-orig-idx]');
+              if (row) dragOver.current = parseInt(row.dataset.origIdx);
+            };
+            const onTouchEnd = (ev) => {
+              ev.currentTarget.style.opacity = '1';
+              if (dragItem.current !== null && dragOver.current !== null && dragItem.current !== dragOver.current) {
+                moveEvent(dragItem.current, dragOver.current);
+              }
+              dragItem.current = null; dragOver.current = null;
+            };
+            return (
+              <div className="space-y-1 max-h-[500px] overflow-y-auto">
+                {sortMode && <div className="text-[10px] text-center py-1 rounded-lg mb-1" style={{ background: C.card2, color: C.sub }}>
+                  ↑↓ボタンで移動 / 長押しドラッグも可
+                </div>}
+                {qEvs.map(({ e, origIdx }, displayIdx) => (
+                  <div key={e.id}
+                    data-orig-idx={origIdx}
+                    className="flex items-center gap-1.5 text-sm py-1.5 rounded-lg px-1"
+                    style={{ borderBottom: `1px solid ${C.border}44`,
+                      background: sortMode ? C.card2 : insertAfter === e.id ? "#3A2A1466" : "transparent",
+                      border: sortMode ? `1px solid ${C.border}` : undefined,
+                      marginBottom: sortMode ? 3 : 0,
+                      touchAction: sortMode ? 'none' : 'auto' }}
+                    onTouchStart={sortMode ? onTouchStart(origIdx) : undefined}
+                    onTouchMove={sortMode ? onTouchMove : undefined}
+                    onTouchEnd={sortMode ? onTouchEnd : undefined}
+                    draggable={sortMode}
+                    onDragStart={() => { dragItem.current = origIdx; }}
+                    onDragEnter={() => { dragOver.current = origIdx; }}
+                    onDragEnd={() => {
+                      if (dragItem.current !== null && dragOver.current !== null && dragItem.current !== dragOver.current) {
+                        moveEvent(dragItem.current, dragOver.current);
+                      }
+                      dragItem.current = null; dragOver.current = null;
+                    }}
+                    onDragOver={(ev) => ev.preventDefault()}
+                  >
+                    {sortMode ? (
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <button disabled={displayIdx === 0}
+                          className="w-7 h-6 flex items-center justify-center rounded text-xs font-bold disabled:opacity-20"
+                          style={{ background: C.card, color: C.text }}
+                          onClick={() => {
+                            const prev = qEvs[displayIdx - 1];
+                            if (prev) moveEvent(origIdx, prev.origIdx);
+                          }}>↑</button>
+                        <button disabled={displayIdx === qEvs.length - 1}
+                          className="w-7 h-6 flex items-center justify-center rounded text-xs font-bold disabled:opacity-20"
+                          style={{ background: C.card, color: C.text }}
+                          onClick={() => {
+                            const next = qEvs[displayIdx + 1];
+                            if (next) moveEvent(origIdx, next.origIdx);
+                          }}>↓</button>
+                      </div>
+                    ) : (
+                      <span className="text-xs w-9" style={{ color: C.sub }}>{e.time || "–"}</span>
+                    )}
+                    <span className="flex-1 truncate">
+                      {e.side === "own" ? pName(e.playerId) : (e.oppNum === TEAM_KEY ? "相手チーム" : `相手 #${e.oppNum}`)}
+                      <span style={{ color: e.side === "own" ? C.sub : C.oppText }}> – {ACTION_LABEL[e.action]}</span>
+                    </span>
+                    {PTS_OF[e.action] ? <span className="text-xs font-bold" style={{ color: C.led }}>+{PTS_OF[e.action]}</span> : null}
+                    {!sortMode && isAdmin && <>
+                      <button className="p-1" style={{ color: C.orange }} onClick={() => setEditEvent({ ...e })}><Pencil size={13} /></button>
+                      <button className="p-1" style={{ color: insertAfter === e.id ? C.led : C.sub }}
+                        onClick={() => setInsertAfter(insertAfter === e.id ? null : e.id)}><CornerDownRight size={14} /></button>
+                      <button className="p-1" style={{ color: C.sub }} onClick={() => delEvent(e.id)}><Trash2 size={14} /></button>
+                    </>}
+                    {sortMode && <span className="text-lg shrink-0 ml-1" style={{ color: C.sub, cursor: 'grab' }}>≡</span>}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         )}
       </Card>
 
