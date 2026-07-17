@@ -2168,17 +2168,78 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
                   上の「{periodLabel2(game, q)}の出場メンバー」から出場中の選手を登録してください。登録した選手のみ記録できます。
                 </div>
               )}
+              {/* ===== ファウルカウントパネル ===== */}
+              {(() => {
+                const inPlayers = players.filter((p) => lineup.includes(p.id));
+                if (inPlayers.length === 0) return null;
+                // 全試合累計ではなく、この試合のみのPF
+                const pfOf = (pid) => (game.events || []).filter((e) => e.side === "own" && e.playerId === pid && e.action === "PF").length;
+                return (
+                  <div className="mb-3 rounded-xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+                    <div className="px-2 py-1 text-[9px] font-bold tracking-widest" style={{ background: C.card2, color: C.sub }}>ファウルカウント（この試合）</div>
+                    <div className="flex">
+                      {inPlayers.map((p) => {
+                        const pf = pfOf(p.id);
+                        const isOut = pf >= 5;
+                        const isWarn = pf === 4;
+                        const bg = isOut ? C.loss : isWarn ? "#B8860B" : C.card2;
+                        const col = (isOut || isWarn) ? "#fff" : pf >= 3 ? C.led : C.sub;
+                        return (
+                          <div key={p.id} className="flex-1 flex flex-col items-center py-1.5 relative"
+                            style={{ borderRight: `1px solid ${C.border}`, background: isOut ? `${C.loss}22` : isWarn ? "#B8860B22" : "transparent" }}>
+                            {isOut && (
+                              <div className="absolute inset-0 flex items-center justify-center rounded text-[8px] font-black z-10 pointer-events-none"
+                                style={{ background: `${C.loss}EE`, color: "#fff", letterSpacing: "0.05em" }}>
+                                FOUL OUT
+                              </div>
+                            )}
+                            <div className="text-[8px] truncate px-0.5 w-full text-center mb-0.5" style={{ color: C.sub }}>
+                              #{p.number}
+                            </div>
+                            {/* ファウル数ブロック */}
+                            <div className="flex gap-0.5 mb-0.5">
+                              {[1,2,3,4,5].map((n) => (
+                                <div key={n} className="rounded-sm"
+                                  style={{
+                                    width: 7, height: 10,
+                                    background: n <= pf
+                                      ? (n >= 5 ? C.loss : n >= 4 ? "#D4A017" : n >= 3 ? C.led + "CC" : C.sub + "99")
+                                      : C.card,
+                                    border: `1px solid ${n <= pf ? "transparent" : C.border}`,
+                                  }} />
+                              ))}
+                            </div>
+                            <div className="text-sm font-black leading-none" style={{ fontFamily: "'Bebas Neue',sans-serif", color: col }}>{pf}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="flex flex-wrap gap-1.5 mb-2">
                 <button onClick={() => setSel(TEAM_KEY)}
                   className="px-3 py-2 rounded-full text-sm font-bold"
                   style={sel === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}>チーム</button>
-                {players.filter((p) => lineup.includes(p.id)).map((p) => (
-                  <button key={p.id} onClick={() => setSel(p.id)}
-                    className="px-3 py-2 rounded-full text-sm font-bold"
-                    style={sel === p.id ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.win}`, color: C.text }}>
-                    #{p.number} {p.codename || p.name}
-                  </button>
-                ))}
+                {players.filter((p) => lineup.includes(p.id)).map((p) => {
+                  const pf = (game.events || []).filter((e) => e.side === "own" && e.playerId === p.id && e.action === "PF").length;
+                  const isOut = pf >= 5;
+                  const isWarn = pf === 4;
+                  return (
+                    <button key={p.id} onClick={() => setSel(p.id)}
+                      className="px-3 py-2 rounded-full text-sm font-bold relative"
+                      style={sel === p.id
+                        ? { background: isOut ? C.loss : isWarn ? "#D4A017" : C.orange, color: "#fff", outline: isOut ? `2px solid ${C.loss}` : isWarn ? "2px solid #D4A017" : "none", outlineOffset: 1 }
+                        : isOut
+                          ? { border: `2px solid ${C.loss}`, color: C.loss, background: `${C.loss}18` }
+                          : isWarn
+                            ? { border: `2px solid #D4A017`, color: "#D4A017", background: "#D4A01718" }
+                            : { border: `1px solid ${C.win}`, color: C.text }}>
+                      #{p.number} {p.codename || p.name}
+                      {pf > 0 && <span className="ml-1 text-[10px] font-black" style={{ color: isOut ? (sel===p.id?"#fff":C.loss) : isWarn ? (sel===p.id?"#fff":"#D4A017") : C.sub }}>{pf}F</span>}
+                    </button>
+                  );
+                })}
               </div>
               {sel && sel !== TEAM_KEY && lineup.includes(sel) && (
                 <button onClick={() => subOutPlayer(sel)}
