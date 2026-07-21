@@ -180,6 +180,7 @@ const normGame = (g) => {
   return { ...rest, qLen: +g.qLen || 6, otLen: +g.otLen || 3, ot: +g.ot || 0, regQ: +g.regQ || 4, order: +g.order || 0,
     category: g.category || "practice",
     memo: g.memo || "",
+    published: g.published !== false, // 既存試合は自動で公開扱い。新規はGameListで false スタート
     qScores: { own: padQ(g.qScores?.own), opp: padQ(g.qScores?.opp) },
     events: g.events || [], lineups: g.lineups || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
@@ -691,7 +692,11 @@ export default function App() {
 
   const getOpp = (id) => data.opponents.find((o) => o.id === id);
   const oppName = (id) => getOpp(id)?.name || "対戦相手";
-  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme };
+  // 閲覧者(非管理者)には未公開(下書き)の試合を一切見せない
+  const visibleData = isAdmin ? data : { ...data, games: data.games.filter((g) => g.published !== false) };
+  // 公開状態の切替は常に「元のdata全体」に対して安全に行う(visibleDataで上書きしないため専用関数を用意)
+  const setGamePublished = (gameId, published) => save({ ...data, games: data.games.map((x) => x.id === gameId ? { ...x, published } : x) });
+  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished };
 
   const NAV_ITEMS = [
     { t: "home", icon: Home, label: "ホーム" },
@@ -826,7 +831,7 @@ export default function App() {
   );
 }
 
-function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
+function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
   const C = useC();
   const games = [...data.games].sort(gameOrderDesc);
   const results = games.map((g) => ({ g, ...gamePts(g) }));
@@ -915,6 +920,9 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC }) {
               return (
                 <button key={g.id} className="w-full text-left" onClick={() => { setTab("games"); setNav({ gameId: g.id }); }}>
                   <div className="mb-1 px-1 text-xs flex items-center gap-1.5" style={{ color: C.sub }}>
+                    {isAdmin && g.published === false && (
+                      <span className="font-bold px-1.5 py-0.5 rounded text-white text-[9px] shrink-0" style={{ background: C.sub }}>下書き</span>
+                    )}
                     <span className="font-bold px-1.5 py-0.5 rounded text-white text-[9px] shrink-0"
                       style={{ background: cat.color }}>{cat.badge}</span>
                     <span>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}` : ""}</span>
@@ -1493,14 +1501,18 @@ function GameForm({ data, initial, onSave, onCancel }) {
   );
 }
 
-function GameRow({ g, setNav, showOpp, oppName }) {
+function GameRow({ g, setNav, showOpp, oppName, isAdmin }) {
   const C = useC();
   const { own, opp } = gamePts(g);
   const cat = gameCatOf(g.category);
+  const isDraft = isAdmin && g.published === false;
   return (
     <button className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
-      style={{ background: C.card2 }} onClick={() => setNav({ gameId: g.id })}>
+      style={{ background: C.card2, border: isDraft ? `1px dashed ${C.sub}` : "none" }} onClick={() => setNav({ gameId: g.id })}>
       <span className="text-xs w-20 text-left shrink-0" style={{ color: C.sub }}>{g.date}</span>
+      {isDraft && (
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: C.sub, color: "#fff" }}>下書き</span>
+      )}
       {cat.k === "ref" && (
         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: cat.color, color: "#fff" }}>{cat.badge}</span>
       )}
@@ -1711,7 +1723,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
       onSave={(f) => {
         let oppId = f.opponentId, opponents = data.opponents;
         if (!oppId) { oppId = uid(); opponents = [...opponents, { id: oppId, name: f.newOpp, area: "", numbers: "", logo: "" }]; }
-        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: [] });
+        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: [], published: false });
         save({ ...data, opponents, games: [...data.games, g] });
         setAdding(false); setNav({ gameId: g.id });
       }} />
@@ -1794,7 +1806,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
             {openKey === "fuchu" && (
               <div className="py-2 space-y-2">
                 {fuchuRs.length === 0 ? <div className="text-xs" style={{ color: C.sub }}>対戦なし</div>
-                  : fuchuRs.map((r) => <GameRow key={r.g.id} g={r.g} setNav={setNav} showOpp oppName={oppName} />)}
+                  : fuchuRs.map((r) => <GameRow key={r.g.id} g={r.g} setNav={setNav} showOpp oppName={oppName} isAdmin={isAdmin} />)}
               </div>
             )}
             <div className="space-y-2 mt-3">
@@ -1828,7 +1840,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
                   </button>
                   {openKey === t.k && n > 0 && (
                     <div className="py-2 space-y-2 pl-9">
-                      {rs.map((r) => <GameRow key={r.g.id} g={r.g} setNav={setNav} showOpp oppName={oppName} />)}
+                      {rs.map((r) => <GameRow key={r.g.id} g={r.g} setNav={setNav} showOpp oppName={oppName} isAdmin={isAdmin} />)}
                     </div>
                   )}
                 </div>
@@ -1848,6 +1860,9 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
             return (
               <button key={g.id} className="w-full text-left" onClick={() => setNav({ gameId: g.id })}>
                 <div className="mb-1 px-1 text-xs flex items-center gap-1.5" style={{ color: C.sub }}>
+                  {isAdmin && g.published === false && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: C.sub }}>下書き</span>
+                  )}
                   {catFilter === "all" && cat.k !== "practice" && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: cat.color }}>{cat.badge}</span>
                   )}
@@ -1873,7 +1888,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
                 <WL gs={gs} />
                 <ChevronDown size={18} style={{ color: C.sub, transform: openKey === t ? "rotate(180deg)" : "none" }} />
               </button>
-              {openKey === t && <div className="mt-3 space-y-2">{gs.map((g) => <GameRow key={g.id} g={g} setNav={setNav} showOpp oppName={oppName} />)}</div>}
+              {openKey === t && <div className="mt-3 space-y-2">{gs.map((g) => <GameRow key={g.id} g={g} setNav={setNav} showOpp oppName={oppName} isAdmin={isAdmin} />)}</div>}
             </Card>
           ))}
         </div>
@@ -1892,7 +1907,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
                 <WL gs={gs} />
                 <ChevronDown size={18} style={{ color: C.sub, transform: openKey === o.id ? "rotate(180deg)" : "none" }} />
               </button>
-              {openKey === o.id && <div className="mt-3 space-y-2">{gs.map((g) => <GameRow key={g.id} g={g} setNav={setNav} />)}</div>}
+              {openKey === o.id && <div className="mt-3 space-y-2">{gs.map((g) => <GameRow key={g.id} g={g} setNav={setNav} isAdmin={isAdmin} />)}</div>}
             </Card>
           ))}
         </div>
@@ -1901,7 +1916,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   );
 }
 
-function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
+function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGamePublished }) {
   const C = useC();
   const g = data.games.find((x) => x.id === nav.gameId);
   const [sub, setSub] = useState(isAdmin ? "entry" : "analysis");
@@ -1909,6 +1924,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
   const [copied, setCopied] = useState(false);
   const [report, setReport] = useState(null);
   if (!g) return null;
+  const isDraft = g.published === false;
   const { own, opp } = gamePts(g);
   const mips = mipOf(g, data.players);
   const copyLink = async () => {
@@ -1939,6 +1955,28 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin }) {
           }}><Trash2 size={18} /></button>}
         </div>
       </div>
+      {isAdmin && (
+        <div className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+          style={{ background: isDraft ? "#8FA0C022" : `${C.win}18`, border: `1px solid ${isDraft ? C.sub : C.win}55` }}>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{isDraft ? "🔒" : "🌐"}</span>
+            <div>
+              <div className="text-xs font-bold" style={{ color: isDraft ? C.sub : C.win }}>
+                {isDraft ? "下書き(閲覧者には非表示)" : "公開中(閲覧者にも表示)"}
+              </div>
+              <div className="text-[10px]" style={{ color: C.sub }}>
+                {isDraft ? "入力・確認が終わったら公開してください" : "この試合結果は誰でも見られます"}
+              </div>
+            </div>
+          </div>
+          <button
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white shrink-0"
+            style={{ background: isDraft ? C.win : C.sub }}
+            onClick={() => setGamePublished(g.id, isDraft)}>
+            {isDraft ? "公開する" : "非公開に戻す"}
+          </button>
+        </div>
+      )}
       <div className="px-1 text-xs" style={{ color: C.sub }}>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}(${g.otLen}分)` : ""}・Q{g.qLen}分</div>
       <ScoreBoard own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} qScores={g.qScores} periods={periodsOf(g)} game={g} />
       {mips.length > 0 && (
