@@ -1643,6 +1643,7 @@ function GameForm({ data, initial, onSave, onCancel, isSelectTeam }) {
           <option value={4}>4ピリオド制(通常)</option>
           <option value={3}>3ピリオド制</option>
           <option value={2}>2ピリオド制</option>
+          {isSelectTeam && <option value={1}>1ピリオド制</option>}
         </select>
       </Field>
       <div className="grid grid-cols-3 gap-3">
