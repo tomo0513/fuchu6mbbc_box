@@ -558,10 +558,94 @@ function OppLogo({ o, size = 36 }) {
   );
 }
 
+/* ============ 府中選抜チーム 専用ビュー ============ */
+/* 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking)を、
+   六小のdataではなく選抜用のdataを渡すことでそのまま再利用する。登録系操作は isAdmin のみ許可(各コンポーネントが元々対応済み)。 */
+function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, isAdmin, theme, toggleTheme, onBack }) {
+  const [tab, setTab] = useState("games");
+  const [nav, setNav] = useState({});
+  const C = useC();
+  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished };
+
+  const NAV_ITEMS = [
+    { t: "games", icon: ClipboardList, label: "試合" },
+    { t: "players", icon: Users, label: "選手" },
+    { t: "ranking", icon: Trophy, label: "ランキング" },
+  ];
+
+  const mainContent = (
+    <main className={isPC ? "flex-1 overflow-y-auto p-6" : "max-w-md mx-auto px-3 pt-3 pb-24"}>
+      <div className={isPC ? "max-w-4xl mx-auto" : ""}>
+        {tab === "games" && !nav.gameId && <GameList {...props} />}
+        {tab === "games" && nav.gameId && <GameDetail {...props} />}
+        {tab === "players" && !nav.playerId && <PlayerList {...props} />}
+        {tab === "players" && nav.playerId && <PlayerKarte {...props} />}
+        {tab === "ranking" && <Ranking {...props} />}
+      </div>
+    </main>
+  );
+
+  return (
+    <div className="min-h-screen" style={{ background: C.bg, color: C.text }}>
+      {isPC ? (
+        <div className="flex h-screen overflow-hidden">
+          <aside className="w-56 shrink-0 flex flex-col" style={{ background: C.sidebar, borderRight: `1px solid ${C.border}` }}>
+            <div className="px-5 py-5" style={{ borderBottom: `1px solid ${C.border}` }}>
+              <button className="flex items-center gap-1 text-xs font-bold mb-3" style={{ color: C.sub }} onClick={onBack}>
+                <ChevronLeft size={14} /> 府中六小に戻る
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏆</span>
+                <div className="font-bold text-sm">府中選抜</div>
+              </div>
+              <div className="text-[10px] mt-1" style={{ color: isAdmin ? C.win : C.sub }}>{isAdmin ? "● 管理者" : "○ 閲覧モード"}</div>
+            </div>
+            <nav className="flex-1 py-3 space-y-1 px-2">
+              {NAV_ITEMS.map(({ t, icon: I, label }) => (
+                <button key={t} onClick={() => { setTab(t); setNav({}); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors"
+                  style={tab === t ? { background: C.orange, color: "#fff" } : { color: C.sub }}>
+                  <I size={18} />
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </aside>
+          {mainContent}
+        </div>
+      ) : (
+        <>
+          <header className="sticky top-0 z-20 px-4 py-3 flex items-center gap-2.5 shadow-lg"
+            style={{ background: C.nav, borderBottom: `1px solid ${C.border}` }}>
+            <button className="flex items-center gap-1 text-xs font-bold" style={{ color: C.sub }} onClick={onBack}>
+              <ChevronLeft size={16} /> 六小
+            </button>
+            <span className="text-lg">🏆</span>
+            <div className="font-bold truncate">府中選抜</div>
+            <span className="ml-auto text-xs" style={{ color: isAdmin ? C.win : C.sub }}>{isAdmin ? "管理者" : "閲覧"}</span>
+          </header>
+          {mainContent}
+          <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-around py-1.5"
+            style={{ background: C.nav, borderTop: `1px solid ${C.border}` }}>
+            {NAV_ITEMS.map(({ t, icon: I, label }) => (
+              <button key={t} onClick={() => { setTab(t); setNav({}); }}
+                className="flex flex-col items-center px-2 py-1" style={{ color: tab === t ? C.led : C.sub }}>
+                <I size={20} />
+                <span className="text-[10px] mt-0.5">{label}</span>
+              </button>
+            ))}
+          </nav>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("home");
   const [nav, setNav] = useState({});
+  const [selectMode, setSelectMode] = useState(null); // { fromPlayerId } または null。非nullなら選抜専用ビュー表示
   const [saveState, setSaveState] = useState("");
   const timer = useRef(null);
   const pending = useRef(null);
@@ -597,6 +681,10 @@ export default function App() {
       };
       init.games = (init.games || []).map(normGame);
       init.tournaments = (init.tournaments || []);
+      init.selectTeam = init.selectTeam || { players: [], opponents: [], games: [] };
+      init.selectTeam.games = (init.selectTeam.games || []).map(normGame);
+      init.selectTeam.players = init.selectTeam.players || [];
+      init.selectTeam.opponents = init.selectTeam.opponents || [];
       setData(init);
       const m = (window.location.hash || "").match(/game=([\w]+)/);
       if (m && init.games.some((g) => g.id === m[1])) { setTab("games"); setNav({ gameId: m[1] }); }
@@ -696,7 +784,22 @@ export default function App() {
   const visibleData = isAdmin ? data : { ...data, games: data.games.filter((g) => g.published !== false) };
   // 公開状態の切替は常に「元のdata全体」に対して安全に行う(visibleDataで上書きしないため専用関数を用意)
   const setGamePublished = (gameId, published) => save({ ...data, games: data.games.map((x) => x.id === gameId ? { ...x, published } : x) });
-  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished };
+  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId) => setSelectMode({ fromPlayerId }) };
+
+  // ===== 府中選抜チーム用のデータ・保存関数 =====
+  // 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking等)を
+  // そのまま再利用するため、data.selectTeam を通常の data と同じ形(players/opponents/games)に見せかける
+  const selData = { team: { name: "府中選抜", logo: "", homeCourt: "" }, players: data.selectTeam.players, opponents: data.selectTeam.opponents, games: data.selectTeam.games, tournaments: [] };
+  const selSave = (nextSelLikeData) => {
+    // nextSelLikeDataは{team,players,opponents,games,tournaments}形式で来る(通常のsaveと同じシグネチャ)ので、
+    // players/opponents/gamesだけを取り出してdata.selectTeamに書き戻す
+    save({ ...data, selectTeam: { players: nextSelLikeData.players, opponents: nextSelLikeData.opponents, games: nextSelLikeData.games } });
+  };
+  const selGetOpp = (id) => selData.opponents.find((o) => o.id === id);
+  const selOppName = (id) => selGetOpp(id)?.name || "対戦相手";
+  // 選抜も六小と同様、閲覧者には下書き試合を見せない
+  const selVisibleData = isAdmin ? selData : { ...selData, games: selData.games.filter((g) => g.published !== false) };
+  const setSelGamePublished = (gameId, published) => selSave({ ...selData, games: selData.games.map((x) => x.id === gameId ? { ...x, published } : x) });
 
   const NAV_ITEMS = [
     { t: "home", icon: Home, label: "ホーム" },
@@ -741,6 +844,20 @@ export default function App() {
       </div>
     </main>
   );
+
+  // 府中選抜ビュー: 藍之介のカルテ等から「選抜スタッツを見る」を押すとここに切り替わる
+  if (selectMode) {
+    return (
+      <ThemeCtx.Provider value={CT}>
+        <SelectTeamView
+          data={selVisibleData} save={selSave} oppName={selOppName} getOpp={selGetOpp}
+          setGamePublished={setSelGamePublished}
+          isPC={isPC} isAdmin={isAdmin} theme={theme} toggleTheme={toggleTheme}
+          onBack={() => setSelectMode(null)}
+        />
+      </ThemeCtx.Provider>
+    );
+  }
 
   return (
     <ThemeCtx.Provider value={CT}>
@@ -940,7 +1057,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
 
 function PlayerForm({ initial, onSave, onCancel }) {
   const C = useC();
-  const [f, setF] = useState(initial || { name: "", codename: "", number: "", bibs: "", grade: "6", photo: "", goal: "", targets: [] });
+  const [f, setF] = useState(initial || { name: "", codename: "", number: "", bibs: "", grade: "6", photo: "", goal: "", targets: [], selectTeam: false });
   const set = (k, v) => setF({ ...f, [k]: v });
   const targets = f.targets || [];
   const setTarget = (i, k, v) => set("targets", targets.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
@@ -987,6 +1104,18 @@ function PlayerForm({ initial, onSave, onCancel }) {
         </button>
       )}
       <Field label="目標メモ(自由記入)"><textarea className={inputCls} style={getInputStyle(C)} rows={2} value={f.goal} onChange={(e) => set("goal", e.target.value)} placeholder="声を出してチームを引っ張る" /></Field>
+      <div className="flex items-center gap-3 mb-3">
+        <button className="w-10 h-6 rounded-full flex-shrink-0 relative"
+          style={{ background: f.selectTeam ? C.orange : C.border }}
+          onClick={() => set("selectTeam", !f.selectTeam)}>
+          <div className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
+            style={{ left: f.selectTeam ? "calc(100% - 20px)" : 4 }} />
+        </button>
+        <div>
+          <div className="text-xs font-bold">府中選抜に選出</div>
+          <div className="text-[10px]" style={{ color: C.sub }}>ONにすると選手カルテに選抜スタッツへの入口が表示されます</div>
+        </div>
+      </div>
       <div className="flex gap-2 mt-1">
         <button className="flex-1 py-3 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }} onClick={onCancel}>キャンセル</button>
         <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange }}
@@ -1038,7 +1167,7 @@ function PlayerList({ data, save, setNav, isPC, isAdmin }) {
   );
 }
 
-function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
+function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam }) {
   const C = useC();
   const p = data.players.find((x) => x.id === nav.playerId);
   const [editing, setEditing] = useState(false);
@@ -1116,6 +1245,16 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin }) {
             <Target size={16} style={{ color: C.orange }} className="mt-0.5 shrink-0" />
             <div>{p.goal}</div>
           </div>
+        )}
+        {p.selectTeam && onOpenSelectTeam && (
+          <button className="w-full mt-3 flex items-center justify-between px-3 py-2.5 rounded-xl"
+            style={{ background: `${C.orange}18`, border: `1px solid ${C.orange}55` }}
+            onClick={() => onOpenSelectTeam(p.id)}>
+            <span className="flex items-center gap-2 text-sm font-bold" style={{ color: C.orange }}>
+              🏆 府中選抜スタッツを見る
+            </span>
+            <ChevronDown size={16} style={{ color: C.orange, transform: "rotate(-90deg)" }} />
+          </button>
         )}
       </Card>
       {targets.length > 0 && (
