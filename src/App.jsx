@@ -565,7 +565,7 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
   const [tab, setTab] = useState("games");
   const [nav, setNav] = useState({});
   const C = useC();
-  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished };
+  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, isSelectTeam: true };
 
   const NAV_ITEMS = [
     { t: "games", icon: ClipboardList, label: "試合" },
@@ -595,7 +595,7 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
                 <ChevronLeft size={14} /> 府中六小に戻る
               </button>
               <div className="flex items-center gap-2">
-                <span className="text-xl">🏆</span>
+                <span className="text-xl">🎗️</span>
                 <div className="font-bold text-sm">府中選抜</div>
               </div>
               <div className="text-[10px] mt-1" style={{ color: isAdmin ? C.win : C.sub }}>{isAdmin ? "● 管理者" : "○ 閲覧モード"}</div>
@@ -620,7 +620,7 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
             <button className="flex items-center gap-1 text-xs font-bold" style={{ color: C.sub }} onClick={onBack}>
               <ChevronLeft size={16} /> 六小
             </button>
-            <span className="text-lg">🏆</span>
+            <span className="text-lg">🎗️</span>
             <div className="font-bold truncate">府中選抜</div>
             <span className="ml-auto text-xs" style={{ color: isAdmin ? C.win : C.sub }}>{isAdmin ? "管理者" : "閲覧"}</span>
           </header>
@@ -789,7 +789,7 @@ export default function App() {
   // ===== 府中選抜チーム用のデータ・保存関数 =====
   // 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking等)を
   // そのまま再利用するため、data.selectTeam を通常の data と同じ形(players/opponents/games)に見せかける
-  const selData = { team: { name: "府中選抜", logo: "", homeCourt: "" }, players: data.selectTeam.players, opponents: data.selectTeam.opponents, games: data.selectTeam.games, tournaments: [] };
+  const selData = { team: { name: "府中市選抜（第3回ゼルコバカップ）", logo: "", homeCourt: "" }, players: data.selectTeam.players, opponents: data.selectTeam.opponents, games: data.selectTeam.games, tournaments: [] };
   const selSave = (nextSelLikeData) => {
     // nextSelLikeDataは{team,players,opponents,games,tournaments}形式で来る(通常のsaveと同じシグネチャ)ので、
     // players/opponents/gamesだけを取り出してdata.selectTeamに書き戻す
@@ -1055,9 +1055,11 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
   );
 }
 
-function PlayerForm({ initial, onSave, onCancel }) {
+function PlayerForm({ initial, onSave, onCancel, isSelectTeam }) {
   const C = useC();
-  const [f, setF] = useState(initial || { name: "", codename: "", number: "", bibs: "", grade: "6", photo: "", goal: "", targets: [], selectTeam: false });
+  const [f, setF] = useState(initial || (isSelectTeam
+    ? { name: "", codename: "", number: "", team: "", grade: "6", photo: "" }
+    : { name: "", codename: "", number: "", bibs: "", grade: "6", photo: "", goal: "", targets: [], selectTeam: false }));
   const set = (k, v) => setF({ ...f, [k]: v });
   const targets = f.targets || [];
   const setTarget = (i, k, v) => set("targets", targets.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
@@ -1074,48 +1076,57 @@ function PlayerForm({ initial, onSave, onCancel }) {
       </div>
       <Field label="名前(フルネーム)"><input className={inputCls} style={getInputStyle(C)} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="山田 太郎" /></Field>
       <Field label="コードネーム(試合入力時の表示名)"><input className={inputCls} style={getInputStyle(C)} value={f.codename} onChange={(e) => set("codename", e.target.value)} placeholder="タロー" /></Field>
-      <div className="grid grid-cols-3 gap-3">
+      {isSelectTeam && (
+        <Field label="所属チーム名"><input className={inputCls} style={getInputStyle(C)} value={f.team || ""} onChange={(e) => set("team", e.target.value)} placeholder="府中六小 / ○○ミニバス" /></Field>
+      )}
+      <div className={isSelectTeam ? "grid grid-cols-2 gap-3" : "grid grid-cols-3 gap-3"}>
         <Field label="背番号"><input className={inputCls} style={getInputStyle(C)} inputMode="numeric" value={f.number} onChange={(e) => set("number", e.target.value)} placeholder="4" /></Field>
-        <Field label="ビブスNo."><input className={inputCls} style={getInputStyle(C)} inputMode="numeric" value={f.bibs || ""} onChange={(e) => set("bibs", e.target.value)} placeholder="12" /></Field>
+        {!isSelectTeam && (
+          <Field label="ビブスNo."><input className={inputCls} style={getInputStyle(C)} inputMode="numeric" value={f.bibs || ""} onChange={(e) => set("bibs", e.target.value)} placeholder="12" /></Field>
+        )}
         <Field label="学年">
           <select className={inputCls} style={getInputStyle(C)} value={f.grade} onChange={(e) => set("grade", e.target.value)}>
             {[1,2,3,4,5,6].map((g) => <option key={g} value={g}>{g}年</option>)}
           </select>
         </Field>
       </div>
-      <div className="text-xs mb-1" style={{ color: C.sub }}>目標(1試合平均・5つまで)</div>
-      <div className="space-y-2 mb-2">
-        {targets.map((t, i) => (
-          <div key={i} className="flex gap-2 items-center">
-            <select className="flex-1 rounded-xl px-2 py-2 text-sm" style={getInputStyle(C)} value={t.stat}
-              onChange={(e) => setTarget(i, "stat", e.target.value)}>
-              {STAT_DEFS.map((d) => <option key={d.k} value={d.k}>{d.label}{INVERSE_STATS.has(d.k) ? "(以下)" : ""}</option>)}
-            </select>
-            <input className="w-20 rounded-xl px-2 py-2 text-sm text-center" style={getInputStyle(C)} inputMode="decimal"
-              value={t.value} onChange={(e) => setTarget(i, "value", e.target.value)} placeholder="10" />
-            <button className="p-1.5" style={{ color: C.sub }} onClick={() => set("targets", targets.filter((_, j) => j !== i))}><Trash2 size={16} /></button>
+      {!isSelectTeam && (
+        <>
+          <div className="text-xs mb-1" style={{ color: C.sub }}>目標(1試合平均・5つまで)</div>
+          <div className="space-y-2 mb-2">
+            {targets.map((t, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <select className="flex-1 rounded-xl px-2 py-2 text-sm" style={getInputStyle(C)} value={t.stat}
+                  onChange={(e) => setTarget(i, "stat", e.target.value)}>
+                  {STAT_DEFS.map((d) => <option key={d.k} value={d.k}>{d.label}{INVERSE_STATS.has(d.k) ? "(以下)" : ""}</option>)}
+                </select>
+                <input className="w-20 rounded-xl px-2 py-2 text-sm text-center" style={getInputStyle(C)} inputMode="decimal"
+                  value={t.value} onChange={(e) => setTarget(i, "value", e.target.value)} placeholder="10" />
+                <button className="p-1.5" style={{ color: C.sub }} onClick={() => set("targets", targets.filter((_, j) => j !== i))}><Trash2 size={16} /></button>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      {targets.length < 5 && (
-        <button className="text-sm font-bold mb-3 flex items-center gap-1" style={{ color: C.orange }}
-          onClick={() => set("targets", [...targets, { stat: "pts", value: "" }])}>
-          <Plus size={14} /> 目標を追加
-        </button>
+          {targets.length < 5 && (
+            <button className="text-sm font-bold mb-3 flex items-center gap-1" style={{ color: C.orange }}
+              onClick={() => set("targets", [...targets, { stat: "pts", value: "" }])}>
+              <Plus size={14} /> 目標を追加
+            </button>
+          )}
+          <Field label="目標メモ(自由記入)"><textarea className={inputCls} style={getInputStyle(C)} rows={2} value={f.goal} onChange={(e) => set("goal", e.target.value)} placeholder="声を出してチームを引っ張る" /></Field>
+          <div className="flex items-center gap-3 mb-3">
+            <button className="w-10 h-6 rounded-full flex-shrink-0 relative"
+              style={{ background: f.selectTeam ? C.orange : C.border }}
+              onClick={() => set("selectTeam", !f.selectTeam)}>
+              <div className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
+                style={{ left: f.selectTeam ? "calc(100% - 20px)" : 4 }} />
+            </button>
+            <div>
+              <div className="text-xs font-bold">府中選抜に選出</div>
+              <div className="text-[10px]" style={{ color: C.sub }}>ONにすると選手カルテに選抜スタッツへの入口が表示されます</div>
+            </div>
+          </div>
+        </>
       )}
-      <Field label="目標メモ(自由記入)"><textarea className={inputCls} style={getInputStyle(C)} rows={2} value={f.goal} onChange={(e) => set("goal", e.target.value)} placeholder="声を出してチームを引っ張る" /></Field>
-      <div className="flex items-center gap-3 mb-3">
-        <button className="w-10 h-6 rounded-full flex-shrink-0 relative"
-          style={{ background: f.selectTeam ? C.orange : C.border }}
-          onClick={() => set("selectTeam", !f.selectTeam)}>
-          <div className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
-            style={{ left: f.selectTeam ? "calc(100% - 20px)" : 4 }} />
-        </button>
-        <div>
-          <div className="text-xs font-bold">府中選抜に選出</div>
-          <div className="text-[10px]" style={{ color: C.sub }}>ONにすると選手カルテに選抜スタッツへの入口が表示されます</div>
-        </div>
-      </div>
       <div className="flex gap-2 mt-1">
         <button className="flex-1 py-3 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }} onClick={onCancel}>キャンセル</button>
         <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange }}
@@ -1125,12 +1136,12 @@ function PlayerForm({ initial, onSave, onCancel }) {
   );
 }
 
-function PlayerList({ data, save, setNav, isPC, isAdmin }) {
+function PlayerList({ data, save, setNav, isPC, isAdmin, isSelectTeam }) {
   const C = useC();
   const [adding, setAdding] = useState(false);
   const players = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
   if (adding) return (
-    <PlayerForm onCancel={() => setAdding(false)}
+    <PlayerForm isSelectTeam={isSelectTeam} onCancel={() => setAdding(false)}
       onSave={(f) => { save({ ...data, players: [...data.players, { ...f, id: uid() }] }); setAdding(false); }} />
   );
   return (
@@ -1152,7 +1163,11 @@ function PlayerList({ data, save, setNav, isPC, isAdmin }) {
                 <Avatar p={p} size={44} />
                 <div className="flex-1 min-w-0">
                   <div className="font-bold truncate">{p.name}</div>
-                  <div className="text-xs truncate" style={{ color: C.sub }}>#{p.number}{p.codename ? `・${p.codename}` : ""}{p.bibs ? `・ビブス${p.bibs}` : ""}・{p.grade}年</div>
+                  <div className="text-xs truncate" style={{ color: C.sub }}>
+                    #{p.number}{p.codename ? `・${p.codename}` : ""}
+                    {isSelectTeam ? (p.team ? `・${p.team}` : "") : (p.bibs ? `・ビブス${p.bibs}` : "")}
+                    ・{p.grade}年
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{c.n ? fmt1(c.totAdj.pts / c.n) : "–"}</div>
@@ -1167,7 +1182,7 @@ function PlayerList({ data, save, setNav, isPC, isAdmin }) {
   );
 }
 
-function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam }) {
+function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSelectTeam }) {
   const C = useC();
   const p = data.players.find((x) => x.id === nav.playerId);
   const [editing, setEditing] = useState(false);
@@ -1200,7 +1215,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam }) {
   });
   const targets = (p.targets || []).filter((t) => t.value !== "");
   if (editing) return (
-    <PlayerForm initial={p} onCancel={() => setEditing(false)}
+    <PlayerForm initial={p} isSelectTeam={isSelectTeam} onCancel={() => setEditing(false)}
       onSave={(f) => { save({ ...data, players: data.players.map((x) => x.id === p.id ? { ...x, ...f } : x) }); setEditing(false); }} />
   );
   return (
@@ -1237,7 +1252,11 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam }) {
           <Avatar p={p} size={64} />
           <div className="flex-1">
             <div className="text-xl font-bold">{p.name}</div>
-            <div className="text-xs" style={{ color: C.sub }}>{p.codename ? `${p.codename}・` : ""}#{p.number}{p.bibs ? `・ビブス${p.bibs}` : ""}・{p.grade}年</div>
+            <div className="text-xs" style={{ color: C.sub }}>
+              {p.codename ? `${p.codename}・` : ""}#{p.number}
+              {isSelectTeam ? (p.team ? `・${p.team}` : "") : (p.bibs ? `・ビブス${p.bibs}` : "")}
+              ・{p.grade}年
+            </div>
           </div>
         </div>
         {p.goal && (
@@ -1251,7 +1270,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam }) {
             style={{ background: `${C.orange}18`, border: `1px solid ${C.orange}55` }}
             onClick={() => onOpenSelectTeam(p.id)}>
             <span className="flex items-center gap-2 text-sm font-bold" style={{ color: C.orange }}>
-              🏆 府中選抜スタッツを見る
+              🎗️ 府中選抜スタッツを見る
             </span>
             <ChevronDown size={16} style={{ color: C.orange, transform: "rotate(-90deg)" }} />
           </button>
