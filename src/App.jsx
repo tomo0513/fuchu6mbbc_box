@@ -311,14 +311,13 @@ function analysisFor(data, game, scope) {
   const win = ownPts > oppPts;
   const isIntramural = gameCatOf(game.category)?.isIntramural;
   const ownRows = data.players.map((p) => ({ key: p.id, label: `#${p.number} ${p.codename || p.name}`, p, s: aggStats(events, "own", p.id, scope, game) })).filter((r) => hasStats(r.s) || r.s.min > 0);
-  const oppKeys = [...new Set(events.filter((e) => e.side === "opp" && e.oppNum && e.oppNum !== TEAM_KEY && (scope === "all" || e.q === scope)).map((e) => e.oppNum))];
-  const oppRows = oppKeys.map((n) => {
-    if (isIntramural) {
-      const p = data.players.find((x) => x.id === n);
-      return { key: n, label: p ? `#${p.number} ${p.codename || p.name}` : "?", s: aggStats(events, "opp", n, scope, game) };
-    }
-    return { key: n, label: `#${n}`, s: aggStats(events, "opp", n, scope, game) };
-  }).filter((r) => hasStats(r.s));
+  const oppRows = isIntramural
+    // 紅白戦: 白組も紅組と同じく、選抜メンバー全員からスタッツ・出場時間のある選手を拾う(得点0でも出場していれば表示)
+    ? data.players.map((p) => ({ key: p.id, label: `#${p.number} ${p.codename || p.name}`, p, s: aggStats(events, "opp", p.id, scope, game) })).filter((r) => hasStats(r.s) || r.s.min > 0)
+    // 通常試合: 相手は背番号が分かる範囲でしか拾えないため、イベントに記録された選手のみ
+    : [...new Set(events.filter((e) => e.side === "opp" && e.oppNum && e.oppNum !== TEAM_KEY && (scope === "all" || e.q === scope)).map((e) => e.oppNum))]
+        .map((n) => ({ key: n, label: `#${n}`, s: aggStats(events, "opp", n, scope, game) }))
+        .filter((r) => hasStats(r.s));
   const qData = Array.from({ length: periods }, (_, i) => ({ name: periodLabel2(game, i + 1), 自チーム: +(game.qScores?.own?.[i]) || 0, 相手: +(game.qScores?.opp?.[i]) || 0 }));
   const insights = [], tips = [];
   const scopeLabel = scope === "all" ? "試合全体" : periodLabel2(game, scope);
@@ -345,39 +344,54 @@ function analysisFor(data, game, scope) {
     if (tips.length === 0) tips.push("大きな課題は見当たりません。この内容を継続しましょう。");
   }
 
-  const goodPoints = [];
-  const improvePoints = [];
-  if (ownT.n > 0) {
+  // 良かった点・改善点の生成(mainT視点でvsTと比較)。紅白戦は紅組視点・白組視点の両方を作るため関数化
+  const buildGoodImprove = (mainT, vsT, mainRows, mainWin, mainLabel) => {
+    const good = [], improve = [];
+    if (mainT.n === 0) return { good, improve };
     const isAll = scope === "all";
     const sl = isAll ? "この試合" : `${scopeLabel}`;
-    const fgp = ownT.fga > 0 ? ownT.fgm / ownT.fga : 0;
-    const ftp = ownT.fta > 0 ? ownT.ftm / ownT.fta : 0;
-    const oppFgp = oppT.fga > 0 ? oppT.fgm / oppT.fga : 0;
-    const astRate = ownT.fgm > 0 ? ownT.ast / ownT.fgm : 0;
-    const margins = qData.map((x) => x.自チーム - x.相手);
-    const topEff = [...ownRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff)[0];
+    const fgp = mainT.fga > 0 ? mainT.fgm / mainT.fga : 0;
+    const ftp = mainT.fta > 0 ? mainT.ftm / mainT.fta : 0;
+    const vsFgp = vsT.fga > 0 ? vsT.fgm / vsT.fga : 0;
+    const astRate = mainT.fgm > 0 ? mainT.ast / mainT.fgm : 0;
+    const mainPts = mainLabel === "own" ? ownPts : oppPts;
+    const vsPts = mainLabel === "own" ? oppPts : ownPts;
+    const margins = qData.map((x) => mainLabel === "own" ? x.自チーム - x.相手 : x.相手 - x.自チーム);
+    const topEff = [...mainRows].filter((r) => hasStats(r.s)).sort((a, b) => b.s.eff - a.s.eff)[0];
 
-    if (fgp >= 0.45 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は小学生年代では非常に高い水準です。無理のないシュートセレクションができており、ボールを動かして良い形を作れていた証拠です。`);
-    else if (fgp >= 0.38 && ownT.fga >= (isAll ? 10 : 3)) goodPoints.push(`${sl}のフィールドゴール成功率${pct(ownT.fgm, ownT.fga)}は年代の平均を上回ります。シュートチャンスの選び方は概ね良好でした。`);
-    if (oppFgp > 0 && oppFgp < 0.35 && oppT.fga >= (isAll ? 8 : 3)) goodPoints.push(`相手のFG成功率を${pct(oppT.fgm, oppT.fga)}に抑えました。ディフェンスのプレッシャーとヘルプが機能し、イージーシュートを与えていません。`);
-    if (ownT.reb > oppT.reb && ownT.reb + oppT.reb >= (isAll ? 10 : 3)) goodPoints.push(`リバウンドで${ownT.reb}対${oppT.reb}と上回りました(OR${ownT.or}/DR${ownT.dr})。ボックスアウトの意識が数字に表れています。${ownT.or >= (isAll ? 5 : 2) ? "オフェンスリバウンドからのセカンドチャンスも作れていました。" : ""}`);
-    if (ownT.stl >= (isAll ? 6 : 2)) goodPoints.push(`スティール${ownT.stl}本はアクティブなディフェンスの成果です。パスラインを読んで積極的に仕掛けられていました。`);
-    if (astRate >= 0.5 && ownT.fgm >= (isAll ? 4 : 2)) goodPoints.push(`得点のうちアシスト経由が${Math.round(astRate * 100)}%。個人技に頼らず、パスでズレを作って得点する良いバスケットができています。`);
-    if (ftp >= 0.6 && ownT.fta >= (isAll ? 6 : 2)) goodPoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}と確実に決め切りました。競った展開で効いてくる重要な数字です。`);
-    if (isAll && win && margins.filter((m) => m > 0).length >= 3) goodPoints.push(`複数のピリオドで相手を上回り、試合を通して主導権を握れていました。集中力が最後まで続いた点を評価できます。`);
-    if (!isAll && ownPts > oppPts) goodPoints.push(`${scopeLabel}は${ownPts}対${oppPts}とリードを奪えました。この時間帯の戦い方は継続したいところです。`);
-    if (topEff && topEff.s.eff >= (isAll ? 12 : 5)) goodPoints.push(`${topEff.label}がEFF${topEff.s.eff}と高い貢献度を記録。${topEff.s.pts}得点${topEff.s.reb}リバウンド${topEff.s.ast}アシストとチームを支えました。`);
-    if (goodPoints.length === 0) goodPoints.push(`${sl}は数字上の強みは控えめでしたが、最後まで走り切る姿勢が見えました。次につながる内容です。`);
+    if (fgp >= 0.45 && mainT.fga >= (isAll ? 10 : 3)) good.push(`${sl}のフィールドゴール成功率${pct(mainT.fgm, mainT.fga)}は小学生年代では非常に高い水準です。無理のないシュートセレクションができており、ボールを動かして良い形を作れていた証拠です。`);
+    else if (fgp >= 0.38 && mainT.fga >= (isAll ? 10 : 3)) good.push(`${sl}のフィールドゴール成功率${pct(mainT.fgm, mainT.fga)}は年代の平均を上回ります。シュートチャンスの選び方は概ね良好でした。`);
+    if (vsFgp > 0 && vsFgp < 0.35 && vsT.fga >= (isAll ? 8 : 3)) good.push(`相手のFG成功率を${pct(vsT.fgm, vsT.fga)}に抑えました。ディフェンスのプレッシャーとヘルプが機能し、イージーシュートを与えていません。`);
+    if (mainT.reb > vsT.reb && mainT.reb + vsT.reb >= (isAll ? 10 : 3)) good.push(`リバウンドで${mainT.reb}対${vsT.reb}と上回りました(OR${mainT.or}/DR${mainT.dr})。ボックスアウトの意識が数字に表れています。${mainT.or >= (isAll ? 5 : 2) ? "オフェンスリバウンドからのセカンドチャンスも作れていました。" : ""}`);
+    if (mainT.stl >= (isAll ? 6 : 2)) good.push(`スティール${mainT.stl}本はアクティブなディフェンスの成果です。パスラインを読んで積極的に仕掛けられていました。`);
+    if (astRate >= 0.5 && mainT.fgm >= (isAll ? 4 : 2)) good.push(`得点のうちアシスト経由が${Math.round(astRate * 100)}%。個人技に頼らず、パスでズレを作って得点する良いバスケットができています。`);
+    if (ftp >= 0.6 && mainT.fta >= (isAll ? 6 : 2)) good.push(`フリースロー${pct(mainT.ftm, mainT.fta)}と確実に決め切りました。競った展開で効いてくる重要な数字です。`);
+    if (isAll && mainWin && margins.filter((m) => m > 0).length >= 3) good.push(`複数のピリオドで相手を上回り、試合を通して主導権を握れていました。集中力が最後まで続いた点を評価できます。`);
+    if (!isAll && mainPts > vsPts) good.push(`${scopeLabel}は${mainPts}対${vsPts}とリードを奪えました。この時間帯の戦い方は継続したいところです。`);
+    if (topEff && topEff.s.eff >= (isAll ? 12 : 5)) good.push(`${topEff.label}がEFF${topEff.s.eff}と高い貢献度を記録。${topEff.s.pts}得点${topEff.s.reb}リバウンド${topEff.s.ast}アシストとチームを支えました。`);
+    if (good.length === 0) good.push(`${sl}は数字上の強みは控えめでしたが、最後まで走り切る姿勢が見えました。次につながる内容です。`);
 
-    if (fgp < 0.33 && ownT.fga >= (isAll ? 10 : 4)) improvePoints.push(`FG成功率${pct(ownT.fgm, ownT.fga)}は改善余地があります。遠い位置からの難しいシュートが多くなっていないか、ゴール下やフリーの味方を使えていたか映像で確認したいところです。練習ではレイアップとゴール下フィニッシュの本数を増やしましょう。`);
-    if (ownT.to >= (isAll ? 12 : 4)) improvePoints.push(`ターンオーバー${ownT.to}個は多めです。相手のプレッシャーに対してパスを焦った場面が想定されます。ピボット、ボールミート、強いパスの3点をドリルで徹底すると減らせます。`);
-    if (oppT.or >= (isAll ? 8 : 3)) improvePoints.push(`相手にオフェンスリバウンドを${oppT.or}本許しました。シュートが打たれた瞬間の「ボックスアウト」を全員が徹底することで、相手のセカンドチャンスを減らせます。`);
-    if (ftp < 0.5 && ownT.fta >= (isAll ? 6 : 2)) improvePoints.push(`フリースロー${pct(ownT.ftm, ownT.fta)}は勝敗を左右します。練習の最後に、疲れた状態で連続FTを入れることをおすすめします。`);
-    if (astRate < 0.35 && ownT.fgm >= (isAll ? 6 : 3)) improvePoints.push(`アシスト比率が低く、1対1で完結する場面が多かったようです。「もう1本パスを回す」意識と合わせの動き(カット、スクリーン)を増やすと得点が安定します。`);
-    if (oppFgp >= 0.45 && oppT.fga >= (isAll ? 8 : 3)) improvePoints.push(`相手のFG成功率${pct(oppT.fgm, oppT.fga)}を許しました。ボールマンへの間合いとヘルプの戻りに改善余地があります。ゴール下を簡単に使われていないか確認しましょう。`);
-    if (isAll && margins[2] !== undefined && margins[2] < -3) improvePoints.push(`第3ピリオドで失点が先行しました(${margins[2]})。ハーフタイム明けの入りは集中を切らしやすい時間帯です。最初の2分のプレーを声かけで引き締めたいところです。`);
-    if (!isAll && ownPts < oppPts) improvePoints.push(`${scopeLabel}は${ownPts}対${oppPts}とリードを許しました。この時間帯に何が起きたか、失点の形を映像で振り返ると次に活きます。`);
-    if (improvePoints.length === 0) improvePoints.push(`${sl}は大きな穴は見当たりませんでした。強いて言えば、リードした時間帯でも安易なプレーに逃げず、丁寧なバスケットを続けられると盤石になります。`);
+    if (fgp < 0.33 && mainT.fga >= (isAll ? 10 : 4)) improve.push(`FG成功率${pct(mainT.fgm, mainT.fga)}は改善余地があります。遠い位置からの難しいシュートが多くなっていないか、ゴール下やフリーの味方を使えていたか映像で確認したいところです。練習ではレイアップとゴール下フィニッシュの本数を増やしましょう。`);
+    if (mainT.to >= (isAll ? 12 : 4)) improve.push(`ターンオーバー${mainT.to}個は多めです。相手のプレッシャーに対してパスを焦った場面が想定されます。ピボット、ボールミート、強いパスの3点をドリルで徹底すると減らせます。`);
+    if (vsT.or >= (isAll ? 8 : 3)) improve.push(`相手にオフェンスリバウンドを${vsT.or}本許しました。シュートが打たれた瞬間の「ボックスアウト」を全員が徹底することで、相手のセカンドチャンスを減らせます。`);
+    if (ftp < 0.5 && mainT.fta >= (isAll ? 6 : 2)) improve.push(`フリースロー${pct(mainT.ftm, mainT.fta)}は勝敗を左右します。練習の最後に、疲れた状態で連続FTを入れることをおすすめします。`);
+    if (astRate < 0.35 && mainT.fgm >= (isAll ? 6 : 3)) improve.push(`アシスト比率が低く、1対1で完結する場面が多かったようです。「もう1本パスを回す」意識と合わせの動き(カット、スクリーン)を増やすと得点が安定します。`);
+    if (vsFgp >= 0.45 && vsT.fga >= (isAll ? 8 : 3)) improve.push(`相手のFG成功率${pct(vsT.fgm, vsT.fga)}を許しました。ボールマンへの間合いとヘルプの戻りに改善余地があります。ゴール下を簡単に使われていないか確認しましょう。`);
+    if (isAll && margins[2] !== undefined && margins[2] < -3) improve.push(`第3ピリオドで失点が先行しました(${margins[2]})。ハーフタイム明けの入りは集中を切らしやすい時間帯です。最初の2分のプレーを声かけで引き締めたいところです。`);
+    if (!isAll && mainPts < vsPts) improve.push(`${scopeLabel}は${mainPts}対${vsPts}とリードを許しました。この時間帯に何が起きたか、失点の形を映像で振り返ると次に活きます。`);
+    if (improve.length === 0) improve.push(`${sl}は大きな穴は見当たりませんでした。強いて言えば、リードした時間帯でも安易なプレーに逃げず、丁寧なバスケットを続けられると盤石になります。`);
+    return { good, improve };
+  };
+
+  const ownGI = buildGoodImprove(ownT, oppT, ownRows, win, "own");
+  const goodPoints = ownGI.good;
+  const improvePoints = ownGI.improve;
+  // 紅白戦のみ: 白組視点の良かった点・改善点も生成
+  let oppGoodPoints = [], oppImprovePoints = [];
+  if (isIntramural) {
+    const oppGI = buildGoodImprove(oppT, ownT, oppRows, !win && ownPts !== oppPts, "opp");
+    oppGoodPoints = oppGI.good;
+    oppImprovePoints = oppGI.improve;
   }
 
   void insights; void tips;
@@ -413,7 +427,7 @@ function analysisFor(data, game, scope) {
     ["ファウル", ownT.pf, oppT.pf],
     ["タイムアウト", timeoutsOf(game.events, "own", scope), timeoutsOf(game.events, "opp", scope)],
   ];
-  return { periods, ownT, oppT, ownPts, oppPts, ortg, drtg, net, win, ownRows, oppRows, qData, insights, tips, reviews, compRows, scopeLabel, goodPoints, improvePoints };
+  return { periods, ownT, oppT, ownPts, oppPts, ortg, drtg, net, win, ownRows, oppRows, qData, insights, tips, reviews, compRows, scopeLabel, goodPoints, improvePoints, oppGoodPoints, oppImprovePoints, isIntramural };
 }
 
 function flowAnalysis(data, game) {
@@ -3223,21 +3237,30 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
           </Card>
         );
       })()}
-      {a.ownRows.length > 0 && (<Card><SectionTitle>{isIntramural ? "紅組" : "自チーム"} 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.ownRows} accent={C.orange} /></Card>)}
-      {a.oppRows.length > 0 && (
-        <Card>
-          <SectionTitle>{isIntramural ? "白組" : "相手"} 得点ランキング({a.scopeLabel}・上位5人)</SectionTitle>
-          <div className="space-y-1.5">
-            {[...a.oppRows].sort((x, y) => y.s.pts - x.s.pts).slice(0, 5).map(({ key, label, s }, i) => (
-              <div key={key} className="flex items-center gap-3 py-1.5" style={{ borderBottom: `1px solid ${C.border}44` }}>
-                <span className="w-6 text-center text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
-                <span className="flex-1 font-bold text-sm">{label}</span>
-                <span className="text-2xl font-bold" style={{ color: C.oppText, fontFamily: "'Bebas Neue', sans-serif" }}>{s.pts}</span>
-                <span className="text-xs" style={{ color: C.sub }}>点</span>
+      {isIntramural ? (
+        <>
+          {a.ownRows.length > 0 && (<Card><SectionTitle>紅組 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.ownRows} accent={C.orange} /></Card>)}
+          {a.oppRows.length > 0 && (<Card><SectionTitle>白組 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.oppRows} accent={C.oppBlue} /></Card>)}
+        </>
+      ) : (
+        <>
+          {a.ownRows.length > 0 && (<Card><SectionTitle>自チーム 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.ownRows} accent={C.orange} /></Card>)}
+          {a.oppRows.length > 0 && (
+            <Card>
+              <SectionTitle>相手 得点ランキング({a.scopeLabel}・上位5人)</SectionTitle>
+              <div className="space-y-1.5">
+                {[...a.oppRows].sort((x, y) => y.s.pts - x.s.pts).slice(0, 5).map(({ key, label, s }, i) => (
+                  <div key={key} className="flex items-center gap-3 py-1.5" style={{ borderBottom: `1px solid ${C.border}44` }}>
+                    <span className="w-6 text-center text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
+                    <span className="flex-1 font-bold text-sm">{label}</span>
+                    <span className="text-2xl font-bold" style={{ color: C.oppText, fontFamily: "'Bebas Neue', sans-serif" }}>{s.pts}</span>
+                    <span className="text-xs" style={{ color: C.sub }}>点</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </Card>
+            </Card>
+          )}
+        </>
       )}
       {a.reviews.length > 0 && (
         <Card>
@@ -3258,7 +3281,9 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
           <div className="flex items-center gap-2 mb-3">
             <span className="text-lg">🏀</span>
             <div>
-              <div className="text-xs font-bold tracking-widest" style={{ color: C.win }}>AIアナリスト分析{scope === "all" ? "" : ` (${periodLabel2(game, scope)})`}</div>
+              <div className="text-xs font-bold tracking-widest" style={{ color: C.win }}>
+                AIアナリスト分析{isIntramural ? "・紅組視点" : ""}{scope === "all" ? "" : ` (${periodLabel2(game, scope)})`}
+              </div>
               <div className="text-[10px]" style={{ color: C.sub }}>プロのミニバス分析アナリストの視点</div>
             </div>
           </div>
@@ -3288,7 +3313,44 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
         </Card>
       )}
 
-      {scope === "all" && a.tips.length > 0 && (
+      {isIntramural && a.oppGoodPoints.length > 0 && (
+        <Card style={{ border: `1px solid ${C.oppBlue}44` }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🏀</span>
+            <div>
+              <div className="text-xs font-bold tracking-widest" style={{ color: C.oppBlue }}>
+                AIアナリスト分析・白組視点{scope === "all" ? "" : ` (${periodLabel2(game, scope)})`}
+              </div>
+              <div className="text-[10px]" style={{ color: C.sub }}>プロのミニバス分析アナリストの視点</div>
+            </div>
+          </div>
+          <div className="mb-3">
+            <div className="text-sm font-bold mb-2 flex items-center gap-1.5" style={{ color: C.oppBlue }}>
+              <span className="px-2 py-0.5 rounded text-white text-xs" style={{ background: C.oppBlue }}>GOOD</span> 良かった点
+            </div>
+            <ul className="text-sm space-y-2">
+              {a.oppGoodPoints.map((s, i) => (
+                <li key={i} className="flex gap-2 leading-relaxed"><span className="shrink-0" style={{ color: C.oppBlue }}>◎</span><span>{s}</span></li>
+              ))}
+            </ul>
+          </div>
+          <div className="pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+            <div className="text-sm font-bold mb-2 flex items-center gap-1.5" style={{ color: C.orange }}>
+              <span className="px-2 py-0.5 rounded text-white text-xs" style={{ background: C.orange }}>NEXT</span> 改善点
+            </div>
+            <ul className="text-sm space-y-2">
+              {a.oppImprovePoints.map((s, i) => (
+                <li key={i} className="flex gap-2 leading-relaxed"><span className="shrink-0" style={{ color: C.orange }}>▲</span><span>{s}</span></li>
+              ))}
+            </ul>
+          </div>
+          <div className="text-[10px] mt-3 pt-2" style={{ color: C.sub, borderTop: `1px solid ${C.border}` }}>
+            ※入力されたスタッツとプレイログをもとに自動生成した分析です。実際の試合内容と照らし合わせてご活用ください。
+          </div>
+        </Card>
+      )}
+
+      {!isIntramural && scope === "all" && a.tips.length > 0 && (
         <Card>
           <SectionTitle>次戦に向けた提言</SectionTitle>
           <ul className="text-sm space-y-1.5">{a.tips.map((s, i) => <li key={i} className="flex gap-2"><Target size={14} className="mt-0.5 shrink-0" style={{ color: C.win }} /><span>{s}</span></li>)}</ul>
