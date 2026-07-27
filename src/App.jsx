@@ -275,7 +275,21 @@ const gameOrderAsc = (a, b) => (a.date || "").localeCompare(b.date || "") || ((+
 const gameOrderDesc = (a, b) => (b.date || "").localeCompare(a.date || "") || ((+b.order || 0) - (+a.order || 0));
 
 function careerStats(games, playerId) {
-  const per = games.map((g) => ({ g, s: aggStats(g.events, "own", playerId, "all", g) })).filter((x) => hasStats(x.s));
+  // 通常はown側(自チーム)の選手として集計。紅白戦の場合、その試合でopp側(白組)に
+  // 振り分けられていれば、opp側の選手としてスタッツを拾う。
+  const sideFor = (g) => {
+    if (!gameCatOf(g.category)?.isIntramural) return "own";
+    const evs = g.events || [];
+    const onOpp = evs.some((e) => e.side === "opp" && e.oppNum === playerId);
+    const onOwn = evs.some((e) => e.side === "own" && e.playerId === playerId);
+    if (onOpp && !onOwn) return "opp";
+    // lineupsOppにのみ登録されている(イベントがまだ無い)場合もopp側と判定
+    const inLineupOwn = Object.values(g.lineups || {}).some((arr) => arr.includes(playerId));
+    const inLineupOpp = Object.values(g.lineupsOpp || {}).some((arr) => arr.includes(playerId));
+    if (inLineupOpp && !inLineupOwn && !onOwn) return "opp";
+    return "own";
+  };
+  const per = games.map((g) => ({ g, s: aggStats(g.events, sideFor(g), playerId, "all", g) })).filter((x) => hasStats(x.s));
   const played = per.filter((x) => { const p = gamePts(x.g); return (p.own + p.opp) > 0; });
   const totalQPlayed = played.reduce((a, x) => a + periodsOf(x.g), 0);
   const baseQ = played.length * 4;
@@ -292,7 +306,19 @@ function careerStats(games, playerId) {
 }
 
 function mipOf(game, players) {
-  const rows = players.map((p) => ({ p, s: aggStats(game.events, "own", p.id, "all", game) })).filter((r) => hasStats(r.s));
+  const isIntramural = gameCatOf(game.category)?.isIntramural;
+  const sideForPlayer = (pid) => {
+    if (!isIntramural) return "own";
+    const evs = game.events || [];
+    const onOpp = evs.some((e) => e.side === "opp" && e.oppNum === pid);
+    const onOwn = evs.some((e) => e.side === "own" && e.playerId === pid);
+    if (onOpp && !onOwn) return "opp";
+    const inLineupOwn = Object.values(game.lineups || {}).some((arr) => arr.includes(pid));
+    const inLineupOpp = Object.values(game.lineupsOpp || {}).some((arr) => arr.includes(pid));
+    if (inLineupOpp && !inLineupOwn && !onOwn) return "opp";
+    return "own";
+  };
+  const rows = players.map((p) => ({ p, s: aggStats(game.events, sideForPlayer(p.id), p.id, "all", game) })).filter((r) => hasStats(r.s));
   if (rows.length === 0) return [];
   const max = Math.max(...rows.map((r) => r.s.eff));
   return rows.filter((r) => r.s.eff === max);
@@ -453,7 +479,12 @@ function flowAnalysis(data, game) {
   const periodNotes = [];
   for (let q = 1; q <= periods; q++) {
     const o = +(game.qScores?.own?.[q - 1]) || 0, p = +(game.qScores?.opp?.[q - 1]) || 0;
-    const rows = data.players.map((pl) => ({ pl, s: aggStats(game.events, "own", pl.id, q, game) })).filter((r) => r.s.pts > 0).sort((a, b) => b.s.pts - a.s.pts);
+    const rows = data.players.map((pl) => {
+      const sd = isIntramural
+        ? (game.events || []).some((e) => e.side === "opp" && e.oppNum === pl.id) ? "opp" : "own"
+        : "own";
+      return { pl, s: aggStats(game.events, sd, pl.id, q, game) };
+    }).filter((r) => r.s.pts > 0).sort((a, b) => b.s.pts - a.s.pts);
     const parts = [`${periodLabel2(game, q)}: ${o}-${p}${o > p ? "で上回る" : o < p ? "で劣勢" : "の互角"}`];
     if (rows[0]) parts.push(`#${rows[0].pl.number} ${rows[0].pl.codename || rows[0].pl.name}が${rows[0].s.pts}得点`);
     if (perPeriod[q]) parts.push(...perPeriod[q]);
