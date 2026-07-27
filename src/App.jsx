@@ -108,11 +108,16 @@ const TIERS = [
 const tierOf = (k) => TIERS.find((t) => t.k === k);
 
 const GAME_CATS = [
-  { k: "official",  label: "公式戦",   badge: "公式", color: "#E25C5C", countWL: true  },
-  { k: "practice",  label: "練習試合", badge: "練習", color: "#5B74A8", countWL: true  },
-  { k: "ref",       label: "参考試合", badge: "参考", color: "#8FA0C0", countWL: false },
+  { k: "official",    label: "公式戦",   badge: "公式", color: "#E25C5C", countWL: true  },
+  { k: "practice",    label: "練習試合", badge: "練習", color: "#5B74A8", countWL: true  },
+  { k: "ref",         label: "参考試合", badge: "参考", color: "#8FA0C0", countWL: false },
+  { k: "intramural",  label: "紅白戦",   badge: "紅白", color: "#C0455C", countWL: false, isIntramural: true },
 ];
 const gameCatOf = (k) => GAME_CATS.find((c) => c.k === k) || GAME_CATS[1];
+// 画面に出す試合区分の選択肢。isSelectTeam=trueなら「参考試合」を除き「紅白戦」を含める
+const gameCatsFor = (isSelectTeam) => isSelectTeam
+  ? GAME_CATS.filter((c) => c.k !== "ref")
+  : GAME_CATS.filter((c) => c.k !== "intramural");
 
 const nameCompare = (a, b) => (a || "").localeCompare(b || "", "ja");
 const TIER_RANK = { A: 0, B: 1, C: 2, D: 3 };
@@ -303,9 +308,16 @@ function analysisFor(data, game, scope) {
   const drtg = oppT.poss > 0 ? (100 * oppPts) / oppT.poss : null;
   const net = ortg !== null && drtg !== null ? ortg - drtg : null;
   const win = ownPts > oppPts;
+  const isIntramural = gameCatOf(game.category)?.isIntramural;
   const ownRows = data.players.map((p) => ({ key: p.id, label: `#${p.number} ${p.codename || p.name}`, p, s: aggStats(events, "own", p.id, scope, game) })).filter((r) => hasStats(r.s) || r.s.min > 0);
   const oppKeys = [...new Set(events.filter((e) => e.side === "opp" && e.oppNum && e.oppNum !== TEAM_KEY && (scope === "all" || e.q === scope)).map((e) => e.oppNum))];
-  const oppRows = oppKeys.map((n) => ({ key: n, label: `#${n}`, s: aggStats(events, "opp", n, scope, game) })).filter((r) => hasStats(r.s));
+  const oppRows = oppKeys.map((n) => {
+    if (isIntramural) {
+      const p = data.players.find((x) => x.id === n);
+      return { key: n, label: p ? `#${p.number} ${p.codename || p.name}` : "?", s: aggStats(events, "opp", n, scope, game) };
+    }
+    return { key: n, label: `#${n}`, s: aggStats(events, "opp", n, scope, game) };
+  }).filter((r) => hasStats(r.s));
   const qData = Array.from({ length: periods }, (_, i) => ({ name: periodLabel2(game, i + 1), 自チーム: +(game.qScores?.own?.[i]) || 0, 相手: +(game.qScores?.opp?.[i]) || 0 }));
   const insights = [], tips = [];
   const scopeLabel = scope === "all" ? "試合全体" : periodLabel2(game, scope);
@@ -405,6 +417,9 @@ function analysisFor(data, game, scope) {
 
 function flowAnalysis(data, game) {
   const periods = periodsOf(game);
+  const isIntramural = gameCatOf(game.category)?.isIntramural;
+  const ownName = isIntramural ? "紅組" : data.team.name;
+  const oppSideName = isIntramural ? "白組" : "相手";
   const sorted = [...(game.events || [])].map((e, i) => ({ e, i })).sort((a, b) => a.e.q - b.e.q || a.i - b.i).map((x) => x.e);
   let ro = 0, rp = 0, leadChanges = 0, prevSign = 0, runTeam = null, runPts = 0;
   const perPeriod = {};
@@ -413,13 +428,13 @@ function flowAnalysis(data, game) {
     const pts = PTS_OF[e.action];
     if (!pts) continue;
     if (e.side === runTeam) runPts += pts;
-    else { if (runTeam && runPts >= 6) note(e.q, `${runTeam === "own" ? data.team.name : "相手"}が${runPts}-0のラン`); runTeam = e.side; runPts = pts; }
+    else { if (runTeam && runPts >= 6) note(e.q, `${runTeam === "own" ? ownName : oppSideName}が${runPts}-0のラン`); runTeam = e.side; runPts = pts; }
     if (e.side === "own") ro += pts; else rp += pts;
     const sign = Math.sign(ro - rp);
     if (sign !== 0 && prevSign !== 0 && sign !== prevSign) leadChanges++;
     if (sign !== 0) prevSign = sign;
   }
-  if (runTeam && runPts >= 6 && sorted.length) note(sorted[sorted.length - 1].q, `${runTeam === "own" ? data.team.name : "相手"}が${runPts}-0のラン`);
+  if (runTeam && runPts >= 6 && sorted.length) note(sorted[sorted.length - 1].q, `${runTeam === "own" ? ownName : oppSideName}が${runPts}-0のラン`);
   const periodNotes = [];
   for (let q = 1; q <= periods; q++) {
     const o = +(game.qScores?.own?.[q - 1]) || 0, p = +(game.qScores?.opp?.[q - 1]) || 0;
@@ -473,7 +488,7 @@ const Seg = ({ items, value, onChange }) => {
   );
 };
 
-function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods, game }) {
+function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods, game, ownName }) {
   const C = useC();
   const win = own > opp, draw = own === opp;
   return (
@@ -481,7 +496,7 @@ function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods,
       style={{ background: C.board, border: `1px solid ${C.border}`, fontFamily: "'Bebas Neue', sans-serif" }}>
       <div className="flex items-center justify-between">
         <div className="text-center flex-1">
-          <div className="text-xs tracking-widest" style={{ fontFamily: "sans-serif", color: C.sub }}>府中六小</div>
+          <div className="text-xs tracking-widest" style={{ fontFamily: "sans-serif", color: C.sub }}>{ownName || "府中六小"}</div>
           <div className={small ? "text-5xl" : "text-7xl"} style={{ color: C.led, textShadow: `0 0 16px ${C.led}66`, lineHeight: 1.1 }}>{own}</div>
         </div>
         <div className="text-center px-2">
@@ -514,7 +529,7 @@ function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods,
             </thead>
             <tbody>
               <tr>
-                <td style={{ fontSize: 9, color: C.sub, fontFamily: "sans-serif", paddingRight: 4 }}>府中六小</td>
+                <td style={{ fontSize: 9, color: C.sub, fontFamily: "sans-serif", paddingRight: 4 }}>{ownName || "府中六小"}</td>
                 {Array.from({ length: periods }, (_, i) => (
                   <td key={i} style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, textAlign: "center", color: C.led, lineHeight: 1.3 }}>
                     {qScores.own[i] || 0}
@@ -1524,7 +1539,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
   );
 }
 
-function GameForm({ data, initial, onSave, onCancel }) {
+function GameForm({ data, initial, onSave, onCancel, isSelectTeam }) {
   const C = useC();
   const [f, setF] = useState(initial ? { ...normGame(initial), newOpp: "" } : {
     date: new Date().toISOString().slice(0, 10), tournament: "",
@@ -1536,6 +1551,8 @@ function GameForm({ data, initial, onSave, onCancel }) {
   const setQ = (side, i, v) => setF({ ...f, qScores: { ...f.qScores, [side]: f.qScores[side].map((x, j) => (j === i ? v : x)) } });
   const oppFull = !f.opponentId && data.opponents.length >= MAX_OPPONENTS;
   const sameDayGames = data.games.filter((x) => x.date === f.date && x.id !== initial?.id);
+  const isIntramural = gameCatOf(f.category)?.isIntramural;
+  const cats = gameCatsFor(isSelectTeam);
 
   const handleSave = () => {
     const wasRegQ = initial ? regQOf(initial) : 4;
@@ -1597,7 +1614,7 @@ function GameForm({ data, initial, onSave, onCancel }) {
       </Field>
       <Field label="試合区分">
         <div className="flex gap-2">
-          {GAME_CATS.map((c) => (
+          {cats.map((c) => (
             <button key={c.k} type="button" className="flex-1 py-2.5 rounded-xl text-xs font-bold"
               onClick={() => setF({ ...f, category: c.k })}
               style={f.category === c.k ? { background: c.color, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}>
@@ -1606,16 +1623,21 @@ function GameForm({ data, initial, onSave, onCancel }) {
           ))}
         </div>
         {f.category === "ref" && <div className="text-[10px] mt-1" style={{ color: C.sub }}>※参考試合はスタッツを記録しますが、勝敗集計には含まれません。</div>}
+        {isIntramural && <div className="text-[10px] mt-1" style={{ color: C.sub }}>※紅白戦は対戦相手を選ばず、紅組・白組ともに選抜メンバーからボックススコアを記録します。</div>}
       </Field>
-      <Field label="対戦相手">
-        <select className={inputCls} style={getInputStyle(C)} value={f.opponentId} onChange={(e) => setF({ ...f, opponentId: e.target.value })}>
-          <option value="">(新しいチームを入力)</option>
-          {[...data.opponents].sort((a, b) => nameCompare(a.name, b.name)).map((o) => <option key={o.id} value={o.id}>{o.name}{o.area ? `(${o.area})` : ""}</option>)}
-        </select>
-      </Field>
-      {!f.opponentId && (!oppFull
-        ? <Field label="新しい相手チーム名"><input className={inputCls} style={getInputStyle(C)} value={f.newOpp} onChange={(e) => setF({ ...f, newOpp: e.target.value })} placeholder="◯◯ミニバス" /></Field>
-        : <div className="text-xs mb-3" style={{ color: C.loss }}>対戦相手の登録上限({MAX_OPPONENTS}チーム)に達しています。</div>)}
+      {!isIntramural && (
+        <>
+          <Field label="対戦相手">
+            <select className={inputCls} style={getInputStyle(C)} value={f.opponentId} onChange={(e) => setF({ ...f, opponentId: e.target.value })}>
+              <option value="">(新しいチームを入力)</option>
+              {[...data.opponents].sort((a, b) => nameCompare(a.name, b.name)).map((o) => <option key={o.id} value={o.id}>{o.name}{o.area ? `(${o.area})` : ""}</option>)}
+            </select>
+          </Field>
+          {!f.opponentId && (!oppFull
+            ? <Field label="新しい相手チーム名"><input className={inputCls} style={getInputStyle(C)} value={f.newOpp} onChange={(e) => setF({ ...f, newOpp: e.target.value })} placeholder="◯◯ミニバス" /></Field>
+            : <div className="text-xs mb-3" style={{ color: C.loss }}>対戦相手の登録上限({MAX_OPPONENTS}チーム)に達しています。</div>)}
+        </>
+      )}
       <Field label="試合形式">
         <select className={inputCls} style={getInputStyle(C)} value={f.regQ} onChange={(e) => setF({ ...f, regQ: +e.target.value })}>
           <option value={4}>4ピリオド制(通常)</option>
@@ -1644,16 +1666,16 @@ function GameForm({ data, initial, onSave, onCancel }) {
       <div className="overflow-x-auto">
         <div className="grid items-center text-center text-sm mb-3 gap-1.5" style={{ gridTemplateColumns: `64px repeat(${periods}, 1fr)`, minWidth: periods > 4 ? 360 : 0 }}>
           <div></div>{Array.from({ length: periods }, (_, i) => <div key={i} className="text-xs" style={{ color: C.sub }}>{periodLabel2(f, i + 1)}</div>)}
-          <div className="text-xs font-bold">自チーム</div>
+          <div className="text-xs font-bold">{isIntramural ? "紅組" : "自チーム"}</div>
           {Array.from({ length: periods }, (_, i) => <input key={i} inputMode="numeric" className="rounded-lg py-2 text-center w-full" style={getInputStyle(C)} value={f.qScores.own[i]} onChange={(e) => setQ("own", i, e.target.value)} />)}
-          <div className="text-xs font-bold">相手</div>
+          <div className="text-xs font-bold">{isIntramural ? "白組" : "相手"}</div>
           {Array.from({ length: periods }, (_, i) => <input key={i} inputMode="numeric" className="rounded-lg py-2 text-center w-full" style={getInputStyle(C)} value={f.qScores.opp[i]} onChange={(e) => setQ("opp", i, e.target.value)} />)}
         </div>
       </div>
       <div className="flex gap-2">
         <button className="flex-1 py-3 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }} onClick={onCancel}>キャンセル</button>
         <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange }}
-          disabled={!f.date || (!f.opponentId && (!f.newOpp || oppFull))} onClick={handleSave}>保存する</button>
+          disabled={!f.date || (!isIntramural && !f.opponentId && (!f.newOpp || oppFull))} onClick={handleSave}>保存する</button>
       </div>
     </Card>
   );
@@ -1867,7 +1889,7 @@ function TeamStatsCard({ data, oppName }) {
   );
 }
 
-function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
+function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin, isSelectTeam }) {
   const C = useC();
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState("list");
@@ -1877,10 +1899,15 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   const filteredGames = catFilter === "all" ? games : games.filter((g) => (g.category || "practice") === catFilter);
   const results = filteredGames.map((g) => ({ g, ...gamePts(g) }));
   if (adding) return (
-    <GameForm data={data} onCancel={() => setAdding(false)}
+    <GameForm data={data} isSelectTeam={isSelectTeam} onCancel={() => setAdding(false)}
       onSave={(f) => {
+        const isIntramural = gameCatOf(f.category)?.isIntramural;
         let oppId = f.opponentId, opponents = data.opponents;
-        if (!oppId) { oppId = uid(); opponents = [...opponents, { id: oppId, name: f.newOpp, area: "", numbers: "", logo: "" }]; }
+        if (isIntramural) {
+          oppId = ""; // 紅白戦は対戦相手を作らない(白組は選抜メンバーからPlay by Playで直接入力)
+        } else if (!oppId) {
+          oppId = uid(); opponents = [...opponents, { id: oppId, name: f.newOpp, area: "", numbers: "", logo: "" }];
+        }
         const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: [], published: false });
         save({ ...data, opponents, games: [...data.games, g] });
         setAdding(false); setNav({ gameId: g.id });
@@ -1918,7 +1945,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
           onClick={() => { setCatFilter("all"); setOpenKey(null); }}>
           全て ({games.length})
         </button>
-        {GAME_CATS.map((c) => {
+        {gameCatsFor(isSelectTeam).map((c) => {
           const cnt = games.filter((g) => (g.category || "practice") === c.k).length;
           return (
             <button key={c.k} className="flex-1 py-2 rounded-xl text-xs font-bold"
@@ -1931,7 +1958,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
       </div>
 
       {catFilter === "all" && games.length > 0 && (() => {
-        const officialResults = games.map((g) => ({ g, ...gamePts(g) })).filter((r) => (r.g.category || "practice") !== "ref");
+        const officialResults = games.map((g) => ({ g, ...gamePts(g) })).filter((r) => !["ref", "intramural"].includes(r.g.category || "practice"));
         const wldOf2 = (rs) => ({ w: rs.filter((r) => r.own > r.opp).length, l: rs.filter((r) => r.own < r.opp).length, d: rs.filter((r) => r.own === r.opp).length });
         const fuchuRs = officialResults.filter((r) => (getOpp(r.g.opponentId)?.area || "").includes("府中"));
         const fuchu2 = wldOf2(fuchuRs);
@@ -2026,7 +2053,8 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
                   )}
                   <span>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}` : ""}</span>
                 </div>
-                <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} />
+                <ScoreBoard small own={own} opp={opp} oppName={isSelectTeam && cat.isIntramural ? "白組" : oppName(g.opponentId)}
+                  oppLogo={getOpp(g.opponentId)?.logo} date={g.date} ownName={isSelectTeam ? (cat.isIntramural ? "紅組" : "府中選抜") : undefined} />
               </button>
             );
           })}
@@ -2074,7 +2102,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin }) {
   );
 }
 
-function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGamePublished }) {
+function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGamePublished, isSelectTeam }) {
   const C = useC();
   const g = data.games.find((x) => x.id === nav.gameId);
   const [sub, setSub] = useState(isAdmin ? "entry" : "analysis");
@@ -2083,6 +2111,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
   const [report, setReport] = useState(null);
   if (!g) return null;
   const isDraft = g.published === false;
+  const cat = gameCatOf(g.category);
   const { own, opp } = gamePts(g);
   const mips = mipOf(g, data.players);
   const copyLink = async () => {
@@ -2092,7 +2121,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
   };
   if (report) return <ReportView data={data} game={g} mode={report} oppName={oppName} onClose={() => setReport(null)} />;
   if (editing) return (
-    <GameForm data={data} initial={g} onCancel={() => setEditing(false)}
+    <GameForm data={data} initial={g} isSelectTeam={isSelectTeam} onCancel={() => setEditing(false)}
       onSave={(f) => {
         save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: f._clearQs ? (x.events || []).filter((e) => !f._clearQs.includes(e.q)) : x.events, lineups: f._clearQs ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => !f._clearQs.includes(+k))) : x.lineups }) : x) });
         setEditing(false);
@@ -2136,7 +2165,9 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
         </div>
       )}
       <div className="px-1 text-xs" style={{ color: C.sub }}>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}(${g.otLen}分)` : ""}・Q{g.qLen}分</div>
-      <ScoreBoard own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} qScores={g.qScores} periods={periodsOf(g)} game={g} />
+      <ScoreBoard own={own} opp={opp} oppName={isSelectTeam && cat.isIntramural ? "白組" : oppName(g.opponentId)}
+        oppLogo={getOpp(g.opponentId)?.logo} date={g.date} qScores={g.qScores} periods={periodsOf(g)} game={g}
+        ownName={isSelectTeam ? (cat.isIntramural ? "紅組" : "府中選抜") : undefined} />
       {mips.length > 0 && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl flex-wrap" style={{ background: C.card, border: `1px solid ${C.led}55` }}>
           <Award size={18} style={{ color: C.led }} />
@@ -2150,16 +2181,17 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
             style={sub === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
         ))}
       </div>
-      {sub === "entry" && isAdmin && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
+      {sub === "entry" && isAdmin && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} isSelectTeam={isSelectTeam} />}
       {sub === "analysis" && <GameAnalysis data={data} save={save} game={g} oppName={oppName} onReport={setReport} isAdmin={isAdmin} />}
       {sub === "media" && <GameMedia data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
     </div>
   );
 }
 
-function PlayByPlay({ data, save, game, oppName, isAdmin }) {
+function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam }) {
   const C = useC();
   const periods = periodsOf(game);
+  const isIntramural = isSelectTeam && gameCatOf(game.category)?.isIntramural;
   const [q, setQ] = useState(1);
   const [time, setTime] = useState("");
   const [side, setSide] = useState("own");
@@ -2215,7 +2247,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
       return { ...x, events, qScores: pts ? applyScore(x.qScores, side, q - 1, pts) : x.qScores };
     });
     if (insertAfter) setInsertAfter(ev.id);
-    const who = key === TEAM_KEY ? (side === "own" ? "自チーム" : "相手チーム") : (side === "own" ? pName(key) : `相手 #${key}`);
+    const who = key === TEAM_KEY ? (side === "own" ? "自チーム" : (isIntramural ? "白組チーム" : "相手チーム")) : (side === "own" ? pName(key) : (isIntramural ? pName(key) : `相手 #${key}`));
     setFlash({ id: ev.id, text: `${who} – ${ACTION_LABEL[action]}${pts ? ` (+${pts})` : ""}` });
     clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 1300);
@@ -2353,7 +2385,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
           <span className="text-xs" style={{ color: C.sub }}>任意</span>
         </div>
         <div className="mb-3">
-          <Seg items={[["own", "自チーム"], ["opp", `相手(${oppName(game.opponentId)})`]]} value={side}
+          <Seg items={[["own", isIntramural ? "紅組" : "自チーム"], ["opp", isIntramural ? "白組" : `相手(${oppName(game.opponentId)})`]]} value={side}
             onChange={changeSide} />
         </div>
         {side === "own" ? (
@@ -2460,6 +2492,20 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
               )}
             </>
           )
+        ) : isIntramural ? (
+          <div className="flex flex-wrap gap-1.5 mb-3 items-center">
+            <div className="text-xs w-full mb-1" style={{ color: C.sub }}>白組(選抜メンバーから選択)</div>
+            <button onClick={() => setSel(TEAM_KEY)}
+              className="px-3 py-2 rounded-full text-sm font-bold"
+              style={sel === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}>チーム</button>
+            {players.map((p) => (
+              <button key={p.id} onClick={() => setSel(p.id)}
+                className="px-3 py-2 rounded-full text-sm font-bold"
+                style={sel === p.id ? { background: C.oppBlue, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.text }}>
+                #{p.number} {p.codename || p.name}
+              </button>
+            ))}
+          </div>
         ) : (
           <div className="flex flex-wrap gap-1.5 mb-3 items-center">
             <button onClick={() => setSel(TEAM_KEY)}
@@ -2529,7 +2575,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
             events={events} q={q} game={game} sortMode={sortMode} insertAfter={insertAfter}
             updGame={updGame} dragItem={dragItem} dragOver={dragOver}
             pName={pName} isAdmin={isAdmin} setEditEvent={setEditEvent} setInsertAfter={setInsertAfter} delEvent={delEvent}
-            C={C}
+            C={C} isIntramural={isIntramural}
           />
         )}
       </Card>
@@ -2552,22 +2598,22 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
             <div className="flex gap-2">
               <button className="flex-1 py-2 rounded-xl text-sm font-bold"
                 style={editEvent.side === "own" ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
-                onClick={() => setEditEvent({ ...editEvent, side: "own", oppNum: undefined })}>自チーム</button>
+                onClick={() => setEditEvent({ ...editEvent, side: "own", oppNum: undefined })}>{isIntramural ? "紅組" : "自チーム"}</button>
               <button className="flex-1 py-2 rounded-xl text-sm font-bold"
                 style={editEvent.side === "opp" ? { background: C.oppBlue, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
-                onClick={() => setEditEvent({ ...editEvent, side: "opp", playerId: undefined })}>相手</button>
+                onClick={() => setEditEvent({ ...editEvent, side: "opp", playerId: undefined })}>{isIntramural ? "白組" : "相手"}</button>
             </div>
-            {editEvent.side === "own" && (
+            {(editEvent.side === "own" || (isIntramural && editEvent.side === "opp")) && (
               <div>
                 <div className="text-xs mb-1" style={{ color: C.sub }}>選手</div>
                 <div className="flex flex-wrap gap-1.5">
                   <button className="px-3 py-1.5 rounded-full text-xs font-bold"
-                    style={editEvent.playerId === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}
-                    onClick={() => setEditEvent({ ...editEvent, playerId: TEAM_KEY })}>チーム</button>
+                    style={(editEvent.side === "own" ? editEvent.playerId : editEvent.oppNum) === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}
+                    onClick={() => setEditEvent(editEvent.side === "own" ? { ...editEvent, playerId: TEAM_KEY } : { ...editEvent, oppNum: TEAM_KEY })}>チーム</button>
                   {players.map((p) => (
                     <button key={p.id} className="px-3 py-1.5 rounded-full text-xs font-bold"
-                      style={editEvent.playerId === p.id ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.text }}
-                      onClick={() => setEditEvent({ ...editEvent, playerId: p.id })}>
+                      style={(editEvent.side === "own" ? editEvent.playerId : editEvent.oppNum) === p.id ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.text }}
+                      onClick={() => setEditEvent(editEvent.side === "own" ? { ...editEvent, playerId: p.id } : { ...editEvent, oppNum: p.id })}>
                       #{p.number} {p.codename || p.name}
                     </button>
                   ))}
@@ -2597,7 +2643,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin }) {
 }
 
 /* ============ プレイログ並び替えリスト ============ */
-function LogList({ events, q, game, sortMode, insertAfter, updGame, dragItem, dragOver, pName, isAdmin, setEditEvent, setInsertAfter, delEvent, C }) {
+function LogList({ events, q, game, sortMode, insertAfter, updGame, dragItem, dragOver, pName, isAdmin, setEditEvent, setInsertAfter, delEvent, C, isIntramural }) {
   const qEvs = events.map((e, i) => ({ e, origIdx: i })).filter(({ e }) => e.q === q).reverse();
 
   const moveEvent = (fromOrigIdx, toOrigIdx) => {
@@ -2675,7 +2721,7 @@ function LogList({ events, q, game, sortMode, insertAfter, updGame, dragItem, dr
             <span className="text-xs w-9" style={{ color: C.sub }}>{e.time || "–"}</span>
           )}
           <span className="flex-1 truncate">
-            {e.side === "own" ? pName(e.playerId) : (e.oppNum === TEAM_KEY ? "相手チーム" : `相手 #${e.oppNum}`)}
+            {e.side === "own" ? pName(e.playerId) : (e.oppNum === TEAM_KEY ? (isIntramural ? "白組チーム" : "相手チーム") : (isIntramural ? pName(e.oppNum) : `相手 #${e.oppNum}`))}
             <span style={{ color: e.side === "own" ? C.sub : C.oppText }}> – {ACTION_LABEL[e.action]}</span>
           </span>
           {PTS_OF[e.action] ? <span className="text-xs font-bold" style={{ color: C.led }}>+{PTS_OF[e.action]}</span> : null}
@@ -2698,6 +2744,7 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
   const C = useC();
   const [copied, setCopied] = useState(false);
   const periods = periodsOf(game);
+  const isIntramural = gameCatOf(game.category)?.isIntramural;
   const upd = (patch) => save({ ...data, games: data.games.map((x) => x.id === game.id ? { ...x, ...patch } : x) });
   const buildRows = () => {
     const sorted = [...(game.events || [])].map((e, i) => ({ e, i })).sort((a, b) => a.e.q - b.e.q || a.i - b.i);
@@ -2706,8 +2753,15 @@ function GameMedia({ data, save, game, oppName, isAdmin }) {
       const pts = PTS_OF[e.action] || 0;
       if (pts) { if (e.side === "own") ro += pts; else rp += pts; }
       const p = e.side === "own" && e.playerId !== TEAM_KEY ? data.players.find((x) => x.id === e.playerId) : null;
+      const oppP = isIntramural && e.side === "opp" && e.oppNum !== TEAM_KEY ? data.players.find((x) => x.id === e.oppNum) : null;
       const isTeam = e.playerId === TEAM_KEY || e.oppNum === TEAM_KEY;
-      return { period: periodLabel2(game, e.q), time: e.time || "", team: e.side === "own" ? data.team.name : oppName(game.opponentId), num: isTeam ? "" : e.side === "own" ? (p?.number || "") : e.oppNum, name: isTeam ? "チーム" : e.side === "own" ? (p?.codename || p?.name || "") : "", action: ACTION_LABEL[e.action], pts: pts || "", score: `${ro}-${rp}` };
+      return {
+        period: periodLabel2(game, e.q), time: e.time || "",
+        team: e.side === "own" ? (isIntramural ? "紅組" : data.team.name) : (isIntramural ? "白組" : oppName(game.opponentId)),
+        num: isTeam ? "" : e.side === "own" ? (p?.number || "") : (isIntramural ? (oppP?.number || "") : e.oppNum),
+        name: isTeam ? "チーム" : e.side === "own" ? (p?.codename || p?.name || "") : (isIntramural ? (oppP?.codename || oppP?.name || "") : ""),
+        action: ACTION_LABEL[e.action], pts: pts || "", score: `${ro}-${rp}`,
+      };
     });
   };
   const toCSV = () => {
@@ -2864,7 +2918,9 @@ function ReportView({ data, game, mode, oppName, onClose }) {
   const a = analysisFor(data, game, "all");
   const flow = mode === "detail" ? flowAnalysis(data, game) : null;
   const mips = mipOf(game, data.players);
-  const opp = oppName(game.opponentId);
+  const isIntramural = gameCatOf(game.category)?.isIntramural;
+  const opp = isIntramural ? "白組" : oppName(game.opponentId);
+  const ownName = isIntramural ? "紅組" : data.team.name;
   const title = mode === "simple" ? "試合レポート(簡易版)" : "試合レポート(詳細版)";
   const rootRef = useRef(null);
   const downloadHTML = () => {
@@ -2899,22 +2955,22 @@ function ReportView({ data, game, mode, oppName, onClose }) {
       <div ref={rootRef} className="max-w-2xl mx-auto px-5 py-6">
         <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>{title}</h1>
         <p style={{ fontSize: 13, color: "#555", margin: 0 }}>{game.date}・{game.tournament || "練習試合"}{game.ot ? `・OT${game.ot}` : ""}</p>
-        <p style={{ fontSize: 24, fontWeight: 700, margin: "12px 0 4px" }}>{data.team.name} {a.ownPts} – {a.oppPts} {opp}<span style={{ fontSize: 14, marginLeft: 10, color: a.win ? "#1B8A52" : a.ownPts === a.oppPts ? "#666" : "#C03A3A" }}>{a.win ? "WIN" : a.ownPts === a.oppPts ? "引分" : "LOSE"}</span></p>
+        <p style={{ fontSize: 24, fontWeight: 700, margin: "12px 0 4px" }}>{ownName} {a.ownPts} – {a.oppPts} {opp}<span style={{ fontSize: 14, marginLeft: 10, color: a.win ? "#1B8A52" : a.ownPts === a.oppPts ? "#666" : "#C03A3A" }}>{a.win ? "WIN" : a.ownPts === a.oppPts ? "引分" : "LOSE"}</span></p>
         {mips.length > 0 && <p style={{ fontSize: 13, margin: 0 }}>MIP: {mips.map(({ p, s }) => `#${p.number} ${p.codename || p.name}(EFF ${s.eff})`).join("、")}</p>}
         <T>ピリオド別スコア</T>
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
           <thead><tr><th style={th}></th>{a.qData.map((x) => <th key={x.name} style={th}>{x.name}</th>)}<th style={th}>計</th></tr></thead>
           <tbody>
-            <tr><td style={{ ...td, fontWeight: 700 }}>{data.team.name}</td>{a.qData.map((x) => <td key={x.name} style={td}>{x.自チーム}</td>)}<td style={{ ...td, fontWeight: 700 }}>{a.ownPts}</td></tr>
+            <tr><td style={{ ...td, fontWeight: 700 }}>{ownName}</td>{a.qData.map((x) => <td key={x.name} style={td}>{x.自チーム}</td>)}<td style={{ ...td, fontWeight: 700 }}>{a.ownPts}</td></tr>
             <tr><td style={{ ...td, fontWeight: 700 }}>{opp}</td>{a.qData.map((x) => <td key={x.name} style={td}>{x.相手}</td>)}<td style={{ ...td, fontWeight: 700 }}>{a.oppPts}</td></tr>
           </tbody>
         </table>
         <T>チームスタッツ</T>
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
-          <thead><tr><th style={th}>項目</th><th style={th}>{data.team.name}</th><th style={th}>{opp}</th></tr></thead>
+          <thead><tr><th style={th}>項目</th><th style={th}>{ownName}</th><th style={th}>{opp}</th></tr></thead>
           <tbody>{a.compRows.map(([l, x, y]) => <tr key={l}><td style={td}>{l}</td><td style={td}>{x}</td><td style={td}>{y}</td></tr>)}</tbody>
         </table>
-        {a.ownRows.length > 0 && (<><T>{data.team.name} ボックススコア</T><BoxTable rows={a.ownRows} /></>)}
+        {a.ownRows.length > 0 && (<><T>{ownName} ボックススコア</T><BoxTable rows={a.ownRows} /></>)}
         {a.oppRows.length > 0 && (<><T>{opp} ボックススコア</T><BoxTable rows={a.oppRows} /></>)}
         <T>試合分析サマリー</T>
         <ul style={{ fontSize: 13, paddingLeft: 20, margin: "4px 0" }}>{a.insights.map((s, i) => <li key={i}>{s}</li>)}</ul>
@@ -2940,12 +2996,13 @@ function ReportView({ data, game, mode, oppName, onClose }) {
                 <tbody>{flow.sorted.map((e) => {
                   const isTeam = e.playerId === TEAM_KEY || e.oppNum === TEAM_KEY;
                   const p = e.side === "own" && !isTeam ? data.players.find((x) => x.id === e.playerId) : null;
-                  return (<tr key={e.id}><td style={td}>{periodLabel2(game, e.q)}</td><td style={td}>{e.time || ""}</td><td style={td}>{e.side === "own" ? data.team.name : opp}</td><td style={td}>{isTeam ? "チーム" : e.side === "own" ? `#${p?.number || ""} ${p?.codename || p?.name || ""}` : `#${e.oppNum}`}</td><td style={td}>{ACTION_LABEL[e.action]}</td></tr>);
+                  const oppP = isIntramural && e.side === "opp" && !isTeam ? data.players.find((x) => x.id === e.oppNum) : null;
+                  return (<tr key={e.id}><td style={td}>{periodLabel2(game, e.q)}</td><td style={td}>{e.time || ""}</td><td style={td}>{e.side === "own" ? ownName : opp}</td><td style={td}>{isTeam ? "チーム" : e.side === "own" ? `#${p?.number || ""} ${p?.codename || p?.name || ""}` : (isIntramural ? `#${oppP?.number || ""} ${oppP?.codename || oppP?.name || ""}` : `#${e.oppNum}`)}</td><td style={td}>{ACTION_LABEL[e.action]}</td></tr>);
                 })}</tbody>
               </table></>)}
           </>
         )}
-        <p style={{ fontSize: 11, color: "#888", marginTop: 24 }}>作成: {data.team.name} 記録アプリ</p>
+        <p style={{ fontSize: 11, color: "#888", marginTop: 24 }}>作成: {ownName} 記録アプリ</p>
       </div>
     </div>
   );
@@ -2955,6 +3012,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
   const C = useC();
   const [scope, setScope] = useState("all");
   const a = analysisFor(data, game, scope);
+  const isIntramural = gameCatOf(game.category)?.isIntramural;
   const mips = scope === "all" ? mipOf(game, data.players) : [];
   const updGame = (patch) => save({ ...data, games: data.games.map((x) => x.id === game.id ? { ...x, ...patch } : x) });
   const StatTable = ({ rows, accent }) => (
@@ -3045,7 +3103,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
       <Card>
         <SectionTitle>チームスタッツ比較({a.scopeLabel})</SectionTitle>
         <table className="w-full text-sm">
-          <thead><tr style={{ color: C.sub }}><th className="text-left py-1 font-normal text-xs">項目</th><th className="text-right py-1 font-bold" style={{ color: C.orange }}>自チーム</th><th className="text-right py-1 font-bold" style={{ color: C.oppText }}>{oppName(game.opponentId)}</th></tr></thead>
+          <thead><tr style={{ color: C.sub }}><th className="text-left py-1 font-normal text-xs">項目</th><th className="text-right py-1 font-bold" style={{ color: C.orange }}>{isIntramural ? "紅組" : "自チーム"}</th><th className="text-right py-1 font-bold" style={{ color: C.oppText }}>{isIntramural ? "白組" : oppName(game.opponentId)}</th></tr></thead>
           <tbody>{a.compRows.map(([l, x, y]) => (<tr key={l} style={{ borderTop: `1px solid ${C.border}44` }}><td className="py-1.5 text-xs" style={{ color: C.sub }}>{l}</td><td className="py-1.5 text-right font-bold">{x}</td><td className="py-1.5 text-right">{y}</td></tr>))}</tbody>
         </table>
       </Card>
@@ -3124,10 +3182,10 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
           </Card>
         );
       })()}
-      {a.ownRows.length > 0 && (<Card><SectionTitle>自チーム 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.ownRows} accent={C.orange} /></Card>)}
+      {a.ownRows.length > 0 && (<Card><SectionTitle>{isIntramural ? "紅組" : "自チーム"} 選手別スタッツ({a.scopeLabel})</SectionTitle><StatTable rows={a.ownRows} accent={C.orange} /></Card>)}
       {a.oppRows.length > 0 && (
         <Card>
-          <SectionTitle>相手 得点ランキング({a.scopeLabel}・上位5人)</SectionTitle>
+          <SectionTitle>{isIntramural ? "白組" : "相手"} 得点ランキング({a.scopeLabel}・上位5人)</SectionTitle>
           <div className="space-y-1.5">
             {[...a.oppRows].sort((x, y) => y.s.pts - x.s.pts).slice(0, 5).map(({ key, label, s }, i) => (
               <div key={key} className="flex items-center gap-3 py-1.5" style={{ borderBottom: `1px solid ${C.border}44` }}>
