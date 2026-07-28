@@ -622,11 +622,11 @@ function OppLogo({ o, size = 36 }) {
 /* ============ 府中選抜チーム 専用ビュー ============ */
 /* 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking)を、
    六小のdataではなく選抜用のdataを渡すことでそのまま再利用する。登録系操作は isAdmin のみ許可(各コンポーネントが元々対応済み)。 */
-function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, isAdmin, theme, toggleTheme, onBack }) {
+function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, isAdmin, theme, toggleTheme, onBack, saveState, updateGameById }) {
   const [tab, setTab] = useState("games");
   const [nav, setNav] = useState({});
   const C = useC();
-  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, isSelectTeam: true };
+  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, isSelectTeam: true, updateGameById };
 
   const NAV_ITEMS = [
     { t: "games", icon: ClipboardList, label: "試合" },
@@ -671,6 +671,9 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
                 </button>
               ))}
             </nav>
+            <div className="px-4 py-3 text-xs" style={{ color: saveState.startsWith("error") ? C.loss : C.sub, borderTop: `1px solid ${C.border}` }}>
+              {saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : "データ同期済み"}
+            </div>
           </aside>
           {mainContent}
         </div>
@@ -684,6 +687,9 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
             <span className="text-lg">🎗️</span>
             <div className="font-bold truncate">府中選抜</div>
             <span className="ml-auto text-xs" style={{ color: isAdmin ? C.win : C.sub }}>{isAdmin ? "管理者" : "閲覧"}</span>
+            <span className="text-xs" style={{ color: saveState.startsWith("error") ? C.loss : C.sub }}>
+              {saveState === "saving" ? "保存中…" : saveState.startsWith("error") ? saveState.slice(6) : ""}
+            </span>
           </header>
           {mainContent}
           <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-around py-1.5"
@@ -704,6 +710,7 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
 
 export default function App() {
   const [data, setData] = useState(null);
+  const dataRef = useRef(null); // save呼び出し元が常に最新のdataを参照できるようにするためのミラー
   const [tab, setTab] = useState("home");
   const [nav, setNav] = useState({});
   const [selectMode, setSelectMode] = useState(null); // { fromPlayerId } または null。非nullなら選抜専用ビュー表示
@@ -747,6 +754,7 @@ export default function App() {
       init.selectTeam.players = init.selectTeam.players || [];
       init.selectTeam.opponents = init.selectTeam.opponents || [];
       setData(init);
+      dataRef.current = init;
       const m = (window.location.hash || "").match(/game=([\w]+)/);
       if (m && init.games.some((g) => g.id === m[1])) { setTab("games"); setNav({ gameId: m[1] }); }
     })();
@@ -771,6 +779,7 @@ export default function App() {
   };
   const save = (next) => {
     setData(next);
+    dataRef.current = next;
     pending.current = next;
     setSaveState("saving");
     clearTimeout(timer.current);
@@ -845,7 +854,20 @@ export default function App() {
   const visibleData = isAdmin ? data : { ...data, games: data.games.filter((g) => g.published !== false) };
   // 公開状態の切替は常に「元のdata全体」に対して安全に行う(visibleDataで上書きしないため専用関数を用意)
   const setGamePublished = (gameId, published) => save({ ...data, games: data.games.map((x) => x.id === gameId ? { ...x, published } : x) });
-  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId) => setSelectMode({ fromPlayerId }) };
+  // 特定の試合1件だけを更新する専用関数。dataRef.current(常に最新)をベースにするため、
+  // Play by Playで連続して得点を記録しても、レンダリング遅延によるデータ消失が起きない。
+  // scope: "main"=府中六小の試合 / "select"=府中選抜の試合
+  const updateGameById = (scope, gameId, fn) => {
+    const latest = dataRef.current || data;
+    if (scope === "select") {
+      const games = (latest.selectTeam?.games || []).map((x) => (x.id === gameId ? fn(x) : x));
+      save({ ...latest, selectTeam: { ...latest.selectTeam, games } });
+    } else {
+      const games = (latest.games || []).map((x) => (x.id === gameId ? fn(x) : x));
+      save({ ...latest, games });
+    }
+  };
+  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId) => setSelectMode({ fromPlayerId }), updateGameById: (gameId, fn) => updateGameById("main", gameId, fn) };
 
   // ===== 府中選抜チーム用のデータ・保存関数 =====
   // 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking等)を
@@ -853,8 +875,16 @@ export default function App() {
   const selData = { team: { name: "府中市選抜（第3回ゼルコバカップ）", logo: "", homeCourt: "" }, players: data.selectTeam.players, opponents: data.selectTeam.opponents, games: data.selectTeam.games, tournaments: [] };
   const selSave = (nextSelLikeData) => {
     // nextSelLikeDataは{team,players,opponents,games,tournaments}形式で来る(通常のsaveと同じシグネチャ)ので、
-    // players/opponents/gamesだけを取り出してdata.selectTeamに書き戻す
-    save({ ...data, selectTeam: { players: nextSelLikeData.players, opponents: nextSelLikeData.opponents, games: nextSelLikeData.games } });
+    // players/opponents/gamesだけを取り出してdata.selectTeamに書き戻す。
+    // dataRef.current(常に最新のdata)をベースにすることで、レンダリングの遅延中に
+    // 別の変更が割り込んでも直前の入力が消えないようにする。
+    const latest = dataRef.current || data;
+    const nextSelectTeam = {
+      players: nextSelLikeData.players !== undefined ? nextSelLikeData.players : latest.selectTeam.players,
+      opponents: nextSelLikeData.opponents !== undefined ? nextSelLikeData.opponents : latest.selectTeam.opponents,
+      games: nextSelLikeData.games !== undefined ? nextSelLikeData.games : latest.selectTeam.games,
+    };
+    save({ ...latest, selectTeam: nextSelectTeam });
   };
   const selGetOpp = (id) => selData.opponents.find((o) => o.id === id);
   const selOppName = (id) => selGetOpp(id)?.name || "対戦相手";
@@ -914,7 +944,8 @@ export default function App() {
           data={selVisibleData} save={selSave} oppName={selOppName} getOpp={selGetOpp}
           setGamePublished={setSelGamePublished}
           isPC={isPC} isAdmin={isAdmin} theme={theme} toggleTheme={toggleTheme}
-          onBack={() => setSelectMode(null)}
+          onBack={() => setSelectMode(null)} saveState={saveState}
+          updateGameById={(gameId, fn) => updateGameById("select", gameId, fn)}
         />
       </ThemeCtx.Provider>
     );
@@ -2149,7 +2180,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin, isSelect
   );
 }
 
-function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGamePublished, isSelectTeam }) {
+function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGamePublished, isSelectTeam, updateGameById }) {
   const C = useC();
   const g = data.games.find((x) => x.id === nav.gameId);
   const [sub, setSub] = useState(isAdmin ? "entry" : "analysis");
@@ -2228,14 +2259,14 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
             style={sub === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
         ))}
       </div>
-      {sub === "entry" && isAdmin && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} isSelectTeam={isSelectTeam} />}
-      {sub === "analysis" && <GameAnalysis data={data} save={save} game={g} oppName={oppName} onReport={setReport} isAdmin={isAdmin} />}
-      {sub === "media" && <GameMedia data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} />}
+      {sub === "entry" && isAdmin && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} isSelectTeam={isSelectTeam} updateGameById={updateGameById} />}
+      {sub === "analysis" && <GameAnalysis data={data} save={save} game={g} oppName={oppName} onReport={setReport} isAdmin={isAdmin} updateGameById={updateGameById} />}
+      {sub === "media" && <GameMedia data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} updateGameById={updateGameById} />}
     </div>
   );
 }
 
-function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam }) {
+function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam, updateGameById }) {
   const C = useC();
   const periods = periodsOf(game);
   const isIntramural = isSelectTeam && gameCatOf(game.category)?.isIntramural;
@@ -2263,7 +2294,12 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam }) {
   const lineup = game.lineups?.[q] || [];
   const lineupOpp = game.lineupsOpp?.[q] || [];
   const players = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
-  const updGame = (fn) => save({ ...data, games: data.games.map((x) => (x.id === game.id ? fn(x) : x)) });
+  // updateGameByIdが渡されていれば、常に最新のdataを直接参照する安全な経路を使う。
+  // (渡されていない場合のフォールバックとして従来のprops.dataベースの更新も残す)
+  const updGame = (fn) => {
+    if (updateGameById) { updateGameById(game.id, fn); return; }
+    save({ ...data, games: data.games.map((x) => (x.id === game.id ? fn(x) : x)) });
+  };
   const toggleLineup = (pid, forSide) => {
     const key = forSide === "opp" ? "lineupsOpp" : "lineups";
     updGame((x) => {
@@ -2272,10 +2308,34 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam }) {
       return { ...x, [key]: { ...x[key], [q]: next } };
     });
   };
+  // 紅白戦専用: 選手1人を紅組/白組いずれかに割り当てる(もう片方に居れば自動で外す)。
+  // 1回のupdGame呼び出しで両方のlineupsを同時に更新するため、連打してもデータが競合しない。
+  const setIntramuralSide = (pid, forSide) => {
+    updGame((x) => {
+      const curRed = x.lineups?.[q] || [];
+      const curWhite = x.lineupsOpp?.[q] || [];
+      const inRed = curRed.includes(pid), inWhite = curWhite.includes(pid);
+      // 既に選択中のチームをもう一度押したらベンチ(未選択)に戻す。逆側にいたら移動。
+      const nextInRed = forSide === "own" ? !inRed : false;
+      const nextInWhite = forSide === "opp" ? !inWhite : false;
+      const nextRed = nextInRed ? [...curRed.filter((i) => i !== pid), pid] : curRed.filter((i) => i !== pid);
+      const nextWhite = nextInWhite ? [...curWhite.filter((i) => i !== pid), pid] : curWhite.filter((i) => i !== pid);
+      return { ...x, lineups: { ...x.lineups, [q]: nextRed }, lineupsOpp: { ...x.lineupsOpp, [q]: nextWhite } };
+    });
+  };
   const copyPrevLineup = (forSide) => {
     if (q <= 1) return;
     const key = forSide === "opp" ? "lineupsOpp" : "lineups";
     updGame((x) => ({ ...x, [key]: { ...x[key], [q]: [...(x[key]?.[q - 1] || [])] } }));
+  };
+  // 紅白戦専用: 紅組・白組の前ピリオド分をまとめて1回のupdGameでコピー
+  const copyPrevLineupBoth = () => {
+    if (q <= 1) return;
+    updGame((x) => ({
+      ...x,
+      lineups: { ...x.lineups, [q]: [...(x.lineups?.[q - 1] || [])] },
+      lineupsOpp: { ...x.lineupsOpp, [q]: [...(x.lineupsOpp?.[q - 1] || [])] },
+    }));
   };
   const applyScore = (qScores, sideKey, qi, delta) => {
     const arr = padQ(qScores[sideKey]);
@@ -2433,10 +2493,10 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam }) {
                       <div className="flex rounded-lg overflow-hidden text-[10px] font-bold" style={{ border: `1px solid ${C.border}` }}>
                         <button className="px-2.5 py-1.5"
                           style={inRed ? { background: C.loss, color: "#fff" } : { color: C.sub }}
-                          onClick={() => { if (inWhite) toggleLineup(p.id, "opp"); toggleLineup(p.id, "own"); }}>紅</button>
+                          onClick={() => setIntramuralSide(p.id, "own")}>紅</button>
                         <button className="px-2.5 py-1.5"
                           style={inWhite ? { background: C.oppBlue, color: "#fff" } : { color: C.sub }}
-                          onClick={() => { if (inRed) toggleLineup(p.id, "own"); toggleLineup(p.id, "opp"); }}>白</button>
+                          onClick={() => setIntramuralSide(p.id, "opp")}>白</button>
                       </div>
                     </div>
                   );
@@ -2445,7 +2505,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam }) {
               <div className="flex items-center justify-between">
                 <span className="text-[10px]" style={{ color: C.sub }}>{periodLabel2(game, q)}フル出場として計算されます</span>
                 {q > 1 && <button className="text-xs font-bold shrink-0 ml-2" style={{ color: C.orange }}
-                  onClick={() => { copyPrevLineup("own"); copyPrevLineup("opp"); }}>前と同じ</button>}
+                  onClick={copyPrevLineupBoth}>前と同じ</button>}
               </div>
             </div>
           ) : (
@@ -2826,12 +2886,15 @@ function LogList({ events, q, game, sortMode, insertAfter, updGame, dragItem, dr
   );
 }
 
-function GameMedia({ data, save, game, oppName, isAdmin }) {
+function GameMedia({ data, save, game, oppName, isAdmin, updateGameById }) {
   const C = useC();
   const [copied, setCopied] = useState(false);
   const periods = periodsOf(game);
   const isIntramural = gameCatOf(game.category)?.isIntramural;
-  const upd = (patch) => save({ ...data, games: data.games.map((x) => x.id === game.id ? { ...x, ...patch } : x) });
+  const upd = (patch) => {
+    if (updateGameById) { updateGameById(game.id, (x) => ({ ...x, ...patch })); return; }
+    save({ ...data, games: data.games.map((x) => x.id === game.id ? { ...x, ...patch } : x) });
+  };
   const buildRows = () => {
     const sorted = [...(game.events || [])].map((e, i) => ({ e, i })).sort((a, b) => a.e.q - b.e.q || a.i - b.i);
     let ro = 0, rp = 0;
@@ -3094,13 +3157,16 @@ function ReportView({ data, game, mode, oppName, onClose }) {
   );
 }
 
-function GameAnalysis({ data, save, game, oppName, onReport, isAdmin }) {
+function GameAnalysis({ data, save, game, oppName, onReport, isAdmin, updateGameById }) {
   const C = useC();
   const [scope, setScope] = useState("all");
   const a = analysisFor(data, game, scope);
   const isIntramural = gameCatOf(game.category)?.isIntramural;
   const mips = scope === "all" ? mipOf(game, data.players) : [];
-  const updGame = (patch) => save({ ...data, games: data.games.map((x) => x.id === game.id ? { ...x, ...patch } : x) });
+  const updGame = (patch) => {
+    if (updateGameById) { updateGameById(game.id, (x) => ({ ...x, ...patch })); return; }
+    save({ ...data, games: data.games.map((x) => x.id === game.id ? { ...x, ...patch } : x) });
+  };
   const StatTable = ({ rows, accent }) => (
     <div className="overflow-x-auto -mx-1">
       <table className="text-xs w-full min-w-[600px]">
