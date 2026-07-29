@@ -153,7 +153,7 @@ function shrinkSquare(file, size, cb) {
       const ctx = cv.getContext("2d");
       const m = Math.min(img.width, img.height);
       ctx.drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, size, size);
-      cb(cv.toDataURL("image/jpeg", 0.85));
+      cb(cv.toDataURL("image/jpeg", 0.7));
     };
     img.src = reader.result;
   };
@@ -4143,6 +4143,17 @@ function SettingsScreen({ data, save }) {
   const oppCount = data.opponents.length;
   const usage = useMemo(() => JSON.stringify(data).length, [data]);
   const usagePct = Math.min(100, Math.round((usage / STORAGE_LIMIT) * 100));
+  // 内訳: 写真・ロゴ(base64画像)と、それ以外(試合データ・プレイログ等)を分けて集計
+  const usageBreakdown = useMemo(() => {
+    let photoBytes = 0;
+    const countPhoto = (v) => { if (typeof v === "string" && v.startsWith("data:image")) photoBytes += v.length; };
+    (data.players || []).forEach((p) => countPhoto(p.photo));
+    (data.opponents || []).forEach((o) => countPhoto(o.logo));
+    (data.selectTeam?.players || []).forEach((p) => countPhoto(p.photo));
+    (data.selectTeam?.opponents || []).forEach((o) => countPhoto(o.logo));
+    countPhoto(data.team?.logo);
+    return { photoBytes, otherBytes: Math.max(0, usage - photoBytes) };
+  }, [data, usage]);
   const exportData = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -4276,7 +4287,11 @@ function SettingsScreen({ data, save }) {
           <div className="h-2 rounded-full overflow-hidden" style={{ background: C.card2 }}>
             <div className="h-full rounded-full" style={{ width: `${usagePct}%`, background: usagePct > 85 ? C.loss : usagePct > 60 ? C.led : C.win }} />
           </div>
-          <div className="text-[10px] mt-1" style={{ color: C.sub }}>データはFirebaseにリアルタイム同期されます。</div>
+          <div className="flex justify-between text-[10px] mt-1.5" style={{ color: C.sub }}>
+            <span>📷 写真・ロゴ: {(usageBreakdown.photoBytes / 1024).toFixed(0)} KB</span>
+            <span>📊 試合データ等: {(usageBreakdown.otherBytes / 1024).toFixed(0)} KB</span>
+          </div>
+          <div className="text-[10px] mt-1" style={{ color: C.sub }}>データはFirebaseにリアルタイム同期されます。保存の都度、上記の合計データを送信するため、容量が大きいほど保存に時間がかかります。</div>
         </div>
         <div className="flex gap-2 mb-2">
           <button className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.border}` }} onClick={exportData}><Download size={16} /> 書き出し(JSON)</button>
@@ -4285,6 +4300,36 @@ function SettingsScreen({ data, save }) {
             <input type="file" accept=".json,application/json" className="hidden" onChange={importData} />
           </label>
         </div>
+        {usageBreakdown.photoBytes > 300 * 1024 && (
+          <button className="w-full mb-2 py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.orange}`, color: C.orange }}
+            onClick={async () => {
+              if (!confirm("登録済みの写真・ロゴをすべて再圧縮して軽量化します。画質は少し落ちますが保存が速くなります。よろしいですか?")) return;
+              const recompress = (dataUrl, size) => new Promise((resolve) => {
+                if (!dataUrl || !dataUrl.startsWith("data:image")) { resolve(dataUrl); return; }
+                const img = new Image();
+                img.onload = () => {
+                  const cv = document.createElement("canvas");
+                  cv.width = size; cv.height = size;
+                  const ctx = cv.getContext("2d");
+                  const m = Math.min(img.width, img.height);
+                  ctx.drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, size, size);
+                  resolve(cv.toDataURL("image/jpeg", 0.7));
+                };
+                img.onerror = () => resolve(dataUrl);
+                img.src = dataUrl;
+              });
+              const newPlayers = await Promise.all(data.players.map(async (p) => ({ ...p, photo: p.photo ? await recompress(p.photo, 200) : p.photo })));
+              const newOpponents = await Promise.all(data.opponents.map(async (o) => ({ ...o, logo: o.logo ? await recompress(o.logo, 64) : o.logo })));
+              const newSelPlayers = await Promise.all((data.selectTeam?.players || []).map(async (p) => ({ ...p, photo: p.photo ? await recompress(p.photo, 200) : p.photo })));
+              const newSelOpponents = await Promise.all((data.selectTeam?.opponents || []).map(async (o) => ({ ...o, logo: o.logo ? await recompress(o.logo, 64) : o.logo })));
+              const newLogo = team.logo ? await recompress(team.logo, 200) : team.logo;
+              save({ ...data, team: { ...team, logo: newLogo }, players: newPlayers, opponents: newOpponents, selectTeam: { ...data.selectTeam, players: newSelPlayers, opponents: newSelOpponents } });
+              setTeam((t) => ({ ...t, logo: newLogo }));
+              alert("再圧縮が完了しました。");
+            }}>
+            📷 写真・ロゴを軽量化して保存を速くする
+          </button>
+        )}
         <button className="w-full py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.loss}`, color: C.loss }}
           onClick={() => { if (confirm("すべてのデータを削除します。よろしいですか?")) save({ team: { name: "府中六小ミニバス", logo: "", homeCourt: "" }, players: [], opponents: [], games: [] }); }}>
           すべてのデータを初期化
