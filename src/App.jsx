@@ -769,11 +769,14 @@ export default function App() {
       return;
     }
     try {
-      await saveData(JSON.parse(str));
+      // saveData自体にタイムアウトが無い場合に備え、8秒で強制的にタイムアウトさせる。
+      // これが無いと、通信が詰まった際に「保存中…」のまま無期限に固まってしまう。
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
+      await Promise.race([saveData(JSON.parse(str)), timeoutPromise]);
       pending.current = null; retried.current = false;
       setSaveState("");
     } catch (e) {
-      if (!retried.current) { retried.current = true; setTimeout(persist, 1500); }
+      if (!retried.current) { retried.current = true; setSaveState("saving"); setTimeout(persist, 1500); }
       else { retried.current = false; setSaveState("error:保存に失敗しました。自動で再保存します。"); setTimeout(persist, 5000); }
     }
   };
