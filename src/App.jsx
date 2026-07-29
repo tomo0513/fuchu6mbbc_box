@@ -764,20 +764,24 @@ export default function App() {
     const d = pending.current;
     if (!d) return;
     const str = JSON.stringify(d);
+    const sizeKB = Math.round(str.length / 1024);
     if (str.length > STORAGE_LIMIT * 0.96) {
-      setSaveState("error:容量が上限に近づいています。設定タブで使用量を確認してください。");
+      setSaveState(`error:容量が上限に近づいています(${sizeKB}KB)。設定タブで使用量を確認してください。`);
       return;
     }
+    const startedAt = Date.now();
     try {
-      // saveData自体にタイムアウトが無い場合に備え、8秒で強制的にタイムアウトさせる。
+      // saveData自体にタイムアウトが無い場合に備え、15秒で強制的にタイムアウトさせる。
       // これが無いと、通信が詰まった際に「保存中…」のまま無期限に固まってしまう。
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 15000));
       await Promise.race([saveData(JSON.parse(str)), timeoutPromise]);
       pending.current = null; retried.current = false;
       setSaveState("");
     } catch (e) {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      const reason = e?.message === "timeout" ? `応答なし${elapsed}秒` : (e?.message || "不明なエラー");
       if (!retried.current) { retried.current = true; setSaveState("saving"); setTimeout(persist, 1500); }
-      else { retried.current = false; setSaveState("error:保存に失敗しました。自動で再保存します。"); setTimeout(persist, 5000); }
+      else { retried.current = false; setSaveState(`error:保存に失敗しました(${sizeKB}KB・${reason})。自動で再保存します。`); setTimeout(persist, 5000); }
     }
   };
   const save = (next) => {
@@ -786,7 +790,7 @@ export default function App() {
     pending.current = next;
     setSaveState("saving");
     clearTimeout(timer.current);
-    timer.current = setTimeout(persist, 700);
+    timer.current = setTimeout(persist, 1200);
   };
 
   if (!data || showSplash) return (
