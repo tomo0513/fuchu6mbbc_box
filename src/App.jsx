@@ -1069,10 +1069,10 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
   const w = wlResults.filter((r) => r.own > r.opp).length;
   const l = wlResults.filter((r) => r.own < r.opp).length;
   const n = wlResults.length;
-  // 試合タブと完全に同じ: 全試合(参考含む)・試合ごとに1Qあたり換算後、3Q基準で平均(0-0除外)
+  // チーム合計(得点・失点)は常に4Q換算で表示。試合ごとに1Qあたりへ換算後、4Qを掛ける(0-0除外)
   const allPlayed = results.filter((r) => (r.own + r.opp) > 0);
   const allAvg = (k) => allPlayed.length > 0
-    ? (allPlayed.reduce((a, r) => a + r[k] / avgBaseQOf(r.g), 0) / allPlayed.length) * 3
+    ? (allPlayed.reduce((a, r) => a + r[k] / avgBaseQOf(r.g), 0) / allPlayed.length) * 4
     : 0;
   const avgPF = allAvg("own");
   const avgPA = allAvg("opp");
@@ -1282,7 +1282,7 @@ function PlayerList({ data, save, setNav, isPC, isAdmin, isSelectTeam }) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{c.n ? fmt1(c.totAdj.pts / c.n) : "–"}</div>
+                  <div className="text-2xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{c.n ? fmt1(c.totAdj.pts) : "–"}</div>
                   <div className="text-[10px]" style={{ color: C.sub }}>平均得点</div>
                 </div>
               </Card>
@@ -1318,7 +1318,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
   ];
   const trendOpt = TREND_OPTS.find((o) => o.k === trendStat);
   const chart = per.map((x, i) => ({ name: x.g.date?.slice(5) || `G${i + 1}`, value: x.s[trendStat], gid: x.g.id }));
-  const trendAvg = n > 0 ? totAdj[trendStat] / n : 0;
+  const trendAvg = totAdj[trendStat] || 0;
   const careerHigh = {};
   ["pts", "reb", "ast", "stl", "blk", "eff"].forEach((k) => {
     let best = null;
@@ -1396,7 +1396,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
               {targets.map((t, i) => {
                 const def = STAT_DEFS.find((d) => d.k === t.stat);
                 const goal = +t.value || 0;
-                const actual = n > 0 ? totAdj[t.stat] / n : 0;
+                const actual = totAdj[t.stat] || 0;
                 const inv = INVERSE_STATS.has(t.stat);
                 const achieved = inv ? actual <= goal : actual >= goal;
                 const ratio = inv ? (actual > 0 ? Math.min(1, goal / actual) : 1) : (goal > 0 ? Math.min(1, actual / goal) : 0);
@@ -1430,12 +1430,12 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
             if (cs.n === 0) return null;
             return {
               id: pl.id,
-              pts: cs.totAdj.pts / cs.n, reb: cs.totAdj.reb / cs.n,
-              ast: cs.totAdj.ast / cs.n, stl: cs.totAdj.stl / cs.n,
-              blk: cs.totAdj.blk / cs.n, eff: cs.totAdj.eff / cs.n,
+              pts: cs.totAdj.pts, reb: cs.totAdj.reb,
+              ast: cs.totAdj.ast, stl: cs.totAdj.stl,
+              blk: cs.totAdj.blk, eff: cs.totAdj.eff,
               fgp: cs.tot.fga > 0 ? cs.tot.fgm / cs.tot.fga : null,
               ftp: cs.tot.fta > 0 ? cs.tot.ftm / cs.tot.fta : null,
-              min: cs.n > 0 ? cs.totAdj.min / cs.n : null,
+              min: cs.n > 0 ? cs.totAdj.min : null,
             };
           }).filter(Boolean);
           const rankOf = (key, desc = true) => {
@@ -1460,12 +1460,12 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
             <>
               <div className="grid grid-cols-3 gap-2 text-center">
                 {[
-                  ["得点", tot.pts, fmt1(totAdj.pts / n), "pts"],
-                  ["リバウンド", tot.reb, fmt1(totAdj.reb / n), "reb"],
-                  ["アシスト", tot.ast, fmt1(totAdj.ast / n), "ast"],
-                  ["スティール", tot.stl, fmt1(totAdj.stl / n), "stl"],
-                  ["ブロック", tot.blk, fmt1(totAdj.blk / n), "blk"],
-                  ["EFF", tot.eff, fmt1(totAdj.eff / n), "eff"],
+                  ["得点", tot.pts, fmt1(totAdj.pts), "pts"],
+                  ["リバウンド", tot.reb, fmt1(totAdj.reb), "reb"],
+                  ["アシスト", tot.ast, fmt1(totAdj.ast), "ast"],
+                  ["スティール", tot.stl, fmt1(totAdj.stl), "stl"],
+                  ["ブロック", tot.blk, fmt1(totAdj.blk), "blk"],
+                  ["EFF", tot.eff, fmt1(totAdj.eff), "eff"],
                 ].map(([l, t, a, key]) => (
                   <div key={l} className="rounded-xl py-2.5" style={{ background: C.card2 }}>
                     <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>{t}</div>
@@ -1483,7 +1483,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
                   <StatLabel label="FT%" rk={rankLabel("ftp")} />
                 </div>
                 <div>
-                  <span className="font-bold text-lg">{fmt1(totAdj.min / n)}</span>
+                  <span className="font-bold text-lg">{fmt1(totAdj.min)}</span>
                   <StatLabel label="平均出場(分)" rk={rankLabel("min")} />
                 </div>
               </div>
@@ -1842,9 +1842,8 @@ function TeamStatsCard({ data, oppName }) {
   const sumOf = (k) => perGame.reduce((a, x) => a + (x[k] || 0), 0);
 
   const played = perGame.filter((x) => (x.own + x.opp) > 0);
-  // 選手個人の平均と同じ考え方: 試合ごとに基準Q(4Q制+10人制なら3Q、それ以外は4Qや試合自体のQ数)で
-  // 1Qあたりに換算してから平均し、表示は3Q基準(公式戦の10人制ルール想定)に揃える。
-  const DISPLAY_BASE_Q = 3;
+  // チーム合計は常に4Q換算で表示。試合ごとに1Qあたりへ換算してから平均し、4Qを掛ける。
+  const DISPLAY_BASE_Q = 4;
   const avgOf = (k) => {
     if (played.length === 0) return 0;
     const perQAvg = played.reduce((a, x) => a + (x[k] || 0) / avgBaseQOf(x.g), 0) / played.length;
@@ -1876,7 +1875,7 @@ function TeamStatsCard({ data, oppName }) {
   return (
     <Card>
       <SectionTitle>チームスタッツ({n}試合)</SectionTitle>
-      {hasVaryQ && <div className="text-[10px] mt-1 mb-1" style={{ color: C.sub }}>※平均は試合ごとに1Qあたり換算後、3Q基準(10人制ルール想定)で算出</div>}
+      {hasVaryQ && <div className="text-[10px] mt-1 mb-1" style={{ color: C.sub }}>※平均は試合ごとに1Qあたり換算後、4Q基準で算出</div>}
 
       <div className="flex gap-2 mt-2">
         <div className="flex-1 rounded-2xl px-3 py-3 text-center relative overflow-hidden"
@@ -3493,7 +3492,7 @@ function Ranking({ data, setTab, setNav }) {
       return { p, n: c.n, total: pmTotal, avg: pmAvg };
     }
     const total = c.tot[stat];
-    const avg = c.totAdj[stat] / c.n;
+    const avg = c.totAdj[stat];
     if ((mode === "total" ? total : avg) === 0) return null;
     return { p, n: c.n, total, avg };
   }).filter(Boolean).sort((a, b) => {
