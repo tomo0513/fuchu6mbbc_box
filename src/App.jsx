@@ -186,10 +186,19 @@ const normGame = (g) => {
     category: g.category || "practice",
     memo: g.memo || "",
     published: g.published !== false, // 既存試合は自動で公開扱い。新規はGameListで false スタート
+    tenPersonRule: g.tenPersonRule || false, // 10人制ルール(1人最大3Qまで)適用の試合か。4Q制の試合の平均算出基準に影響
     qScores: { own: padQ(g.qScores?.own), opp: padQ(g.qScores?.opp) },
     events: g.events || [], lineups: g.lineups || {}, lineupsOpp: g.lineupsOpp || {}, videos: g.videos || {}, scoreCards: g.scoreCards || [] };
 };
 
+// 選手個人の平均算出に使う「基準Q数」。
+// 4Q制の試合は10人制ルール(1人最大3Qまで)の有無で3Q/4Qを切り替え、
+// 3Q制以下の試合は常にその試合自体のQ数を基準にする。
+const avgBaseQOf = (g) => {
+  const rq = regQOf(g);
+  if (rq >= 4) return g?.tenPersonRule ? 3 : 4;
+  return rq;
+};
 const matchKey = (e, side, key) =>
   e.side === side && (side === "own" ? e.playerId === key : e.oppNum === key);
 
@@ -291,18 +300,22 @@ function careerStats(games, playerId) {
   };
   const per = games.map((g) => ({ g, s: aggStats(g.events, sideFor(g), playerId, "all", g) })).filter((x) => hasStats(x.s));
   const played = per.filter((x) => { const p = gamePts(x.g); return (p.own + p.opp) > 0; });
-  const totalQPlayed = played.reduce((a, x) => a + periodsOf(x.g), 0);
-  const baseQ = played.length * 4;
   const n = played.length;
   const tot = {};
   const totAdj = {};
   const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
+  // 表示用の「1試合平均」に換算する際の基準Q数(公式戦は10人制が基本のため3Q)
+  const DISPLAY_BASE_Q = 3;
   cntKeys.forEach((k) => {
     tot[k] = Math.round(per.reduce((a, x) => a + (x.s[k] || 0), 0) * 10) / 10;
-    const playedTotal = played.reduce((a, x) => a + (x.s[k] || 0), 0);
-    totAdj[k] = totalQPlayed > 0 ? playedTotal / totalQPlayed * baseQ : 0;
+    // 各試合を「1Qあたりの値」に変換してから試合数で平均し、最後に表示用Qを掛ける。
+    // (試合ごとの基準Qは、4Q制なら10人制ルール有無で3or4、3Q制以下はその試合のQ数)
+    const perQAvg = n > 0
+      ? played.reduce((a, x) => a + (x.s[k] || 0) / avgBaseQOf(x.g), 0) / n
+      : 0;
+    totAdj[k] = perQAvg * DISPLAY_BASE_Q;
   });
-  return { per, n, tot, totAdj, gamesPlayed: per.length, totalQPlayed, baseQ };
+  return { per, n, tot, totAdj, gamesPlayed: per.length };
 }
 
 function mipOf(game, players) {
@@ -1056,11 +1069,11 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
   const w = wlResults.filter((r) => r.own > r.opp).length;
   const l = wlResults.filter((r) => r.own < r.opp).length;
   const n = wlResults.length;
-  // 試合タブと完全に同じ: 全試合(参考含む)・Q数基準の加重平均(0-0除外)
+  // 試合タブと完全に同じ: 全試合(参考含む)・試合ごとに1Qあたり換算後、3Q基準で平均(0-0除外)
   const allPlayed = results.filter((r) => (r.own + r.opp) > 0);
-  const allTotalQ = allPlayed.reduce((a, r) => a + periodsOf(r.g), 0);
-  const allBaseQ = allPlayed.length * 4;
-  const allAvg = (k) => allTotalQ > 0 ? allPlayed.reduce((a, r) => a + r[k], 0) / allTotalQ * allBaseQ / allPlayed.length : 0;
+  const allAvg = (k) => allPlayed.length > 0
+    ? (allPlayed.reduce((a, r) => a + r[k] / avgBaseQOf(r.g), 0) / allPlayed.length) * 3
+    : 0;
   const avgPF = allAvg("own");
   const avgPA = allAvg("opp");
   const stars = useMemo(() => {
@@ -1294,8 +1307,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
   const prevPlayer = curIdx > 0 ? sortedPlayers[curIdx - 1] : null;
   const nextPlayer = curIdx < sortedPlayers.length - 1 ? sortedPlayers[curIdx + 1] : null;
   const games = [...data.games].sort(gameOrderAsc);
-  const { per, n, tot, totAdj, gamesPlayed, totalQPlayed, baseQ } = careerStats(games, p.id);
-  const hasVaryQ = per.some((x) => regQOf(x.g) !== 4);
+  const { per, n, tot, totAdj, gamesPlayed } = careerStats(games, p.id);
+  const hasVaryQ = per.some((x) => regQOf(x.g) !== 4 || x.g.tenPersonRule);
   const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
   const TREND_OPTS = [
     { k: "eff", label: "EFF", color: "#3DBE7B" },
@@ -1408,8 +1421,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
         </Card>
       )}
       <Card>
-        <SectionTitle>通算成績({gamesPlayed}試合 / {totalQPlayed}Q)</SectionTitle>
-        {hasVaryQ && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均はQ数基準で算出(実施{totalQPlayed}Q ÷ 基準{baseQ}Q)。全試合4Q換算の平均値です。</div>}
+        <SectionTitle>通算成績({gamesPlayed}試合)</SectionTitle>
+        {hasVaryQ && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均は試合ごとに1Qあたりへ換算してから平均し、3Q基準(公式戦の10人制ルール想定)で表示しています。4Q制で10人制ルール適用外の試合は4Q基準、3Q制以下の試合はその試合のQ数を基準に換算します。</div>}
         {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (() => {
           const allGames = [...data.games].sort(gameOrderAsc);
           const teamAvgs = data.players.map((pl) => {
@@ -1628,7 +1641,7 @@ function GameForm({ data, initial, onSave, onCancel, isSelectTeam }) {
   const [f, setF] = useState(initial ? { ...normGame(initial), newOpp: "" } : {
     date: new Date().toISOString().slice(0, 10), tournament: "",
     opponentId: data.opponents[0]?.id || "", newOpp: "",
-    qLen: 6, otLen: 3, ot: 0, regQ: 4, category: "practice",
+    qLen: 6, otLen: 3, ot: 0, regQ: 4, category: "practice", tenPersonRule: false,
     qScores: { own: padQ([]), opp: padQ([]) },
   });
   const periods = (+f.regQ || 4) + (+f.ot || 0);
@@ -1730,6 +1743,20 @@ function GameForm({ data, initial, onSave, onCancel, isSelectTeam }) {
           {isSelectTeam && <option value={1}>1ピリオド制</option>}
         </select>
       </Field>
+      {(+f.regQ || 4) >= 4 && (
+        <div className="flex items-center gap-3 mb-3">
+          <button className="w-10 h-6 rounded-full flex-shrink-0 relative"
+            style={{ background: f.tenPersonRule ? C.orange : C.border }}
+            onClick={() => setF({ ...f, tenPersonRule: !f.tenPersonRule })}>
+            <div className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
+              style={{ left: f.tenPersonRule ? "calc(100% - 20px)" : 4 }} />
+          </button>
+          <div>
+            <div className="text-xs font-bold">10人制ルール適用(1人最大3Qまで)</div>
+            <div className="text-[10px]" style={{ color: C.sub }}>ONの場合、選手個人の平均は3Q基準で算出されます</div>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-3">
         <Field label="Qの時間">
           <select className={inputCls} style={getInputStyle(C)} value={f.qLen} onChange={(e) => setF({ ...f, qLen: +e.target.value })}>
@@ -1815,16 +1842,17 @@ function TeamStatsCard({ data, oppName }) {
   const sumOf = (k) => perGame.reduce((a, x) => a + (x[k] || 0), 0);
 
   const played = perGame.filter((x) => (x.own + x.opp) > 0);
-  const totalQPlayed = played.reduce((a, x) => a + periodsOf(x.g), 0);
-  const baseQ = played.length * 4;
+  // 選手個人の平均と同じ考え方: 試合ごとに基準Q(4Q制+10人制なら3Q、それ以外は4Qや試合自体のQ数)で
+  // 1Qあたりに換算してから平均し、表示は3Q基準(公式戦の10人制ルール想定)に揃える。
+  const DISPLAY_BASE_Q = 3;
   const avgOf = (k) => {
-    if (totalQPlayed === 0 || played.length === 0) return 0;
-    const playedTotal = played.reduce((a, x) => a + (x[k] || 0), 0);
-    return playedTotal / totalQPlayed * baseQ / played.length;
+    if (played.length === 0) return 0;
+    const perQAvg = played.reduce((a, x) => a + (x[k] || 0) / avgBaseQOf(x.g), 0) / played.length;
+    return perQAvg * DISPLAY_BASE_Q;
   };
   const pctOf = (m, a) => a > 0 ? `${Math.round(m / a * 1000) / 10}%` : "–";
   const bestOf = (k) => perGame.reduce((b, x) => (!b || x[k] > b.v) ? { v: x[k], g: x.g } : b, null);
-  const hasVaryQ = perGame.some((x) => regQOf(x.g) !== 4);
+  const hasVaryQ = perGame.some((x) => regQOf(x.g) !== 4 || x.g.tenPersonRule);
 
   const TREND_OPTS = [
     { k: "own", label: "得点", color: C.win },
@@ -1835,9 +1863,7 @@ function TeamStatsCard({ data, oppName }) {
   ];
   const tOpt = TREND_OPTS.find((o) => o.k === trendStat) || TREND_OPTS[0];
   const chartData = perGame.map((x) => ({ name: x.g.date?.slice(5) || "", val: x[trendStat] }));
-  const tAvg = totalQPlayed > 0 && played.length > 0
-    ? played.reduce((a, x) => a + (x[trendStat] || 0), 0) / totalQPlayed * baseQ / played.length
-    : 0;
+  const tAvg = avgOf(trendStat);
 
   const SubBox = ({ label, main, corner }) => (
     <div className="rounded-lg py-2 px-1 text-center relative" style={{ background: C.card2 }}>
@@ -1850,7 +1876,7 @@ function TeamStatsCard({ data, oppName }) {
   return (
     <Card>
       <SectionTitle>チームスタッツ({n}試合)</SectionTitle>
-      {hasVaryQ && <div className="text-[10px] mt-1 mb-1" style={{ color: C.sub }}>※平均はQ数基準で算出(全試合4Q換算)</div>}
+      {hasVaryQ && <div className="text-[10px] mt-1 mb-1" style={{ color: C.sub }}>※平均は試合ごとに1Qあたり換算後、3Q基準(10人制ルール想定)で算出</div>}
 
       <div className="flex gap-2 mt-2">
         <div className="flex-1 rounded-2xl px-3 py-3 text-center relative overflow-hidden"
@@ -1993,7 +2019,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin, isSelect
         } else if (!oppId) {
           oppId = uid(); opponents = [...opponents, { id: oppId, name: f.newOpp, area: "", numbers: "", logo: "" }];
         }
-        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: [], published: false });
+        const g = normGame({ id: uid(), date: f.date, tournament: f.tournament, opponentId: oppId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", tenPersonRule: f.tenPersonRule || false, qScores: f.qScores, events: [], published: false });
         save({ ...data, opponents, games: [...data.games, g] });
         setAdding(false); setNav({ gameId: g.id });
       }} />
@@ -2208,7 +2234,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
   if (editing) return (
     <GameForm data={data} initial={g} isSelectTeam={isSelectTeam} onCancel={() => setEditing(false)}
       onSave={(f) => {
-        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", qScores: f.qScores, events: f._clearQs ? (x.events || []).filter((e) => !f._clearQs.includes(e.q)) : x.events, lineups: f._clearQs ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => !f._clearQs.includes(+k))) : x.lineups }) : x) });
+        save({ ...data, games: data.games.map((x) => x.id === g.id ? normGame({ ...x, date: f.date, tournament: f.tournament, opponentId: f.opponentId || x.opponentId, qLen: f.qLen, otLen: f.otLen, ot: f.ot, regQ: f.regQ, order: +f.order || 0, category: f.category || "practice", tenPersonRule: f.tenPersonRule || false, qScores: f.qScores, events: f._clearQs ? (x.events || []).filter((e) => !f._clearQs.includes(e.q)) : x.events, lineups: f._clearQs ? Object.fromEntries(Object.entries(x.lineups || {}).filter(([k]) => !f._clearQs.includes(+k))) : x.lineups }) : x) });
         setEditing(false);
       }} />
   );
@@ -2368,6 +2394,11 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam, updateGa
     setFlash({ id: ev.id, text: `${who} – ${ACTION_LABEL[action]}${pts ? ` (+${pts})` : ""}` });
     clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 1300);
+    // PFで5ファウルに到達したら選択を自動解除(グレーアウトしたチップを選択したままにしない)
+    if (action === "PF" && key !== TEAM_KEY) {
+      const newPf = (game.events || []).filter((e) => e.side === side && (side === "own" ? e.playerId === key : e.oppNum === key) && e.action === "PF").length + 1;
+      if (newPf >= 5) setSel(null);
+    }
   };
   const delEvent = (id) => {
     const ev = (game.events || []).find((e) => e.id === id);
@@ -2580,75 +2611,44 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam, updateGa
                   上の「出場メンバー」から{teamLabel}の出場中の選手を登録してください。登録した選手のみ記録できます。
                 </div>
               )}
-              {/* ===== ファウルカウントパネル ===== */}
-              {(() => {
-                const inPlayers = players.filter((p) => curLineup.includes(p.id));
-                if (inPlayers.length === 0) return null;
-                const pfOf = (pid) => (game.events || []).filter((e) => e.side === side && (side === "own" ? e.playerId === pid : e.oppNum === pid) && e.action === "PF").length;
-                return (
-                  <div className="mb-3 rounded-xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
-                    <div className="px-2 py-1 text-[9px] font-bold tracking-widest" style={{ background: C.card2, color: C.sub }}>ファウルカウント（{teamLabel}・この試合）</div>
-                    <div className="flex">
-                      {inPlayers.map((p) => {
-                        const pf = pfOf(p.id);
-                        const isOut = pf >= 5;
-                        const isWarn = pf === 4;
-                        const col = (isOut || isWarn) ? "#fff" : pf >= 3 ? C.led : C.sub;
-                        return (
-                          <div key={p.id} className="flex-1 flex flex-col items-center py-1.5 relative"
-                            style={{ borderRight: `1px solid ${C.border}`, background: isOut ? `${C.loss}22` : isWarn ? "#B8860B22" : "transparent" }}>
-                            {isOut && (
-                              <div className="absolute inset-0 flex items-center justify-center rounded text-[8px] font-black z-10 pointer-events-none"
-                                style={{ background: `${C.loss}EE`, color: "#fff", letterSpacing: "0.05em" }}>
-                                FOUL OUT
-                              </div>
-                            )}
-                            <div className="text-[8px] truncate px-0.5 w-full text-center mb-0.5" style={{ color: C.sub }}>
-                              #{p.number}
-                            </div>
-                            <div className="flex gap-0.5 mb-0.5">
-                              {[1,2,3,4,5].map((n) => (
-                                <div key={n} className="rounded-sm"
-                                  style={{
-                                    width: 7, height: 10,
-                                    background: n <= pf
-                                      ? (n >= 5 ? C.loss : n >= 4 ? "#D4A017" : n >= 3 ? C.led + "CC" : C.sub + "99")
-                                      : C.card,
-                                    border: `1px solid ${n <= pf ? "transparent" : C.border}`,
-                                  }} />
-                              ))}
-                            </div>
-                            <div className="text-sm font-black leading-none" style={{ fontFamily: "'Bebas Neue',sans-serif", color: col }}>{pf}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
               <div className="flex flex-wrap gap-1.5 mb-2">
                 <button onClick={() => setSel(TEAM_KEY)}
                   className="px-3 py-2 rounded-full text-sm font-bold"
                   style={sel === TEAM_KEY ? { background: C.led, color: "#000" } : { border: `1px dashed ${C.led}`, color: C.led }}>チーム</button>
                 {players.filter((p) => curLineup.includes(p.id)).map((p) => {
                   const pf = (game.events || []).filter((e) => e.side === side && (side === "own" ? e.playerId === p.id : e.oppNum === p.id) && e.action === "PF").length;
-                  const isOut = pf >= 5;
-                  const isWarn = pf === 4;
+                  const isOut = pf >= 5;      // 5ファウル: グレーアウト(選択不可)
+                  const isDanger = pf === 4;  // 4ファウル: 赤
+                  const isWarn = pf === 3;    // 3ファウル: 黄色
+                  if (isOut) {
+                    return (
+                      <div key={p.id}
+                        className="px-3 py-2 rounded-full text-sm font-bold flex items-center gap-1"
+                        style={{ background: C.card2, color: C.border, cursor: "not-allowed" }}>
+                        #{p.number} {p.codename || p.name}
+                        <span className="text-[9px] font-black">5F退</span>
+                      </div>
+                    );
+                  }
                   return (
                     <button key={p.id} onClick={() => setSel(p.id)}
-                      className="px-3 py-2 rounded-full text-sm font-bold relative"
+                      className="px-3 py-2 rounded-full text-sm font-bold"
                       style={sel === p.id
-                        ? { background: isOut ? C.loss : isWarn ? "#D4A017" : chipActiveColor, color: "#fff", outline: isOut ? `2px solid ${C.loss}` : isWarn ? "2px solid #D4A017" : "none", outlineOffset: 1 }
-                        : isOut
-                          ? { border: `2px solid ${C.loss}`, color: C.loss, background: `${C.loss}18` }
+                        ? { background: isDanger ? C.loss : isWarn ? "#D4A017" : chipActiveColor, color: "#fff" }
+                        : isDanger
+                          ? { background: `${C.loss}30`, color: C.loss, border: `1px solid ${C.loss}` }
                           : isWarn
-                            ? { border: `2px solid #D4A017`, color: "#D4A017", background: "#D4A01718" }
+                            ? { background: "#D4A01730", color: "#D4A017", border: "1px solid #D4A017" }
                             : { border: `1px solid ${borderColor}`, color: C.text }}>
                       #{p.number} {p.codename || p.name}
-                      {pf > 0 && <span className="ml-1 text-[10px] font-black" style={{ color: isOut ? (sel===p.id?"#fff":C.loss) : isWarn ? (sel===p.id?"#fff":"#D4A017") : C.sub }}>{pf}F</span>}
                     </button>
                   );
                 })}
+              </div>
+              <div className="text-[9px] mb-2 flex items-center gap-3" style={{ color: C.sub }}>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: "#D4A017" }} />3F</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.loss }} />4F</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: C.border }} />5F退場</span>
               </div>
               {sel && sel !== TEAM_KEY && curLineup.includes(sel) && (
                 <button onClick={() => subOutPlayer(sel, side)}
