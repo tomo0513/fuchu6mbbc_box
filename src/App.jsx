@@ -1069,11 +1069,9 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
   const w = wlResults.filter((r) => r.own > r.opp).length;
   const l = wlResults.filter((r) => r.own < r.opp).length;
   const n = wlResults.length;
-  // チーム合計(得点・失点)は常に4Q換算で表示。試合ごとに1Qあたりへ換算後、4Qを掛ける(0-0除外)
-  const allPlayed = results.filter((r) => (r.own + r.opp) > 0);
-  const allAvg = (k) => allPlayed.length > 0
-    ? (allPlayed.reduce((a, r) => a + r[k] / avgBaseQOf(r.g), 0) / allPlayed.length) * 4
-    : 0;
+  // チームスタッツと同じロジック: 参考試合を除く4ピリオド制の試合のみを対象に単純合計・単純平均
+  const allPlayed = results.filter((r) => (r.own + r.opp) > 0 && (r.g.category || "practice") !== "ref" && regQOf(r.g) === 4);
+  const allAvg = (k) => allPlayed.length > 0 ? allPlayed.reduce((a, r) => a + r[k], 0) / allPlayed.length : 0;
   const avgPF = allAvg("own");
   const avgPA = allAvg("opp");
   const stars = useMemo(() => {
@@ -1820,7 +1818,11 @@ function TeamStatsCard({ data, oppName }) {
   const C = useC();
   const [trendStat, setTrendStat] = useState("own");
   const [effStat, setEffStat] = useState("fgp");
-  const allGames = [...data.games].sort(gameOrderAsc);
+  // チームスタッツは選手個人の平均ロジックとは切り離し、
+  // 「参考試合以外」かつ「4Q制の試合」のみを対象にした単純合計・単純平均で算出する。
+  const allGames = [...data.games]
+    .filter((g) => (g.category || "practice") !== "ref" && regQOf(g) === 4)
+    .sort(gameOrderAsc);
   const n = allGames.length;
   if (n === 0) return null;
 
@@ -1842,16 +1844,10 @@ function TeamStatsCard({ data, oppName }) {
   const sumOf = (k) => perGame.reduce((a, x) => a + (x[k] || 0), 0);
 
   const played = perGame.filter((x) => (x.own + x.opp) > 0);
-  // チーム合計は常に4Q換算で表示。試合ごとに1Qあたりへ換算してから平均し、4Qを掛ける。
-  const DISPLAY_BASE_Q = 4;
-  const avgOf = (k) => {
-    if (played.length === 0) return 0;
-    const perQAvg = played.reduce((a, x) => a + (x[k] || 0) / avgBaseQOf(x.g), 0) / played.length;
-    return perQAvg * DISPLAY_BASE_Q;
-  };
+  // 単純平均: 対象試合(参考除く・4Q制のみ)の合計 ÷ 試合数
+  const avgOf = (k) => played.length > 0 ? sumOf(k) / played.length : 0;
   const pctOf = (m, a) => a > 0 ? `${Math.round(m / a * 1000) / 10}%` : "–";
   const bestOf = (k) => perGame.reduce((b, x) => (!b || x[k] > b.v) ? { v: x[k], g: x.g } : b, null);
-  const hasVaryQ = perGame.some((x) => regQOf(x.g) !== 4 || x.g.tenPersonRule);
 
   const TREND_OPTS = [
     { k: "own", label: "得点", color: C.win },
@@ -1875,7 +1871,7 @@ function TeamStatsCard({ data, oppName }) {
   return (
     <Card>
       <SectionTitle>チームスタッツ({n}試合)</SectionTitle>
-      {hasVaryQ && <div className="text-[10px] mt-1 mb-1" style={{ color: C.sub }}>※平均は試合ごとに1Qあたり換算後、4Q基準で算出</div>}
+      <div className="text-[10px] mt-1 mb-1" style={{ color: C.sub }}>※参考試合を除く4ピリオド制の試合のみを対象に、単純合計・単純平均で算出</div>
 
       <div className="flex gap-2 mt-2">
         <div className="flex-1 rounded-2xl px-3 py-3 text-center relative overflow-hidden"
