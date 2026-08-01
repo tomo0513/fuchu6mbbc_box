@@ -304,21 +304,21 @@ function careerStats(games, playerId, isSelectTeam) {
   const tot = {};
   const totAdj = {};
   const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
-  // 表示用の「1試合平均」に換算する際の基準Q数。
-  // 選抜チームは「1人最大2Qまで」のルールなので2Q基準。
-  // 六小は公式戦の10人制(1人最大3Qまで)を想定した3Q基準。
-  const DISPLAY_BASE_Q = isSelectTeam ? 2 : 3;
-  // 試合ごとの基準Q。
-  // 選抜: その試合の実際のQ数と、選抜の上限2Qのうち小さい方(例: 1Q制の試合なら1Q基準)。
-  // 六小: avgBaseQOf(4Q制は10人制ルール有無で3or4、3Q制以下はその試合のQ数)。
-  const baseQFor = (g) => isSelectTeam ? Math.min(regQOf(g), 2) : avgBaseQOf(g);
+  // 六小の表示用「1試合平均」に換算する際の基準Q数(公式戦の10人制ルール想定)
+  const DISPLAY_BASE_Q = 3;
   cntKeys.forEach((k) => {
     tot[k] = Math.round(per.reduce((a, x) => a + (x.s[k] || 0), 0) * 10) / 10;
-    // 各試合を「1Qあたりの値」に変換してから試合数で平均し、最後に表示用Qを掛ける。
-    const perQAvg = n > 0
-      ? played.reduce((a, x) => a + (x.s[k] || 0) / baseQFor(x.g), 0) / n
-      : 0;
-    totAdj[k] = perQAvg * DISPLAY_BASE_Q;
+    if (isSelectTeam) {
+      // 選抜チームは単純平均: 出場した試合の合計 ÷ 試合数(Q数換算なし)
+      const playedTotal = played.reduce((a, x) => a + (x.s[k] || 0), 0);
+      totAdj[k] = n > 0 ? playedTotal / n : 0;
+    } else {
+      // 六小は試合ごとに「1Qあたりの値」に変換してから試合数で平均し、最後に表示用Qを掛ける。
+      const perQAvg = n > 0
+        ? played.reduce((a, x) => a + (x.s[k] || 0) / avgBaseQOf(x.g), 0) / n
+        : 0;
+      totAdj[k] = perQAvg * DISPLAY_BASE_Q;
+    }
   });
   return { per, n, tot, totAdj, gamesPlayed: per.length };
 }
@@ -1425,7 +1425,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
       )}
       <Card>
         <SectionTitle>通算成績({gamesPlayed}試合)</SectionTitle>
-        {isSelectTeam && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※府中選抜は1人最大2Qまでの出場のため、平均は2Q基準で表示しています。</div>}
+        {isSelectTeam && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均は出場した試合の合計÷試合数で算出しています。</div>}
         {!isSelectTeam && hasVaryQ && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均は試合ごとに1Qあたりへ換算してから平均し、3Q基準(公式戦の10人制ルール想定)で表示しています。4Q制で10人制ルール適用外の試合は4Q基準、3Q制以下の試合はその試合のQ数を基準に換算します。</div>}
         {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (() => {
           const allGames = [...data.games].sort(gameOrderAsc);
