@@ -283,7 +283,7 @@ const gamePts = (g) => ({ own: qSum(g.qScores?.own, periodsOf(g)), opp: qSum(g.q
 const gameOrderAsc = (a, b) => (a.date || "").localeCompare(b.date || "") || ((+a.order || 0) - (+b.order || 0));
 const gameOrderDesc = (a, b) => (b.date || "").localeCompare(a.date || "") || ((+b.order || 0) - (+a.order || 0));
 
-function careerStats(games, playerId) {
+function careerStats(games, playerId, isSelectTeam) {
   // 通常はown側(自チーム)の選手として集計。紅白戦の場合、その試合でopp側(白組)に
   // 振り分けられていれば、opp側の選手としてスタッツを拾う。
   const sideFor = (g) => {
@@ -304,14 +304,19 @@ function careerStats(games, playerId) {
   const tot = {};
   const totAdj = {};
   const cntKeys = [...STAT_DEFS.map((d) => d.k), "fgm", "fga", "ftm", "fta"];
-  // 表示用の「1試合平均」に換算する際の基準Q数(公式戦は10人制が基本のため3Q)
-  const DISPLAY_BASE_Q = 3;
+  // 表示用の「1試合平均」に換算する際の基準Q数。
+  // 選抜チームは「1人最大2Qまで」のルールなので2Q基準。
+  // 六小は公式戦の10人制(1人最大3Qまで)を想定した3Q基準。
+  const DISPLAY_BASE_Q = isSelectTeam ? 2 : 3;
+  // 試合ごとの基準Q。
+  // 選抜: その試合の実際のQ数と、選抜の上限2Qのうち小さい方(例: 1Q制の試合なら1Q基準)。
+  // 六小: avgBaseQOf(4Q制は10人制ルール有無で3or4、3Q制以下はその試合のQ数)。
+  const baseQFor = (g) => isSelectTeam ? Math.min(regQOf(g), 2) : avgBaseQOf(g);
   cntKeys.forEach((k) => {
     tot[k] = Math.round(per.reduce((a, x) => a + (x.s[k] || 0), 0) * 10) / 10;
     // 各試合を「1Qあたりの値」に変換してから試合数で平均し、最後に表示用Qを掛ける。
-    // (試合ごとの基準Qは、4Q制なら10人制ルール有無で3or4、3Q制以下はその試合のQ数)
     const perQAvg = n > 0
-      ? played.reduce((a, x) => a + (x.s[k] || 0) / avgBaseQOf(x.g), 0) / n
+      ? played.reduce((a, x) => a + (x.s[k] || 0) / baseQFor(x.g), 0) / n
       : 0;
     totAdj[k] = perQAvg * DISPLAY_BASE_Q;
   });
@@ -1266,7 +1271,7 @@ function PlayerList({ data, save, setNav, isPC, isAdmin, isSelectTeam }) {
       )}
       <div className={isPC ? "grid grid-cols-2 gap-3" : "space-y-2"}>
         {players.map((p) => {
-          const c = careerStats(data.games, p.id);
+          const c = careerStats(data.games, p.id, isSelectTeam);
           return (
             <button key={p.id} className="w-full" onClick={() => setNav({ playerId: p.id })}>
               <Card className="flex items-center gap-3 text-left">
@@ -1305,8 +1310,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
   const prevPlayer = curIdx > 0 ? sortedPlayers[curIdx - 1] : null;
   const nextPlayer = curIdx < sortedPlayers.length - 1 ? sortedPlayers[curIdx + 1] : null;
   const games = [...data.games].sort(gameOrderAsc);
-  const { per, n, tot, totAdj, gamesPlayed } = careerStats(games, p.id);
-  const hasVaryQ = per.some((x) => regQOf(x.g) !== 4 || x.g.tenPersonRule);
+  const { per, n, tot, totAdj, gamesPlayed } = careerStats(games, p.id, isSelectTeam);
+  const hasVaryQ = isSelectTeam ? false : per.some((x) => regQOf(x.g) !== 4 || x.g.tenPersonRule);
   const oppNm = (g) => data.opponents.find((o) => o.id === g.opponentId)?.name || "対戦相手";
   const TREND_OPTS = [
     { k: "eff", label: "EFF", color: "#3DBE7B" },
@@ -1420,11 +1425,12 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
       )}
       <Card>
         <SectionTitle>通算成績({gamesPlayed}試合)</SectionTitle>
-        {hasVaryQ && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均は試合ごとに1Qあたりへ換算してから平均し、3Q基準(公式戦の10人制ルール想定)で表示しています。4Q制で10人制ルール適用外の試合は4Q基準、3Q制以下の試合はその試合のQ数を基準に換算します。</div>}
+        {isSelectTeam && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※府中選抜は1人最大2Qまでの出場のため、平均は2Q基準で表示しています。</div>}
+        {!isSelectTeam && hasVaryQ && n > 0 && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※平均は試合ごとに1Qあたりへ換算してから平均し、3Q基準(公式戦の10人制ルール想定)で表示しています。4Q制で10人制ルール適用外の試合は4Q基準、3Q制以下の試合はその試合のQ数を基準に換算します。</div>}
         {n === 0 ? <div className="text-sm" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (() => {
           const allGames = [...data.games].sort(gameOrderAsc);
           const teamAvgs = data.players.map((pl) => {
-            const cs = careerStats(allGames, pl.id);
+            const cs = careerStats(allGames, pl.id, isSelectTeam);
             if (cs.n === 0) return null;
             return {
               id: pl.id,
@@ -3459,7 +3465,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin, updateGame
   );
 }
 
-function Ranking({ data, setTab, setNav }) {
+function Ranking({ data, setTab, setNav, isSelectTeam }) {
   const C = useC();
   const [stat, setStat] = useState("pts");
   const [mode, setMode] = useState("avg");
@@ -3470,7 +3476,7 @@ function Ranking({ data, setTab, setNav }) {
     ? data.players.filter((p) => (+p.grade || 0) >= 5)
     : data.players;
   const rows = rankPlayers.map((p) => {
-    const c = careerStats(data.games, p.id);
+    const c = careerStats(data.games, p.id, isSelectTeam);
     if (c.n === 0) return null;
     if (stat === "fgp") {
       if ((c.tot.fga || 0) === 0) return null;
