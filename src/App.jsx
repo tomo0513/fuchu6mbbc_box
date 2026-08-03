@@ -555,6 +555,7 @@ const Seg = ({ items, value, onChange }) => {
 function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods, game, ownName }) {
   const C = useC();
   const win = own > opp, draw = own === opp;
+  const isIntramural = gameCatOf(game?.category)?.isIntramural;
   return (
     <div className="rounded-xl px-4 py-3"
       style={{ background: C.board, border: `1px solid ${C.border}`, fontFamily: "'Bebas Neue', sans-serif" }}>
@@ -565,10 +566,12 @@ function ScoreBoard({ own, opp, oppName, oppLogo, date, small, qScores, periods,
         </div>
         <div className="text-center px-2">
           <div className="text-xs" style={{ fontFamily: "sans-serif", color: C.sub }}>{date || ""}</div>
-          <div className="text-sm font-bold px-2.5 py-0.5 rounded mt-1 text-white"
-            style={{ background: draw ? "#444" : win ? C.win : C.loss, fontFamily: "sans-serif" }}>
-            {draw ? "引分" : win ? "WIN" : "LOSE"}
-          </div>
+          {!isIntramural && (
+            <div className="text-sm font-bold px-2.5 py-0.5 rounded mt-1 text-white"
+              style={{ background: draw ? "#444" : win ? C.win : C.loss, fontFamily: "sans-serif" }}>
+              {draw ? "引分" : win ? "WIN" : "LOSE"}
+            </div>
+          )}
         </div>
         <div className="text-center flex-1">
           <div className="flex items-center justify-center gap-1 max-w-28 mx-auto">
@@ -1159,7 +1162,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
                       style={{ background: cat.color }}>{cat.badge}</span>
                     <span>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}` : ""}</span>
                   </div>
-                  <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} />
+                  <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo} date={g.date} game={g} />
                 </button>
               );
             })}
@@ -2166,7 +2169,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin, isSelect
                   <span>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}` : ""}</span>
                 </div>
                 <ScoreBoard small own={own} opp={opp} oppName={isSelectTeam && cat.isIntramural ? "白組" : oppName(g.opponentId)}
-                  oppLogo={getOpp(g.opponentId)?.logo} date={g.date} ownName={isSelectTeam ? (cat.isIntramural ? "紅組" : "府中選抜") : undefined} />
+                  oppLogo={getOpp(g.opponentId)?.logo} date={g.date} ownName={isSelectTeam ? (cat.isIntramural ? "紅組" : "府中選抜") : undefined} game={g} />
               </button>
             );
           })}
@@ -3112,7 +3115,7 @@ function ReportView({ data, game, mode, oppName, onClose }) {
       <div ref={rootRef} className="max-w-2xl mx-auto px-5 py-6">
         <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>{title}</h1>
         <p style={{ fontSize: 13, color: "#555", margin: 0 }}>{game.date}・{game.tournament || "練習試合"}{game.ot ? `・OT${game.ot}` : ""}</p>
-        <p style={{ fontSize: 24, fontWeight: 700, margin: "12px 0 4px" }}>{ownName} {a.ownPts} – {a.oppPts} {opp}<span style={{ fontSize: 14, marginLeft: 10, color: a.win ? "#1B8A52" : a.ownPts === a.oppPts ? "#666" : "#C03A3A" }}>{a.win ? "WIN" : a.ownPts === a.oppPts ? "引分" : "LOSE"}</span></p>
+        <p style={{ fontSize: 24, fontWeight: 700, margin: "12px 0 4px" }}>{ownName} {a.ownPts} – {a.oppPts} {opp}{!isIntramural && <span style={{ fontSize: 14, marginLeft: 10, color: a.win ? "#1B8A52" : a.ownPts === a.oppPts ? "#666" : "#C03A3A" }}>{a.win ? "WIN" : a.ownPts === a.oppPts ? "引分" : "LOSE"}</span>}</p>
         {mips.length > 0 && <p style={{ fontSize: 13, margin: 0 }}>MIP: {mips.map(({ p, s }) => `#${p.number} ${p.codename || p.name}(EFF ${s.eff})`).join("、")}</p>}
         <T>ピリオド別スコア</T>
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -4021,7 +4024,7 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
                       <span>{g.date}{g.ot ? `・OT${g.ot}` : ""}</span>
                     </div>
                     <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)}
-                      oppLogo={data.opponents.find((o) => o.id === g.opponentId)?.logo} date={g.date} />
+                      oppLogo={data.opponents.find((o) => o.id === g.opponentId)?.logo} date={g.date} game={g} />
                   </button>
                 );
               })}
