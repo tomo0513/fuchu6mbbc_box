@@ -761,8 +761,7 @@ export default function App() {
     (async () => {
       let d = null;
       try {
-        const json = await loadData();
-        if (json) d = JSON.parse(json);
+        d = await loadData();
       } catch (e) { /* 初回 */ }
       const init = d || {
         team: { name: "府中六小ミニバス", logo: "", homeCourt: "府中第六小学校 体育館" },
