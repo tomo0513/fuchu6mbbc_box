@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { loadData, saveData } from "./firebase.js";
+import { loadData, saveData, deleteGame, deleteAllGames } from "./firebase.js";
 import {
   LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, ReferenceLine,
@@ -795,7 +795,7 @@ export default function App() {
       // saveData自体にタイムアウトが無い場合に備え、15秒で強制的にタイムアウトさせる。
       // これが無いと、通信が詰まった際に「保存中…」のまま無期限に固まってしまう。
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 15000));
-      await Promise.race([saveData(JSON.parse(str)), timeoutPromise]);
+      await Promise.race([saveData(d), timeoutPromise]);
       pending.current = null; retried.current = false;
       setSaveState("");
     } catch (e) {
@@ -2253,7 +2253,11 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
           <button style={{ color: C.sub }} onClick={copyLink}><Link2 size={18} /></button>
           {isAdmin && <button style={{ color: C.sub }} onClick={() => setEditing(true)}><Pencil size={18} /></button>}
           {isAdmin && <button style={{ color: C.sub }} onClick={() => {
-            if (confirm("この試合を削除しますか?")) { save({ ...data, games: data.games.filter((x) => x.id !== g.id) }); setNav({}); }
+            if (confirm("この試合を削除しますか?")) {
+              save({ ...data, games: data.games.filter((x) => x.id !== g.id) });
+              deleteGame(isSelectTeam ? "select" : "main", g.id).catch(() => {});
+              setNav({});
+            }
           }}><Trash2 size={18} /></button>}
         </div>
       </div>
@@ -4335,7 +4339,10 @@ function SettingsScreen({ data, save }) {
           </button>
         )}
         <button className="w-full py-3 rounded-xl font-bold text-sm" style={{ border: `1px solid ${C.loss}`, color: C.loss }}
-          onClick={() => { if (confirm("すべてのデータを削除します。よろしいですか?")) save({ team: { name: "府中六小ミニバス", logo: "", homeCourt: "" }, players: [], opponents: [], games: [] }); }}>
+          onClick={() => { if (confirm("すべてのデータを削除します。よろしいですか?")) {
+            save({ team: { name: "府中六小ミニバス", logo: "", homeCourt: "" }, players: [], opponents: [], tournaments: [], games: [], selectTeam: { players: [], opponents: [], games: [] } });
+            deleteAllGames().catch(() => {});
+          } }}>
           すべてのデータを初期化
         </button>
       </Card>
