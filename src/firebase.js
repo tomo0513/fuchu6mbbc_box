@@ -29,16 +29,22 @@ const selectGamesCol = () => collection(db, "teams", TEAM_DOC, "selectGames");
  */
 export async function loadData() {
   const mainSnap = await getDoc(teamRef());
-  if (!mainSnap.exists()) return null;
+  if (!mainSnap.exists()) {
+    alert("【診断】メインドキュメントが存在しません(mainSnap.exists() === false)");
+    return null;
+  }
 
   const main = mainSnap.data();
+  alert("【診断】main のキー一覧: " + Object.keys(main).join(", ") + "\npayloadの型: " + typeof main.payload + "\npayloadの長さ: " + (main.payload ? main.payload.length : "なし"));
   // 後方互換: 旧形式(payload文字列に全部入っている)ならそのままパースして返し、
   // 次回保存時に新形式へ自動移行される。
   if (main.payload) {
     try {
-      return JSON.parse(main.payload);
+      const parsed = JSON.parse(main.payload);
+      alert("【診断】payloadのパース成功。players数: " + (parsed.players?.length ?? "undefined") + " / games数: " + (parsed.games?.length ?? "undefined"));
+      return parsed;
     } catch (e) {
-      // 壊れていたら通常の分割形式として扱う
+      alert("【診断】payloadのパースに失敗しました: " + e.message);
     }
   }
 
