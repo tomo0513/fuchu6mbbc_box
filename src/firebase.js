@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, doc, getDoc, setDoc,
-  collection, getDocs, writeBatch, deleteField,
+  collection, getDocs, writeBatch,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -94,7 +94,8 @@ export async function saveData(data) {
   }
 
   // メインドキュメント: 巨大なpayload文字列は使わず、フィールドごとに保存(1MB制限内に確実に収める)
-  const mainWrite = setDoc(teamRef(), { ...rest, selectTeam: selRest, payload: deleteField() });
+  // payloadは空文字列にしておく(loadData側でfalsy判定され、分割形式として正しく読み込まれる)
+  const mainWrite = setDoc(teamRef(), { ...rest, selectTeam: selRest, payload: "" });
 
   const writes = [mainWrite];
   if (games) writes.push(writeGamesBatch(gamesCol(), games));
