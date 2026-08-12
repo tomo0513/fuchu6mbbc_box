@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, doc, getDoc, setDoc,
-  collection, getDocs, writeBatch,
+  collection, getDocs, writeBatch, deleteField,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -29,22 +29,16 @@ const selectGamesCol = () => collection(db, "teams", TEAM_DOC, "selectGames");
  */
 export async function loadData() {
   const mainSnap = await getDoc(teamRef());
-  if (!mainSnap.exists()) {
-    alert("【診断】メインドキュメントが存在しません(mainSnap.exists() === false)");
-    return null;
-  }
+  if (!mainSnap.exists()) return null;
 
   const main = mainSnap.data();
-  alert("【診断】main のキー一覧: " + Object.keys(main).join(", ") + "\npayloadの型: " + typeof main.payload + "\npayloadの長さ: " + (main.payload ? main.payload.length : "なし"));
   // 後方互換: 旧形式(payload文字列に全部入っている)ならそのままパースして返し、
   // 次回保存時に新形式へ自動移行される。
   if (main.payload) {
     try {
-      const parsed = JSON.parse(main.payload);
-      alert("【診断】payloadのパース成功。players数: " + (parsed.players?.length ?? "undefined") + " / games数: " + (parsed.games?.length ?? "undefined"));
-      return parsed;
+      return JSON.parse(main.payload);
     } catch (e) {
-      alert("【診断】payloadのパースに失敗しました: " + e.message);
+      // 壊れていたら通常の分割形式として扱う
     }
   }
 
@@ -83,8 +77,24 @@ export async function saveData(data) {
   const selGames = selectTeam?.games || [];
   const selRest = { players: selectTeam?.players || [], opponents: selectTeam?.opponents || [] };
 
+  // 安全策: 既に選手or試合が登録されているはずなのに、今回保存しようとしている内容が
+  // すべて空(初回起動時のデフォルト値と同じ状態)の場合は、アプリ側の不具合等で
+  // データが誤って空になっている可能性が高いため、書き込みを中断してデータ消失を防ぐ。
+  const looksEmpty = (rest.players || []).length === 0 && (games || []).length === 0
+    && (selRest.players || []).length === 0 && selGames.length === 0;
+  if (looksEmpty) {
+    const existing = await getDoc(teamRef());
+    if (existing.exists()) {
+      const ex = existing.data();
+      const existingHasData = ex.payload || (ex.players && ex.players.length > 0);
+      if (existingHasData) {
+        throw new Error("guard: 空データでの上書きを防止しました。既存データを保護します。");
+      }
+    }
+  }
+
   // メインドキュメント: 巨大なpayload文字列は使わず、フィールドごとに保存(1MB制限内に確実に収める)
-  const mainWrite = setDoc(teamRef(), { ...rest, selectTeam: selRest, payload: null });
+  const mainWrite = setDoc(teamRef(), { ...rest, selectTeam: selRest, payload: deleteField() });
 
   const writes = [mainWrite];
   if (games) writes.push(writeGamesBatch(gamesCol(), games));
