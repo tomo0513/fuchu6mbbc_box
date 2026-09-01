@@ -2293,7 +2293,7 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
           <div className="flex items-center gap-1.5 mb-3 relative">
             <Award size={15} style={{ color: C.led }} />
             <span className="text-[10px] font-black tracking-widest" style={{ color: C.led }}>
-              MIP{mips.length > 1 ? "(同点)" : ""}
+              MIP
             </span>
           </div>
           <div className="relative space-y-2.5">
@@ -3262,20 +3262,6 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin, updateGame
             <div className="text-center"><div className="text-6xl" style={{ color: C.led }}>{a.ownPts}</div><div className="text-xs" style={{ fontFamily: "sans-serif", color: C.sub }}>自チーム</div></div>
             <div className="text-xl" style={{ color: C.sub }}>{periodLabel2(game, scope)}</div>
             <div className="text-center"><div className="text-6xl" style={{ color: C.oppText }}>{a.oppPts}</div><div className="text-xs" style={{ fontFamily: "sans-serif", color: C.sub }}>相手</div></div>
-          </div>
-        </Card>
-      )}
-      {mips.length > 0 && (
-        <Card style={{ border: `1px solid ${C.led}66` }}>
-          <SectionTitle><span className="inline-flex items-center gap-1" style={{ color: C.led }}><Award size={13} /> MIP(EFF最高)</span></SectionTitle>
-          <div className="space-y-2">
-            {mips.map(({ p, s }) => (
-              <div key={p.id} className="flex items-center gap-3">
-                <Avatar p={p} size={44} />
-                <div className="flex-1"><div className="font-bold">#{p.number} {p.codename || p.name}</div><div className="text-xs" style={{ color: C.sub }}>{s.pts}得点・{s.reb}REB・{s.ast}AST・{s.stl}STL・{s.blk}BLK</div></div>
-                <div className="text-right"><div className="text-4xl font-bold" style={{ color: C.led, fontFamily: "'Bebas Neue', sans-serif" }}>{s.eff}</div><div className="text-[10px]" style={{ color: C.sub }}>EFF</div></div>
-              </div>
-            ))}
           </div>
         </Card>
       )}
