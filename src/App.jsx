@@ -339,7 +339,7 @@ function mipOf(game, players) {
   const rows = players.map((p) => ({ p, s: aggStats(game.events, sideForPlayer(p.id), p.id, "all", game) })).filter((r) => hasStats(r.s));
   if (rows.length === 0) return [];
   const max = Math.max(...rows.map((r) => r.s.eff));
-  return rows.filter((r) => r.s.eff === max);
+  return rows.filter((r) => r.s.eff === max).sort((a, b) => a.s.to - b.s.to);
 }
 
 function analysisFor(data, game, scope) {
@@ -2287,10 +2287,33 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
         oppLogo={getOpp(g.opponentId)?.logo} date={g.date} qScores={g.qScores} periods={periodsOf(g)} game={g}
         ownName={isSelectTeam ? (cat.isIntramural ? "紅組" : "府中選抜") : undefined} />
       {mips.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl flex-wrap" style={{ background: C.card, border: `1px solid ${C.led}55` }}>
-          <Award size={18} style={{ color: C.led }} />
-          <span className="text-xs font-bold" style={{ color: C.led }}>MIP</span>
-          {mips.map(({ p, s }) => <span key={p.id} className="text-sm font-bold">#{p.number} {p.codename || p.name}<span className="text-xs font-normal" style={{ color: C.sub }}> (EFF {s.eff})</span></span>)}
+        <div className="rounded-2xl p-4 relative overflow-hidden"
+          style={{ background: `linear-gradient(160deg, #3A2A0E, ${C.card} 55%)`, border: `1px solid ${C.led}55` }}>
+          <div className="absolute rounded-full pointer-events-none" style={{ top: -30, right: -30, width: 100, height: 100, background: `${C.led}1A` }} />
+          <div className="flex items-center gap-1.5 mb-3 relative">
+            <Award size={15} style={{ color: C.led }} />
+            <span className="text-[10px] font-black tracking-widest" style={{ color: C.led }}>
+              MIP{mips.length > 1 ? "(同点)" : ""}
+            </span>
+          </div>
+          <div className="relative space-y-2.5">
+            {mips.map(({ p, s }, i) => (
+              <div key={p.id} className="flex items-center gap-3"
+                style={i < mips.length - 1 ? { paddingBottom: 10, borderBottom: `1px solid ${C.led}33` } : {}}>
+                <Avatar p={p} size={52} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[15px] font-black truncate">{p.codename || p.name}</div>
+                  <div className="text-[10px] mt-0.5" style={{ color: C.sub }}>
+                    {s.pts}得点・{s.reb}REB・{s.ast}AST・{s.stl}STL・{s.blk}BLK
+                  </div>
+                </div>
+                <div className="text-center shrink-0">
+                  <div className="text-2xl font-black leading-none" style={{ color: C.led, fontFamily: "'Bebas Neue',sans-serif" }}>{s.eff}</div>
+                  <div className="text-[8px] mt-0.5" style={{ color: C.sub }}>EFF</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       <div className="flex rounded-xl overflow-hidden text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
@@ -3249,7 +3272,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin, updateGame
             {mips.map(({ p, s }) => (
               <div key={p.id} className="flex items-center gap-3">
                 <Avatar p={p} size={44} />
-                <div className="flex-1"><div className="font-bold">#{p.number} {p.codename || p.name}</div><div className="text-xs" style={{ color: C.sub }}>{s.pts}得点・{s.reb}リバウンド・{s.ast}アシスト</div></div>
+                <div className="flex-1"><div className="font-bold">#{p.number} {p.codename || p.name}</div><div className="text-xs" style={{ color: C.sub }}>{s.pts}得点・{s.reb}REB・{s.ast}AST・{s.stl}STL・{s.blk}BLK</div></div>
                 <div className="text-right"><div className="text-4xl font-bold" style={{ color: C.led, fontFamily: "'Bebas Neue', sans-serif" }}>{s.eff}</div><div className="text-[10px]" style={{ color: C.sub }}>EFF</div></div>
               </div>
             ))}
