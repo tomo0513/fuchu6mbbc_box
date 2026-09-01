@@ -643,9 +643,9 @@ function OppLogo({ o, size = 36 }) {
 /* ============ 府中選抜チーム 専用ビュー ============ */
 /* 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking)を、
    六小のdataではなく選抜用のdataを渡すことでそのまま再利用する。登録系操作は isAdmin のみ許可(各コンポーネントが元々対応済み)。 */
-function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, isAdmin, theme, toggleTheme, onBack, saveState, updateGameById }) {
+function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, isAdmin, theme, toggleTheme, onBack, saveState, updateGameById, initialGameId }) {
   const [tab, setTab] = useState("games");
-  const [nav, setNav] = useState({});
+  const [nav, setNav] = useState(initialGameId ? { gameId: initialGameId } : {});
   const C = useC();
   const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, isSelectTeam: true, updateGameById };
 
@@ -894,7 +894,7 @@ export default function App() {
       save({ ...latest, games });
     }
   };
-  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId) => setSelectMode({ fromPlayerId }), updateGameById: (gameId, fn) => updateGameById("main", gameId, fn) };
+  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId, gameId) => setSelectMode({ fromPlayerId, gameId }), updateGameById: (gameId, fn) => updateGameById("main", gameId, fn) };
 
   // ===== 府中選抜チーム用のデータ・保存関数 =====
   // 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking等)を
@@ -973,6 +973,7 @@ export default function App() {
           isPC={isPC} isAdmin={isAdmin} theme={theme} toggleTheme={toggleTheme}
           onBack={() => setSelectMode(null)} saveState={saveState}
           updateGameById={(gameId, fn) => updateGameById("select", gameId, fn)}
+          initialGameId={selectMode.gameId}
         />
       </ThemeCtx.Provider>
     );
@@ -3564,7 +3565,7 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
   );
 }
 
-function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
+function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSelectTeam }) {
   const C = useC();
   const [selId, setSelId] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -3592,7 +3593,13 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
     return da.localeCompare(db);
   });
   const selT = sorted.find((t) => t.id === selId);
-  const relGames = selT ? [...data.games].filter((g) => g.tournament === selT.name).sort(gameOrderDesc) : [];
+  // 六小の試合(大会名が一致するもの)
+  const relGamesMain = selT ? [...data.games].filter((g) => g.tournament === selT.name).map((g) => ({ g, isSelectTeam: false })) : [];
+  // 府中選抜の試合(同じ大会名のもの)。閲覧者には選抜側の下書き試合も見せない。
+  const selectGamesAll = data.selectTeam?.games || [];
+  const visibleSelectGames = isAdmin ? selectGamesAll : selectGamesAll.filter((g) => g.published !== false);
+  const relGamesSelect = selT ? visibleSelectGames.filter((g) => g.tournament === selT.name).map((g) => ({ g, isSelectTeam: true })) : [];
+  const relGames = [...relGamesMain, ...relGamesSelect].sort((a, b) => gameOrderDesc(a.g, b.g));
 
   const CATS = [
     { k: "tournament", label: "トーナメント", color: "#E25C5C" },
@@ -4026,17 +4033,30 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin }) {
           <Card>
             <SectionTitle>試合結果({relGames.length}試合)</SectionTitle>
             <div className="space-y-2">
-              {relGames.map((g) => {
+              {relGames.map(({ g, isSelectTeam: isSel }) => {
                 const { own, opp } = gamePts(g);
                 const cat2 = gameCatOf(g.category);
+                const selOpp = isSel ? (data.selectTeam?.opponents || []).find((o) => o.id === g.opponentId) : null;
+                const oppDisplayName = isSel
+                  ? (cat2.isIntramural ? "白組" : (selOpp?.name || "対戦相手"))
+                  : oppName(g.opponentId);
+                const oppDisplayLogo = isSel ? selOpp?.logo : data.opponents.find((o) => o.id === g.opponentId)?.logo;
                 return (
-                  <button key={g.id} className="w-full text-left" onClick={() => { setTab("games"); setNav({ gameId: g.id }); }}>
+                  <button key={g.id} className="w-full text-left"
+                    onClick={() => {
+                      if (isSel) onOpenSelectTeam?.(undefined, g.id);
+                      else { setTab("games"); setNav({ gameId: g.id }); }
+                    }}>
                     <div className="mb-1 px-1 text-xs flex items-center gap-1.5" style={{ color: C.sub }}>
+                      {isSel && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: C.orange }}>🎗️選抜</span>
+                      )}
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: cat2.color }}>{cat2.badge}</span>
                       <span>{g.date}{g.ot ? `・OT${g.ot}` : ""}</span>
                     </div>
-                    <ScoreBoard small own={own} opp={opp} oppName={oppName(g.opponentId)}
-                      oppLogo={data.opponents.find((o) => o.id === g.opponentId)?.logo} date={g.date} game={g} />
+                    <ScoreBoard small own={own} opp={opp} oppName={oppDisplayName}
+                      oppLogo={oppDisplayLogo} date={g.date} game={g}
+                      ownName={isSel ? (cat2.isIntramural ? "紅組" : "府中選抜") : undefined} />
                   </button>
                 );
               })}
