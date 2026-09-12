@@ -1095,22 +1095,23 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
       const avg = (k) => per.reduce((a, s) => a + s[k], 0) / per.length;
       const avgMin = avg("min");
       if (per.length < MIN_GAMES || avgMin < MIN_AVG_MIN) continue;
-      rows.push({ p, avgEff: avg("eff"), avgPts: avg("pts"), avgAst: avg("ast"), avgReb: avg("reb"), avgStl: avg("stl"), avgBlk: avg("blk"), n: per.length });
+      const fgmSum = per.reduce((a, s) => a + s.fgm, 0);
+      const fgaSum = per.reduce((a, s) => a + s.fga, 0);
+      rows.push({
+        p, avgEff: avg("eff"), avgPts: avg("pts"), avgAst: avg("ast"), avgReb: avg("reb"),
+        avgStl: avg("stl"), avgMin, fgPct: fgaSum > 0 ? (fgmSum / fgaSum) * 100 : null, n: per.length,
+      });
     }
-    // 対象選手全員(フィルター通過者)のチーム平均を算出し、各選手がどの項目で上回っているかを文章化する
-    const STAT_LABELS = { avgPts: "得点", avgReb: "リバウンド", avgAst: "アシスト", avgStl: "スティール", avgBlk: "ブロック" };
-    const statKeys = Object.keys(STAT_LABELS);
+    // 対象選手全員(フィルター通過者)のチーム平均を算出し、各選手がどの項目で上回っているかを判定する
+    const statKeys = ["avgPts", "avgAst", "avgReb", "avgStl", "fgPct", "avgMin"];
     const teamAvg = {};
-    statKeys.forEach((k) => { teamAvg[k] = rows.length > 0 ? rows.reduce((a, r) => a + r[k], 0) / rows.length : 0; });
+    statKeys.forEach((k) => {
+      const vals = rows.map((r) => r[k]).filter((v) => v !== null);
+      teamAvg[k] = vals.length > 0 ? vals.reduce((a, v) => a + v, 0) / vals.length : 0;
+    });
     for (const r of rows) {
-      const above = statKeys.filter((k) => teamAvg[k] > 0 && r[k] > teamAvg[k]);
-      if (above.length === 0) {
-        r.highlight = "堅実なプレーでチームを支える活躍";
-      } else if (above.length <= 2) {
-        r.highlight = `${above.map((k) => STAT_LABELS[k]).join("と")}でチーム平均を上回る活躍`;
-      } else {
-        r.highlight = `${above.slice(0, 2).map((k) => STAT_LABELS[k]).join("・")}など複数の項目でチーム平均を上回る活躍`;
-      }
+      r.above = {};
+      statKeys.forEach((k) => { r.above[k] = r[k] !== null && teamAvg[k] > 0 && r[k] > teamAvg[k]; });
     }
     return rows.sort((a, b) => b.avgEff - a.avgEff).slice(0, 5);
   }, [data]);
@@ -1137,33 +1138,42 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
         <Card className="h-full">
           <SectionTitle>注目選手(直近5試合の平均EFF)</SectionTitle>
           <div className="space-y-2">
-            {stars.map((st, i) => (
-              <button key={st.p.id} className="flex flex-col w-full text-left py-2 px-1 rounded-xl"
-                style={{ background: i === 0 ? `${C.orange}0F` : "transparent", border: i < stars.length - 1 ? `1px solid ${C.border}44` : "1px solid transparent" }}
-                onClick={() => { setTab("players"); setNav({ playerId: st.p.id }); }}>
-                <div className="flex items-center gap-3">
-                  <span className="w-6 text-center text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
-                  <Avatar p={st.p} size={40} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-bold truncate">{st.p.codename || st.p.name}</span>
-                      <span className="text-lg font-bold shrink-0" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(st.avgEff)}</span>
-                      <span className="text-[9px] shrink-0" style={{ color: C.sub }}>EFF</span>
+            {stars.map((st, i) => {
+              const statItems = [
+                ["得点", fmt1(st.avgPts), st.above.avgPts],
+                ["AST", fmt1(st.avgAst), st.above.avgAst],
+                ["REB", fmt1(st.avgReb), st.above.avgReb],
+                ["STL", fmt1(st.avgStl), st.above.avgStl],
+                ["FG%", st.fgPct !== null ? `${fmt1(st.fgPct)}%` : "–", st.above.fgPct],
+                ["出場(分)", fmt1(st.avgMin), st.above.avgMin],
+              ];
+              return (
+                <button key={st.p.id} className="flex flex-col w-full text-left py-2.5 px-2 rounded-xl"
+                  style={{ background: i === 0 ? `${C.orange}0F` : "transparent", border: i < stars.length - 1 ? `1px solid ${C.border}44` : "1px solid transparent" }}
+                  onClick={() => { setTab("players"); setNav({ playerId: st.p.id }); }}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-6 text-center text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
+                    <Avatar p={st.p} size={40} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold truncate">{st.p.codename || st.p.name}</div>
                     </div>
-                    <div className="text-[10px] flex gap-2 mt-0.5" style={{ color: C.sub }}>
-                      <span>得点 <b style={{ color: C.text }}>{fmt1(st.avgPts)}</b></span>
-                      <span>AST <b style={{ color: C.text }}>{fmt1(st.avgAst)}</b></span>
-                      <span>REB <b style={{ color: C.text }}>{fmt1(st.avgReb)}</b></span>
+                    <div className="text-right shrink-0">
+                      <div className="text-2xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(st.avgEff)}</div>
+                      <div className="text-[9px]" style={{ color: C.sub }}>平均EFF</div>
                     </div>
                   </div>
-                </div>
-                {st.highlight && (
-                  <div className="text-[10px] mt-1.5 ml-9 flex items-center gap-1" style={{ color: C.led }}>
-                    <span>⭐</span><span>{st.highlight}</span>
+                  <div className="grid grid-cols-6 gap-1 ml-9">
+                    {statItems.map(([label, val, isAbove]) => (
+                      <div key={label} className="rounded-lg py-1.5 text-center"
+                        style={isAbove ? { background: `${C.win}22`, border: `1px solid ${C.win}66` } : { background: C.card2 }}>
+                        <div className="text-xs font-bold" style={{ color: isAbove ? C.win : C.text }}>{val}</div>
+                        <div className="text-[7px] mt-0.5" style={{ color: isAbove ? C.win : C.sub }}>{label}</div>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </Card>
       )}
