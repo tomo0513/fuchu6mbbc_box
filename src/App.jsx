@@ -1086,11 +1086,31 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
     const recent5 = [...data.games].filter((g) => { const p = gamePts(g); return (p.own + p.opp) > 0; }).sort(gameOrderDesc).slice(0, 5);
     if (recent5.length === 0) return [];
     const rows = [];
+    // たまたま1試合だけ短時間出場して活躍した選手が上位に出てしまわないよう、
+    // 「直近5試合中3試合以上出場」かつ「平均出場時間7分以上」の選手のみを対象にする。
+    const MIN_GAMES = 3, MIN_AVG_MIN = 7;
     for (const p of data.players) {
       const per = recent5.map((g) => aggStats(g.events, "own", p.id, "all", g)).filter((s) => hasStats(s));
       if (per.length === 0) continue;
       const avg = (k) => per.reduce((a, s) => a + s[k], 0) / per.length;
-      rows.push({ p, avgEff: avg("eff"), avgPts: avg("pts"), avgAst: avg("ast"), avgReb: avg("reb"), n: per.length });
+      const avgMin = avg("min");
+      if (per.length < MIN_GAMES || avgMin < MIN_AVG_MIN) continue;
+      rows.push({ p, avgEff: avg("eff"), avgPts: avg("pts"), avgAst: avg("ast"), avgReb: avg("reb"), avgStl: avg("stl"), avgBlk: avg("blk"), n: per.length });
+    }
+    // 対象選手全員(フィルター通過者)のチーム平均を算出し、各選手がどの項目で上回っているかを文章化する
+    const STAT_LABELS = { avgPts: "得点", avgReb: "リバウンド", avgAst: "アシスト", avgStl: "スティール", avgBlk: "ブロック" };
+    const statKeys = Object.keys(STAT_LABELS);
+    const teamAvg = {};
+    statKeys.forEach((k) => { teamAvg[k] = rows.length > 0 ? rows.reduce((a, r) => a + r[k], 0) / rows.length : 0; });
+    for (const r of rows) {
+      const above = statKeys.filter((k) => teamAvg[k] > 0 && r[k] > teamAvg[k]);
+      if (above.length === 0) {
+        r.highlight = "堅実なプレーでチームを支える活躍";
+      } else if (above.length <= 2) {
+        r.highlight = `${above.map((k) => STAT_LABELS[k]).join("と")}でチーム平均を上回る活躍`;
+      } else {
+        r.highlight = `${above.slice(0, 2).map((k) => STAT_LABELS[k]).join("・")}など複数の項目でチーム平均を上回る活躍`;
+      }
     }
     return rows.sort((a, b) => b.avgEff - a.avgEff).slice(0, 5);
   }, [data]);
@@ -1116,25 +1136,32 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
       {stars.length > 0 && (
         <Card className="h-full">
           <SectionTitle>注目選手(直近5試合の平均EFF)</SectionTitle>
-          <div className="space-y-1">
+          <div className="space-y-2">
             {stars.map((st, i) => (
-              <button key={st.p.id} className="flex items-center gap-3 w-full text-left py-1.5"
-                style={{ borderBottom: i < stars.length - 1 ? `1px solid ${C.border}44` : "none" }}
+              <button key={st.p.id} className="flex flex-col w-full text-left py-2 px-1 rounded-xl"
+                style={{ background: i === 0 ? `${C.orange}0F` : "transparent", border: i < stars.length - 1 ? `1px solid ${C.border}44` : "1px solid transparent" }}
                 onClick={() => { setTab("players"); setNav({ playerId: st.p.id }); }}>
-                <span className="w-6 text-center text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
-                <Avatar p={st.p} size={40} />
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold truncate">{st.p.codename || st.p.name}</div>
-                  <div className="text-[10px] flex gap-2 mt-0.5" style={{ color: C.sub }}>
-                    <span>得点 <b style={{ color: C.text }}>{fmt1(st.avgPts)}</b></span>
-                    <span>AST <b style={{ color: C.text }}>{fmt1(st.avgAst)}</b></span>
-                    <span>REB <b style={{ color: C.text }}>{fmt1(st.avgReb)}</b></span>
+                <div className="flex items-center gap-3">
+                  <span className="w-6 text-center text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
+                  <Avatar p={st.p} size={40} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold truncate">{st.p.codename || st.p.name}</span>
+                      <span className="text-lg font-bold shrink-0" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(st.avgEff)}</span>
+                      <span className="text-[9px] shrink-0" style={{ color: C.sub }}>EFF</span>
+                    </div>
+                    <div className="text-[10px] flex gap-2 mt-0.5" style={{ color: C.sub }}>
+                      <span>得点 <b style={{ color: C.text }}>{fmt1(st.avgPts)}</b></span>
+                      <span>AST <b style={{ color: C.text }}>{fmt1(st.avgAst)}</b></span>
+                      <span>REB <b style={{ color: C.text }}>{fmt1(st.avgReb)}</b></span>
+                    </div>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="text-2xl font-bold" style={{ color: i === 0 ? C.orange : C.text, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(st.avgEff)}</div>
-                  <div className="text-[10px]" style={{ color: C.sub }}>平均EFF</div>
-                </div>
+                {st.highlight && (
+                  <div className="text-[10px] mt-1.5 ml-9 flex items-center gap-1" style={{ color: C.led }}>
+                    <span>⭐</span><span>{st.highlight}</span>
+                  </div>
+                )}
               </button>
             ))}
           </div>
