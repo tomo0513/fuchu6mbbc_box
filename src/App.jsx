@@ -3613,6 +3613,10 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSe
     result: null,
   });
   const [leagueTeam, setLeagueTeam] = useState("");
+  const [addingVideo, setAddingVideo] = useState(false);
+  const [editVideoId, setEditVideoId] = useState(null);
+  const emptyVideoForm = { category: "", opponent: "", ownScore: "", oppScore: "", url: "" };
+  const [videoForm, setVideoForm] = useState(emptyVideoForm);
 
   const gameNames = [...new Set(data.games.map((g) => g.tournament).filter(Boolean))];
   const savedNames = (data.tournaments || []).map((t) => t.name);
@@ -3661,6 +3665,23 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSe
     save({ ...data, tournaments: exists ? list.map((x) => x.id === t.id ? t : x) : [...list, t] });
   };
   const delT = (id) => save({ ...data, tournaments: (data.tournaments || []).filter((x) => x.id !== id) });
+
+  // 動画記録(スタッツ不要・動画リンクのみの軽量な試合記録)の保存・削除
+  const saveVideoRecord = (tourId, rec) => {
+    const list = data.tournaments || [];
+    const t = list.find((x) => x.id === tourId);
+    if (!t) return;
+    const records = t.videoRecords || [];
+    const exists = records.find((r) => r.id === rec.id);
+    const nextRecords = exists ? records.map((r) => r.id === rec.id ? rec : r) : [...records, rec];
+    saveT({ ...t, videoRecords: nextRecords });
+  };
+  const delVideoRecord = (tourId, recId) => {
+    const list = data.tournaments || [];
+    const t = list.find((x) => x.id === tourId);
+    if (!t) return;
+    saveT({ ...t, videoRecords: (t.videoRecords || []).filter((r) => r.id !== recId) });
+  };
 
   const openForm = (t) => {
     setForm({
@@ -4066,6 +4087,135 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSe
             </Card>
           );
         })()}
+        {/* ===== 動画記録(スタッツ不要・カテゴリー別の動画リンクのみ) ===== */}
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <SectionTitle>動画記録</SectionTitle>
+            {isAdmin && (
+              <button className="text-xs font-bold px-2.5 py-1 rounded-lg" style={{ background: C.orange, color: "#fff" }}
+                onClick={() => { setVideoForm(emptyVideoForm); setEditVideoId(null); setAddingVideo(true); }}>
+                <span className="inline-flex items-center gap-1"><Plus size={12} /> 動画を追加</span>
+              </button>
+            )}
+          </div>
+          {(() => {
+            const records = selT.videoRecords || [];
+            if (records.length === 0) {
+              return <div className="text-sm text-center py-4" style={{ color: C.sub }}>まだ動画記録がありません。</div>;
+            }
+            // カテゴリーごとにグループ化して表示
+            const cats = [...new Set(records.map((r) => r.category || "その他"))];
+            return (
+              <div className="space-y-4">
+                {cats.map((cat) => (
+                  <div key={cat}>
+                    <div className="text-xs font-bold mb-2 px-2 py-1 rounded-lg inline-block" style={{ background: C.card2, color: C.orange }}>{cat}</div>
+                    <div className="space-y-2">
+                      {records.filter((r) => (r.category || "その他") === cat).map((r) => {
+                        const own = +r.ownScore || 0, opp = +r.oppScore || 0;
+                        const win = own > opp, draw = own === opp;
+                        const id = ytId(r.url);
+                        return (
+                          <div key={r.id} className="rounded-xl p-3" style={{ background: C.card2 }}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="font-bold">vs {r.opponent || "対戦相手"}</span>
+                                <span className="font-black" style={{ fontFamily: "'Bebas Neue',sans-serif", color: draw ? C.sub : win ? C.win : C.loss }}>
+                                  {own} - {opp}
+                                </span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
+                                  style={{ background: draw ? C.sub : win ? C.win : C.loss }}>
+                                  {draw ? "引分" : win ? "WIN" : "LOSE"}
+                                </span>
+                              </div>
+                              {isAdmin && (
+                                <div className="flex gap-1">
+                                  <button className="p-1" style={{ color: C.sub }}
+                                    onClick={() => { setVideoForm({ category: r.category || "", opponent: r.opponent || "", ownScore: r.ownScore || "", oppScore: r.oppScore || "", url: r.url || "" }); setEditVideoId(r.id); setAddingVideo(true); }}>
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button className="p-1" style={{ color: C.sub }}
+                                    onClick={() => { if (confirm("この動画記録を削除しますか?")) delVideoRecord(selT.id, r.id); }}>
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            {id ? (
+                              <div className="rounded-lg overflow-hidden" style={{ aspectRatio: "16/9" }}>
+                                <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${id}`} title={`${cat} vs ${r.opponent}`}
+                                  frameBorder="0" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
+                              </div>
+                            ) : (
+                              <div className="text-xs text-center py-3" style={{ color: C.sub }}>動画リンクが未設定、または無効なURLです。</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </Card>
+        {/* ===== 動画記録 入力モーダル ===== */}
+        {addingVideo && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.6)" }}
+            onClick={() => setAddingVideo(false)}>
+            <div className="w-full max-w-lg rounded-t-2xl p-5 space-y-3" style={{ background: C.card, border: `1px solid ${C.border}` }}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="font-bold">{editVideoId ? "動画記録を編集" : "動画記録を追加"}</div>
+                <button onClick={() => setAddingVideo(false)}><X size={18} style={{ color: C.sub }} /></button>
+              </div>
+              <div>
+                <div className="text-xs mb-1" style={{ color: C.sub }}>カテゴリー(例: U8, U12 Aチーム, U12 Bチーム)</div>
+                <input className={inputCls} style={getInputStyle(C)} placeholder="U12 Aチーム"
+                  value={videoForm.category} onChange={(e) => setVideoForm({ ...videoForm, category: e.target.value })}
+                  list="video-cat-list" />
+                <datalist id="video-cat-list">
+                  {[...new Set((selT.videoRecords || []).map((r) => r.category).filter(Boolean))].map((c) => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+              <div>
+                <div className="text-xs mb-1" style={{ color: C.sub }}>対戦相手</div>
+                <input className={inputCls} style={getInputStyle(C)} placeholder="○○ミニバス"
+                  value={videoForm.opponent} onChange={(e) => setVideoForm({ ...videoForm, opponent: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-xs mb-1" style={{ color: C.sub }}>自チームスコア</div>
+                  <input inputMode="numeric" className={inputCls} style={getInputStyle(C)} placeholder="0"
+                    value={videoForm.ownScore} onChange={(e) => setVideoForm({ ...videoForm, ownScore: e.target.value })} />
+                </div>
+                <div>
+                  <div className="text-xs mb-1" style={{ color: C.sub }}>相手スコア</div>
+                  <input inputMode="numeric" className={inputCls} style={getInputStyle(C)} placeholder="0"
+                    value={videoForm.oppScore} onChange={(e) => setVideoForm({ ...videoForm, oppScore: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <div className="text-xs mb-1" style={{ color: C.sub }}>YouTube動画URL</div>
+                <input className={inputCls} style={getInputStyle(C)} placeholder="https://youtu.be/..."
+                  value={videoForm.url} onChange={(e) => setVideoForm({ ...videoForm, url: e.target.value })} />
+              </div>
+              <button className="w-full py-3 rounded-xl font-bold text-white mt-2 disabled:opacity-40"
+                style={{ background: C.orange }}
+                disabled={!videoForm.category || !videoForm.opponent}
+                onClick={() => {
+                  saveVideoRecord(selT.id, {
+                    id: editVideoId || uid(),
+                    category: videoForm.category, opponent: videoForm.opponent,
+                    ownScore: videoForm.ownScore, oppScore: videoForm.oppScore, url: videoForm.url,
+                  });
+                  setAddingVideo(false);
+                }}>
+                保存する
+              </button>
+            </div>
+          </div>
+        )}
         {relGames.length > 0 && (
           <Card>
             <SectionTitle>試合結果({relGames.length}試合)</SectionTitle>
