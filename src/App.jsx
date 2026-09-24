@@ -1095,15 +1095,17 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
       const avg = (k) => per.reduce((a, s) => a + s[k], 0) / per.length;
       const avgMin = avg("min");
       if (per.length < MIN_GAMES || avgMin < MIN_AVG_MIN) continue;
-      const fgmSum = per.reduce((a, s) => a + s.fgm, 0);
+      const ptsSum = per.reduce((a, s) => a + s.pts, 0);
       const fgaSum = per.reduce((a, s) => a + s.fga, 0);
+      const ftaSum = per.reduce((a, s) => a + s.fta, 0);
+      const tsDenom = 2 * (fgaSum + 0.44 * ftaSum);
       rows.push({
         p, avgEff: avg("eff"), avgPts: avg("pts"), avgAst: avg("ast"), avgReb: avg("reb"),
-        avgStl: avg("stl"), avgMin, fgPct: fgaSum > 0 ? (fgmSum / fgaSum) * 100 : null, n: per.length,
+        tsPct: tsDenom > 0 ? (ptsSum / tsDenom) * 100 : null, n: per.length,
       });
     }
     // 対象選手全員(フィルター通過者)のチーム平均を算出し、各選手がどの項目で上回っているかを判定する
-    const statKeys = ["avgPts", "avgAst", "avgReb", "avgStl", "fgPct", "avgMin"];
+    const statKeys = ["avgPts", "avgAst", "avgReb", "tsPct"];
     const teamAvg = {};
     statKeys.forEach((k) => {
       const vals = rows.map((r) => r[k]).filter((v) => v !== null);
@@ -1141,35 +1143,41 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
             {stars.map((st, i) => {
               const statItems = [
                 ["得点", fmt1(st.avgPts), st.above.avgPts],
-                ["AST", fmt1(st.avgAst), st.above.avgAst],
                 ["REB", fmt1(st.avgReb), st.above.avgReb],
-                ["STL", fmt1(st.avgStl), st.above.avgStl],
-                ["FG%", st.fgPct !== null ? `${fmt1(st.fgPct)}%` : "–", st.above.fgPct],
-                ["出場(分)", fmt1(st.avgMin), st.above.avgMin],
+                ["AST", fmt1(st.avgAst), st.above.avgAst],
+                ["TS%", st.tsPct !== null ? `${fmt1(st.tsPct)}%` : "–", st.above.tsPct],
               ];
+              const isTop = i === 0;
               return (
-                <button key={st.p.id} className="flex flex-col w-full text-left py-2.5 px-2 rounded-xl"
-                  style={{ background: i === 0 ? `${C.orange}0F` : "transparent", border: i < stars.length - 1 ? `1px solid ${C.border}44` : "1px solid transparent" }}
+                <button key={st.p.id} className="w-full text-left rounded-2xl relative overflow-hidden flex"
+                  style={{ height: isTop ? 100 : 84, background: "#0A0F1E" }}
                   onClick={() => { setTab("players"); setNav({ playerId: st.p.id }); }}>
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="w-6 text-center text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</span>
-                    <Avatar p={st.p} size={40} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold truncate">{st.p.codename || st.p.name}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-2xl font-bold" style={{ color: C.orange, fontFamily: "'Bebas Neue', sans-serif" }}>{fmt1(st.avgEff)}</div>
-                      <div className="text-[9px]" style={{ color: C.sub }}>平均EFF</div>
-                    </div>
+                  {/* 背景に薄く大きくEFF数字を透かす */}
+                  <div className="absolute pointer-events-none select-none"
+                    style={{ right: -10, top: -16, fontSize: isTop ? 90 : 74, fontWeight: 900, color: `${C.orange}0D`, fontFamily: "'Bebas Neue',sans-serif", lineHeight: 1 }}>
+                    {fmt1(st.avgEff)}
                   </div>
-                  <div className="grid grid-cols-6 gap-1 ml-9">
-                    {statItems.map(([label, val, isAbove]) => (
-                      <div key={label} className="rounded-lg py-1.5 text-center"
-                        style={isAbove ? { background: `${C.win}22`, border: `1px solid ${C.win}66` } : { background: C.card2 }}>
-                        <div className="text-xs font-bold" style={{ color: isAbove ? C.win : C.text }}>{val}</div>
-                        <div className="text-[7px] mt-0.5" style={{ color: isAbove ? C.win : C.sub }}>{label}</div>
-                      </div>
-                    ))}
+                  {/* 写真パネル */}
+                  <div className="flex items-center justify-center shrink-0 relative"
+                    style={{ width: isTop ? 88 : 76, background: isTop ? `linear-gradient(160deg, ${C.orange}55, #1a1200)` : C.card2 }}>
+                    <Avatar p={st.p} size={isTop ? 60 : 50} />
+                  </div>
+                  {/* 情報エリア */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-center relative" style={{ padding: isTop ? "10px 14px" : "8px 12px" }}>
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <span className="font-black truncate" style={{ fontSize: isTop ? 17 : 15, color: "#fff" }}>{st.p.codename || st.p.name}</span>
+                      <span className="font-black shrink-0" style={{ fontSize: isTop ? 20 : 18, color: C.orange, fontFamily: "'Bebas Neue',sans-serif" }}>{fmt1(st.avgEff)}</span>
+                      <span className="text-[7px] shrink-0" style={{ color: C.sub }}>EFF</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {statItems.map(([label, val, isAbove]) => (
+                        <div key={label} className="rounded-lg text-center shrink-0"
+                          style={{ padding: "5px 9px", background: isAbove ? `${C.win}22` : "#ffffff0F" }}>
+                          <div className="text-xs font-black leading-none" style={{ color: isAbove ? C.win : "#fff" }}>{val}</div>
+                          <div className="text-[6px] mt-0.5" style={{ color: isAbove ? C.win : C.sub }}>{label}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </button>
               );
@@ -3534,9 +3542,17 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
   const isPctStat = stat === "fgp" || stat === "ftp" || stat === "tsp";
   const isPmStat = stat === "pm";
   const isAscStat = stat === "to" || stat === "pf";
-  const rankPlayers = isAscStat
+  // 全試合(スコア入力済みのもの)のうち1/3以上に出場している選手のみをランキング対象にする
+  const totalPlayedGames = data.games.filter((g) => { const p = gamePts(g); return (p.own + p.opp) > 0; }).length;
+  const MIN_GAME_RATIO = 1 / 3;
+  const rankPlayers = (isAscStat
     ? data.players.filter((p) => (+p.grade || 0) >= 5)
-    : data.players;
+    : data.players
+  ).filter((p) => {
+    if (totalPlayedGames === 0) return true;
+    const c = careerStats(data.games, p.id, isSelectTeam);
+    return c.n >= totalPlayedGames * MIN_GAME_RATIO;
+  });
   const rows = rankPlayers.map((p) => {
     const c = careerStats(data.games, p.id, isSelectTeam);
     if (c.n === 0) return null;
@@ -3613,6 +3629,7 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
         )}
       </div>
       {STAT_DESCRIPTIONS[stat] && <div className="text-[10px] mb-1" style={{ color: C.sub }}>{STAT_DESCRIPTIONS[stat]}</div>}
+      <div className="text-[10px] mb-1" style={{ color: C.sub }}>※全試合の1/3以上に出場している選手のみを対象にしています。</div>
       {isPctStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※通算成績からの成功率(または割合)。対象のある選手のみ表示します。</div>}
       {isAscStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※少ない方が上位。5年生以上のみ表示。</div>}
       {!isPctStat && !isAscStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※値が0の選手は表示しません。</div>}
