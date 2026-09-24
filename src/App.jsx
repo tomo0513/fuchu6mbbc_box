@@ -1472,6 +1472,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
           const teamAvgs = data.players.map((pl) => {
             const cs = careerStats(allGames, pl.id, isSelectTeam);
             if (cs.n === 0) return null;
+            const tsDenom = 2 * (cs.tot.fga + 0.44 * cs.tot.fta);
             return {
               id: pl.id,
               pts: cs.totAdj.pts, reb: cs.totAdj.reb,
@@ -1479,6 +1480,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
               blk: cs.totAdj.blk, eff: cs.totAdj.eff,
               fgp: cs.tot.fga > 0 ? cs.tot.fgm / cs.tot.fga : null,
               ftp: cs.tot.fta > 0 ? cs.tot.ftm / cs.tot.fta : null,
+              tsp: tsDenom > 0 ? cs.tot.pts / tsDenom : null,
               min: cs.n > 0 ? cs.totAdj.min : null,
             };
           }).filter(Boolean);
@@ -1517,7 +1519,7 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
                   </div>
                 ))}
               </div>
-              <div className="flex justify-around mt-3 pt-3 text-center text-sm" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div className="grid grid-cols-4 gap-1 mt-3 pt-3 text-center text-sm" style={{ borderTop: `1px solid ${C.border}` }}>
                 <div>
                   <span className="font-bold text-lg">{pct(tot.fgm, tot.fga)}</span>
                   <StatLabel label="FG%" rk={rankLabel("fgp")} />
@@ -1525,6 +1527,13 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
                 <div>
                   <span className="font-bold text-lg">{pct(tot.ftm, tot.fta)}</span>
                   <StatLabel label="FT%" rk={rankLabel("ftp")} />
+                </div>
+                <div>
+                  <span className="font-bold text-lg">{(() => {
+                    const tsDenom = 2 * (tot.fga + 0.44 * tot.fta);
+                    return tsDenom > 0 ? `${Math.round((tot.pts / tsDenom) * 100)}%` : "–";
+                  })()}</span>
+                  <StatLabel label="TS%" rk={rankLabel("tsp")} />
                 </div>
                 <div>
                   <span className="font-bold text-lg">{fmt1(totAdj.min)}</span>
@@ -3522,7 +3531,7 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
   const C = useC();
   const [stat, setStat] = useState("pts");
   const [mode, setMode] = useState("avg");
-  const isPctStat = stat === "fgp" || stat === "ftp";
+  const isPctStat = stat === "fgp" || stat === "ftp" || stat === "tsp";
   const isPmStat = stat === "pm";
   const isAscStat = stat === "to" || stat === "pf";
   const rankPlayers = isAscStat
@@ -3540,6 +3549,12 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
       if ((c.tot.fta || 0) === 0) return null;
       const v = (c.tot.ftm / c.tot.fta) * 100;
       return { p, n: c.n, total: v, avg: v, made: c.tot.ftm, att: c.tot.fta };
+    }
+    if (stat === "tsp") {
+      const tsDenom = 2 * (c.tot.fga + 0.44 * c.tot.fta);
+      if (tsDenom === 0) return null;
+      const v = (c.tot.pts / tsDenom) * 100;
+      return { p, n: c.n, total: v, avg: v, made: c.tot.pts, att: null };
     }
     if (stat === "pm") {
       const pmTotal = c.per.reduce((a, x) => a + (x.s.pm || 0), 0);
@@ -3561,9 +3576,27 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
     if (d.k === "pts") {
       statOptions.push(["fgp", "フィールドゴール率(FG%)"]);
       statOptions.push(["ftp", "フリースロー率(FT%)"]);
+      statOptions.push(["tsp", "トゥルーシューティング率(TS%)"]);
     }
   }
   statOptions.push(["pm", "+/-(出場中の得失点差)"]);
+  const STAT_DESCRIPTIONS = {
+    pts: "1試合(平均)または通算(合計)の得点。",
+    reb: "オフェンスリバウンド(OR)とディフェンスリバウンド(DR)の合計。",
+    or: "自チームのシュートが外れた際に、自分たちで取り返したリバウンド。",
+    dr: "相手のシュートが外れた際に、自分たちで確保したリバウンド。",
+    ast: "味方の得点に直接つながったパスの数。",
+    stl: "相手のパスやドリブルを奪った回数。",
+    blk: "相手のシュートを防いだ回数。",
+    to: "パスミスやトラベリングなどでボールを相手に渡してしまった回数。少ないほど良い。",
+    pf: "審判に取られたファウルの回数。少ないほど良い。5年生以上のみ集計。",
+    eff: "得点・リバウンド・アシスト・スティール・ブロックからシュート失敗やターンオーバーを差し引いた総合貢献度の指標。",
+    min: "試合に出場していた時間(分)。",
+    fgp: "2P・3Pを合わせたシュートの成功率(成功数÷試投数)。",
+    ftp: "フリースローの成功率(成功数÷試投数)。",
+    tsp: "2P・3P・フリースローをまとめて評価する、より実態に近いシュート効率の指標。得点÷(2×(試投数+0.44×FT試投数))で算出。",
+    pm: "その選手が出場していた時間帯に、チームが相手より何点多く(少なく)得点したか。",
+  };
   return (
     <Card>
       <div className="flex gap-2 mb-3">
@@ -3579,7 +3612,8 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
           </div>
         )}
       </div>
-      {isPctStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※成功数／試投数からの通算成功率。試投のある選手のみ表示します。</div>}
+      {STAT_DESCRIPTIONS[stat] && <div className="text-[10px] mb-1" style={{ color: C.sub }}>{STAT_DESCRIPTIONS[stat]}</div>}
+      {isPctStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※通算成績からの成功率(または割合)。対象のある選手のみ表示します。</div>}
       {isAscStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※少ない方が上位。5年生以上のみ表示。</div>}
       {!isPctStat && !isAscStat && <div className="text-[10px] mb-2" style={{ color: C.sub }}>※値が0の選手は表示しません。</div>}
       {rows.length === 0 ? <div className="text-sm py-4 text-center" style={{ color: C.sub }}>スタッツのある試合がまだありません。</div> : (
@@ -3588,7 +3622,7 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
             onClick={() => { setTab("players"); setNav({ playerId: r.p.id }); }}>
             <div className="w-8 text-center text-2xl" style={{ fontFamily: "'Bebas Neue', sans-serif", color: i < 3 ? C.led : C.sub }}>{i + 1}</div>
             <Avatar p={r.p} size={36} />
-            <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{r.p.codename || r.p.name}</div><div className="text-[10px]" style={{ color: C.sub }}>#{r.p.number}・{isPctStat ? `${r.made}/${r.att}本` : `${r.n}試合`}</div></div>
+            <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{r.p.codename || r.p.name}</div><div className="text-[10px]" style={{ color: C.sub }}>#{r.p.number}・{isPctStat && r.att !== null ? `${r.made}/${r.att}本` : `${r.n}試合`}</div></div>
             <div className="text-2xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif",
               color: isPmStat ? ((mode === "total" ? r.total : r.avg) >= 0 ? C.win : C.loss) : "inherit" }}>
               {isPctStat ? `${fmt1(r.total)}%`
