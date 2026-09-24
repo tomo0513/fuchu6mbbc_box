@@ -1147,15 +1147,18 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
                 ["AST", fmt1(st.avgAst), st.above.avgAst],
                 ["TS%", st.tsPct !== null ? `${fmt1(st.tsPct)}%` : "–", st.above.tsPct],
               ];
+              // 1人おきにオレンジ・ブルーを交互に(NBA中継グラフィック風の配色バリエーション)
+              const accent = i % 2 === 0 ? C.orange : C.oppBlue;
+              const accentDark = i % 2 === 0 ? "#7A3010" : "#0F1E3A";
               return (
                 <button key={st.p.id} className="w-full text-left rounded-xl relative overflow-hidden flex"
-                  style={{ height: 92, background: "#0A0F1E", border: "1px solid #1E2A45" }}
+                  style={{ height: 92, background: C.card, border: `1px solid ${C.border}` }}
                   onClick={() => { setTab("players"); setNav({ playerId: st.p.id }); }}>
-                  {/* 斜めカットの写真パネル */}
+                  {/* 斜めカットの写真パネル(実況グラフィック風。常にダークトーンで固定) */}
                   <div className="relative shrink-0 overflow-hidden"
                     style={{
                       width: 118,
-                      background: `linear-gradient(160deg, ${C.orange}, #7A3010)`,
+                      background: `linear-gradient(160deg, ${accent}, ${accentDark})`,
                       clipPath: "polygon(0 0, 100% 0, 82% 100%, 0 100%)",
                     }}>
                     <div className="absolute select-none pointer-events-none"
@@ -1170,18 +1173,18 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
                   <div className="flex-1 min-w-0 flex flex-col justify-center px-3 py-2">
                     <div className="flex items-baseline justify-between gap-2">
                       <div className="min-w-0">
-                        <span className="text-[9px] font-bold shrink-0" style={{ color: C.orange }}>#{st.p.number} </span>
-                        <span className="font-black truncate" style={{ fontSize: 18, color: "#fff", fontFamily: "'Bebas Neue',sans-serif" }}>{st.p.codename || st.p.name}</span>
+                        <span className="text-[9px] font-bold shrink-0" style={{ color: accent }}>#{st.p.number} </span>
+                        <span className="font-black truncate" style={{ fontSize: 18, color: C.text, fontFamily: "'Bebas Neue',sans-serif" }}>{st.p.codename || st.p.name}</span>
                       </div>
                       <div className="shrink-0 text-right">
-                        <span className="font-black" style={{ fontSize: 22, color: "#fff", fontFamily: "'Bebas Neue',sans-serif" }}>{fmt1(st.avgEff)}</span>
-                        <span className="text-[8px] font-bold ml-1" style={{ color: C.orange }}>EFF</span>
+                        <span className="font-black" style={{ fontSize: 22, color: C.text, fontFamily: "'Bebas Neue',sans-serif" }}>{fmt1(st.avgEff)}</span>
+                        <span className="text-[8px] font-bold ml-1" style={{ color: accent }}>EFF</span>
                       </div>
                     </div>
-                    <div className="flex mt-2 pt-1.5" style={{ borderTop: "1px solid #1E2A45" }}>
+                    <div className="flex mt-2 pt-1.5" style={{ borderTop: `1px solid ${C.border}` }}>
                       {statItems.map(([label, val, isAbove]) => (
                         <div key={label} className="flex-1">
-                          <span className="font-black" style={{ fontSize: 14, color: isAbove ? C.orange : "#fff", fontFamily: "'Bebas Neue',sans-serif" }}>{val}</span>
+                          <span className="font-black" style={{ fontSize: 14, color: isAbove ? accent : C.text, fontFamily: "'Bebas Neue',sans-serif" }}>{val}</span>
                           <span className="text-[7px] ml-1" style={{ color: C.sub }}>{label}</span>
                         </div>
                       ))}
