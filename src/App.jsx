@@ -1142,39 +1142,47 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
           <div className="space-y-2">
             {stars.map((st, i) => {
               const statItems = [
-                ["得点", fmt1(st.avgPts), st.above.avgPts],
+                ["PTS", fmt1(st.avgPts), st.above.avgPts],
                 ["REB", fmt1(st.avgReb), st.above.avgReb],
                 ["AST", fmt1(st.avgAst), st.above.avgAst],
                 ["TS%", st.tsPct !== null ? `${fmt1(st.tsPct)}%` : "–", st.above.tsPct],
               ];
-              const isTop = i === 0;
               return (
-                <button key={st.p.id} className="w-full text-left rounded-2xl relative overflow-hidden flex"
-                  style={{ height: isTop ? 100 : 84, background: "#0A0F1E" }}
+                <button key={st.p.id} className="w-full text-left rounded-xl relative overflow-hidden flex"
+                  style={{ height: 92, background: "#0A0F1E", border: "1px solid #1E2A45" }}
                   onClick={() => { setTab("players"); setNav({ playerId: st.p.id }); }}>
-                  {/* 背景に薄く大きくEFF数字を透かす */}
-                  <div className="absolute pointer-events-none select-none"
-                    style={{ right: -10, top: -16, fontSize: isTop ? 90 : 74, fontWeight: 900, color: `${C.orange}0D`, fontFamily: "'Bebas Neue',sans-serif", lineHeight: 1 }}>
-                    {fmt1(st.avgEff)}
-                  </div>
-                  {/* 写真パネル */}
-                  <div className="flex items-center justify-center shrink-0 relative"
-                    style={{ width: isTop ? 88 : 76, background: isTop ? `linear-gradient(160deg, ${C.orange}55, #1a1200)` : C.card2 }}>
-                    <Avatar p={st.p} size={isTop ? 60 : 50} />
+                  {/* 斜めカットの写真パネル */}
+                  <div className="relative shrink-0 overflow-hidden"
+                    style={{
+                      width: 118,
+                      background: `linear-gradient(160deg, ${C.orange}, #7A3010)`,
+                      clipPath: "polygon(0 0, 100% 0, 82% 100%, 0 100%)",
+                    }}>
+                    <div className="absolute select-none pointer-events-none"
+                      style={{ left: 4, top: -14, fontSize: 100, fontFamily: "'Bebas Neue',sans-serif", color: "#ffffff22", lineHeight: 1 }}>
+                      {st.p.number}
+                    </div>
+                    <div className="absolute left-1/2" style={{ bottom: 0, transform: "translateX(-50%)" }}>
+                      <Avatar p={st.p} size={68} />
+                    </div>
                   </div>
                   {/* 情報エリア */}
-                  <div className="flex-1 min-w-0 flex flex-col justify-center relative" style={{ padding: isTop ? "10px 14px" : "8px 12px" }}>
-                    <div className="flex items-baseline gap-2 mb-2">
-                      <span className="font-black truncate" style={{ fontSize: isTop ? 17 : 15, color: "#fff" }}>{st.p.codename || st.p.name}</span>
-                      <span className="font-black shrink-0" style={{ fontSize: isTop ? 20 : 18, color: C.orange, fontFamily: "'Bebas Neue',sans-serif" }}>{fmt1(st.avgEff)}</span>
-                      <span className="text-[7px] shrink-0" style={{ color: C.sub }}>EFF</span>
+                  <div className="flex-1 min-w-0 flex flex-col justify-center px-3 py-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-[9px] font-bold shrink-0" style={{ color: C.orange }}>#{st.p.number} </span>
+                        <span className="font-black truncate" style={{ fontSize: 18, color: "#fff", fontFamily: "'Bebas Neue',sans-serif" }}>{st.p.codename || st.p.name}</span>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span className="font-black" style={{ fontSize: 22, color: "#fff", fontFamily: "'Bebas Neue',sans-serif" }}>{fmt1(st.avgEff)}</span>
+                        <span className="text-[8px] font-bold ml-1" style={{ color: C.orange }}>EFF</span>
+                      </div>
                     </div>
-                    <div className="flex gap-1.5">
+                    <div className="flex mt-2 pt-1.5" style={{ borderTop: "1px solid #1E2A45" }}>
                       {statItems.map(([label, val, isAbove]) => (
-                        <div key={label} className="rounded-lg text-center shrink-0"
-                          style={{ padding: "5px 9px", background: isAbove ? `${C.win}22` : "#ffffff0F" }}>
-                          <div className="text-xs font-black leading-none" style={{ color: isAbove ? C.win : "#fff" }}>{val}</div>
-                          <div className="text-[6px] mt-0.5" style={{ color: isAbove ? C.win : C.sub }}>{label}</div>
+                        <div key={label} className="flex-1">
+                          <span className="font-black" style={{ fontSize: 14, color: isAbove ? C.orange : "#fff", fontFamily: "'Bebas Neue',sans-serif" }}>{val}</span>
+                          <span className="text-[7px] ml-1" style={{ color: C.sub }}>{label}</span>
                         </div>
                       ))}
                     </div>
