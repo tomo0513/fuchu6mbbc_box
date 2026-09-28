@@ -17,6 +17,8 @@ const DARK = {
   orange: "#FF7A3D", led: "#FFB23E", win: "#3DBE7B", loss: "#E25C5C",
   board: "#070C16", nav: "#0A101E", oppBlue: "#5B74A8", oppText: "#7E94BC",
   sidebar: "#0E1828", inputBg: "#0F1830",
+  panelOrange1: "#FF7A3D", panelOrange2: "#7A3010",
+  panelBlue1: "#5B74A8", panelBlue2: "#0F1E3A",
 };
 const LIGHT = {
   bg: "#F0F4F8", card: "#FFFFFF", card2: "#EAF0F8", border: "#C8D8EC",
@@ -24,6 +26,8 @@ const LIGHT = {
   orange: "#E8602A", led: "#C87A00", win: "#1E8A50", loss: "#C03030",
   board: "#EDF2FA", nav: "#FFFFFF", oppBlue: "#3A60A0", oppText: "#2A508A",
   sidebar: "#F8FAFE", inputBg: "#F0F4F8",
+  panelOrange1: "#F5B99A", panelOrange2: "#D89670",
+  panelBlue1: "#9DB8E0", panelBlue2: "#7291C4",
 };
 const ThemeCtx = React.createContext(DARK);
 const useC = () => React.useContext(ThemeCtx);
@@ -1147,22 +1151,23 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
                 ["AST", fmt1(st.avgAst), st.above.avgAst],
                 ["TS%", st.tsPct !== null ? `${fmt1(st.tsPct)}%` : "–", st.above.tsPct],
               ];
-              // 1人おきにオレンジ・ブルーを交互に(NBA中継グラフィック風の配色バリエーション)
+              // 1人おきにオレンジ・ブルーを交互に(ライトモードは淡いパステル、ダークは鮮やかな色)
               const accent = i % 2 === 0 ? C.orange : C.oppBlue;
-              const accentDark = i % 2 === 0 ? "#7A3010" : "#0F1E3A";
+              const panelFrom = i % 2 === 0 ? C.panelOrange1 : C.panelBlue1;
+              const panelTo = i % 2 === 0 ? C.panelOrange2 : C.panelBlue2;
               return (
                 <button key={st.p.id} className="w-full text-left rounded-xl relative overflow-hidden flex"
                   style={{ height: 92, background: C.card, border: `1px solid ${C.border}` }}
                   onClick={() => { setTab("players"); setNav({ playerId: st.p.id }); }}>
-                  {/* 斜めカットの写真パネル(実況グラフィック風。常にダークトーンで固定) */}
+                  {/* 斜めカットの写真パネル(実況グラフィック風。ライト/ダークで色調を切替) */}
                   <div className="relative shrink-0 overflow-hidden"
                     style={{
                       width: 118,
-                      background: `linear-gradient(160deg, ${accent}, ${accentDark})`,
+                      background: `linear-gradient(160deg, ${panelFrom}, ${panelTo})`,
                       clipPath: "polygon(0 0, 100% 0, 82% 100%, 0 100%)",
                     }}>
                     <div className="absolute select-none pointer-events-none"
-                      style={{ left: 4, top: -14, fontSize: 100, fontFamily: "'Bebas Neue',sans-serif", color: "#ffffff22", lineHeight: 1 }}>
+                      style={{ left: 4, top: -14, fontSize: 100, fontFamily: "'Bebas Neue',sans-serif", color: "#ffffff33", lineHeight: 1 }}>
                       {st.p.number}
                     </div>
                     <div className="absolute left-1/2" style={{ bottom: 0, transform: "translateX(-50%)" }}>
