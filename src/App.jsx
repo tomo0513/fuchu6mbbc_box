@@ -898,7 +898,16 @@ export default function App() {
       save({ ...latest, games });
     }
   };
-  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId, gameId) => setSelectMode({ fromPlayerId, gameId }), updateGameById: (gameId, fn) => updateGameById("main", gameId, fn) };
+  // 特定の大会1件だけを更新する専用関数。dataRef.current(常に最新)をベースにするため、
+  // 動画記録の追加・編集・削除を連続で行っても、レンダリング遅延によるデータ消失が起きない。
+  const updateTournamentById = (tourId, fn) => {
+    const latest = dataRef.current || data;
+    const list = latest.tournaments || [];
+    const exists = list.find((x) => x.id === tourId);
+    const tournaments = exists ? list.map((x) => (x.id === tourId ? fn(x) : x)) : list;
+    save({ ...latest, tournaments });
+  };
+  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId, gameId) => setSelectMode({ fromPlayerId, gameId }), updateGameById: (gameId, fn) => updateGameById("main", gameId, fn), updateTournamentById };
 
   // ===== 府中選抜チーム用のデータ・保存関数 =====
   // 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking等)を
@@ -3669,7 +3678,7 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
   );
 }
 
-function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSelectTeam }) {
+function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSelectTeam, updateTournamentById }) {
   const C = useC();
   const [selId, setSelId] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -3734,20 +3743,18 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSe
   const delT = (id) => save({ ...data, tournaments: (data.tournaments || []).filter((x) => x.id !== id) });
 
   // 動画記録(スタッツ不要・動画リンクのみの軽量な試合記録)の保存・削除
+  // 動画記録の保存・削除は、常に最新のdataを参照するupdateTournamentById経由で行う。
+  // (古いdataを参照したまま保存すると、直前に追加した記録が消えてしまう不具合があったため)
   const saveVideoRecord = (tourId, rec) => {
-    const list = data.tournaments || [];
-    const t = list.find((x) => x.id === tourId);
-    if (!t) return;
-    const records = t.videoRecords || [];
-    const exists = records.find((r) => r.id === rec.id);
-    const nextRecords = exists ? records.map((r) => r.id === rec.id ? rec : r) : [...records, rec];
-    saveT({ ...t, videoRecords: nextRecords });
+    updateTournamentById(tourId, (t) => {
+      const records = t.videoRecords || [];
+      const exists = records.find((r) => r.id === rec.id);
+      const nextRecords = exists ? records.map((r) => r.id === rec.id ? rec : r) : [...records, rec];
+      return { ...t, videoRecords: nextRecords };
+    });
   };
   const delVideoRecord = (tourId, recId) => {
-    const list = data.tournaments || [];
-    const t = list.find((x) => x.id === tourId);
-    if (!t) return;
-    saveT({ ...t, videoRecords: (t.videoRecords || []).filter((r) => r.id !== recId) });
+    updateTournamentById(tourId, (t) => ({ ...t, videoRecords: (t.videoRecords || []).filter((r) => r.id !== recId) }));
   };
 
   const openForm = (t) => {
@@ -3974,8 +3981,15 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSe
               value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
           </div>
           <PrimaryBtn disabled={!form.name} onClick={() => {
-            const t = { id: editId || uid(), ...form };
-            saveT(t); setAdding(false); setSelId(t.id);
+            const tid = editId || uid();
+            const alreadySaved = editId && (data.tournaments || []).some((x) => x.id === editId);
+            if (alreadySaved) {
+              // 既存の大会の編集: フォームに無い項目(動画記録など)を消さないよう、最新の大会データに上書きする形で保存
+              updateTournamentById(tid, (old) => ({ ...old, ...form, id: tid }));
+            } else {
+              saveT({ id: tid, ...form });
+            }
+            setAdding(false); setSelId(tid);
           }}>保存する</PrimaryBtn>
         </div>
       </Card>
