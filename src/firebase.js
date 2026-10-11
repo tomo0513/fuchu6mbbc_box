@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import {
-  getFirestore, doc, getDoc, setDoc,
+  initializeFirestore, doc, getDoc, setDoc,
   collection, getDocs, writeBatch,
 } from "firebase/firestore";
 
@@ -14,7 +14,9 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// ignoreUndefinedProperties: 値がundefinedの項目は自動で無視する
+// (これが無いと、undefinedを1つでも含む試合はFirestoreに拒否され、保存が永久に失敗する)
+const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
 
 const TEAM_DOC = "fuchu6mbbc";
 const teamRef = () => doc(db, "teams", TEAM_DOC);
@@ -36,7 +38,10 @@ export async function loadData() {
   // 次回保存時に新形式へ自動移行される。
   if (main.payload) {
     try {
-      return JSON.parse(main.payload);
+      const legacy = JSON.parse(main.payload);
+      // 旧形式から読み込んだ印。アプリ側は初回保存で全件を書き込む
+      legacy.__legacy = true;
+      return legacy;
     } catch (e) {
       // 壊れていたら通常の分割形式として扱う
     }
@@ -102,6 +107,36 @@ export async function saveData(data) {
   if (selGames) writes.push(writeGamesBatch(selectGamesCol(), selGames));
 
   await Promise.all(writes);
+}
+
+/**
+ * 変更分だけを保存する(通常の保存はこちらを使う)。
+ * main: メインドキュメントの内容(変更が無ければnull)
+ * games / selectGames: 変更があった試合だけの配列
+ * Play by Playで1プレイ入力した場合、書き込みは「その試合1件」だけになる。
+ */
+export async function saveChanges({ main, games = [], selectGames = [] }) {
+  if (main) {
+    const empty = (main.players || []).length === 0 && (main.selectTeam?.players || []).length === 0;
+    if (empty) {
+      const existing = await getDoc(teamRef());
+      if (existing.exists()) {
+        const ex = existing.data();
+        if (ex.payload || (ex.players && ex.players.length > 0)) {
+          throw new Error("guard: 空データでの上書きを防止しました。既存データを保護します。");
+        }
+      }
+    }
+  }
+  const items = [];
+  if (main) items.push([teamRef(), { ...main, payload: "" }]);
+  for (const g of games) if (g?.id) items.push([doc(gamesCol(), g.id), g]);
+  for (const g of selectGames) if (g?.id) items.push([doc(selectGamesCol(), g.id), g]);
+  for (let i = 0; i < items.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const [ref, val] of items.slice(i, i + 450)) batch.set(ref, val);
+    await batch.commit();
+  }
 }
 
 async function writeGamesBatch(col, gameList) {
