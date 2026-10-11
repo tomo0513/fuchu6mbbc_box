@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { loadData, saveData, deleteGame, deleteAllGames } from "./firebase.js";
+import { loadData, saveChanges, deleteGame, deleteAllGames } from "./firebase.js";
 import {
   LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, ReferenceLine,
@@ -743,6 +743,8 @@ export default function App() {
   const timer = useRef(null);
   const pending = useRef(null);
   const retried = useRef(false);
+  const inFlight = useRef(false); // Firestoreへ送信中か
+  const lastSaved = useRef(null); // 最後に保存できた内容(差分判定用)
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem("minibasket_theme") || "dark"; } catch { return "dark"; }
   });
@@ -777,14 +779,34 @@ export default function App() {
       init.selectTeam.games = (init.selectTeam.games || []).map(normGame);
       init.selectTeam.players = init.selectTeam.players || [];
       init.selectTeam.opponents = init.selectTeam.opponents || [];
+      const legacy = !!init.__legacy;
+      delete init.__legacy;
       setData(init);
       dataRef.current = init;
+      // 読み込んだ時点の内容を「保存済み」として記録(旧形式から読んだ場合は初回に全件書き込む)
+      if (d && !legacy) markSaved(init);
       const m = (window.location.hash || "").match(/game=([\w]+)/);
       if (m && init.games.some((g) => g.id === m[1])) { setTab("games"); setNav({ gameId: m[1] }); }
     })();
   }, []);
 
+  // ---- 保存処理 ----
+  // 変更があった試合・メイン情報だけをFirestoreに書き込む(差分保存)。
+  // 以前は保存のたびに全試合(30件以上)を書き込んでおり、Firebase無料枠(1日2万回)を
+  // Play by Play入力だけで使い切ってしまうことがあった。
+  const mainOf = (d) => {
+    const { games, selectTeam, ...rest } = d;
+    return { ...rest, selectTeam: { players: selectTeam?.players || [], opponents: selectTeam?.opponents || [] } };
+  };
+  const markSaved = (d) => {
+    lastSaved.current = {
+      main: JSON.stringify(mainOf(d)),
+      games: new Map((d.games || []).map((g) => [g.id, g])),
+      sel: new Map((d.selectTeam?.games || []).map((g) => [g.id, g])),
+    };
+  };
   const persist = async () => {
+    if (inFlight.current) return; // 送信中は重ねて送らない(完了後に続きを送る)
     const d = pending.current;
     if (!d) return;
     const str = JSON.stringify(d);
@@ -793,26 +815,43 @@ export default function App() {
       setSaveState(`error:容量が上限に近づいています(${sizeKB}KB)。設定タブで使用量を確認してください。`);
       return;
     }
+    const ls = lastSaved.current;
+    const mainStr = JSON.stringify(mainOf(d));
+    const changes = {
+      main: !ls || ls.main !== mainStr ? JSON.parse(mainStr) : null,
+      games: (d.games || []).filter((g) => !ls || ls.games.get(g.id) !== g),
+      selectGames: (d.selectTeam?.games || []).filter((g) => !ls || ls.sel.get(g.id) !== g),
+    };
+    const done = () => {
+      markSaved(d);
+      retried.current = false;
+      if (pending.current === d) { pending.current = null; setSaveState(""); }
+      else setTimeout(persist, 0); // 送信中に追加の入力があれば続けて保存
+    };
+    if (!changes.main && changes.games.length === 0 && changes.selectGames.length === 0) { done(); return; }
+    inFlight.current = true;
     const startedAt = Date.now();
     try {
-      // saveData自体にタイムアウトが無い場合に備え、15秒で強制的にタイムアウトさせる。
-      // これが無いと、通信が詰まった際に「保存中…」のまま無期限に固まってしまう。
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 15000));
-      await Promise.race([saveData(d), timeoutPromise]);
-      pending.current = null; retried.current = false;
-      setSaveState("");
+      await Promise.race([saveChanges(changes), timeoutPromise]);
+      inFlight.current = false;
+      done();
     } catch (e) {
+      inFlight.current = false;
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
-      const reason = e?.message === "timeout" ? `応答なし${elapsed}秒` : (e?.message || "不明なエラー");
+      const msg = String(e?.code || e?.message || "");
+      const reason = e?.message === "timeout" ? `応答なし${elapsed}秒`
+        : /resource-exhausted|quota/i.test(msg) ? "Firebaseの1日の書き込み上限に達しました。日本時間17時頃に回復します"
+        : (e?.message || "不明なエラー");
       if (!retried.current) { retried.current = true; setSaveState("saving"); setTimeout(persist, 1500); }
-      else { retried.current = false; setSaveState(`error:保存に失敗しました(${sizeKB}KB・${reason})。自動で再保存します。`); setTimeout(persist, 5000); }
+      else { retried.current = false; setSaveState(`error:保存に失敗しました(${reason})。自動で再保存します。`); setTimeout(persist, 8000); }
     }
   };
   const save = (next) => {
     setData(next);
     dataRef.current = next;
     pending.current = next;
-    setSaveState("saving");
+    setSaveState((s) => (s.startsWith("error") ? s : "saving"));
     clearTimeout(timer.current);
     timer.current = setTimeout(persist, 1200);
   };
