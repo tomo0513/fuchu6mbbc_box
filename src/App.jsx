@@ -58,6 +58,41 @@ function useAdminMode() {
   return { isAdmin, login, logout };
 }
 
+// ===== 画面遷移の履歴 =====
+// 「戻る」を押したときに、必ず1つ前に見ていた画面へ戻すための履歴管理。
+// loc(今いる画面)が変わるたびに直前の画面を積み、goBackで1つ取り出して復元する。
+// isValidで、削除済みの選手・試合などを指す履歴は飛ばす。
+function useNavHistory(loc, restore, isValid) {
+  const key = JSON.stringify(loc);
+  const hist = useRef([]);
+  const prev = useRef(null);
+  const skipKey = useRef(null);
+  useEffect(() => {
+    const p = prev.current;
+    if (p && p.key !== key && skipKey.current !== key) {
+      hist.current.push(p.loc);
+      if (hist.current.length > 50) hist.current.shift();
+    }
+    skipKey.current = null;
+    prev.current = { key, loc };
+  }, [key]);
+  const goBack = () => {
+    while (hist.current.length) {
+      const l = hist.current.pop();
+      const k = JSON.stringify(l);
+      if (k === key) continue;
+      if (isValid && !isValid(l)) continue;
+      skipKey.current = k;
+      restore(l);
+      return true;
+    }
+    return false;
+  };
+  // 履歴に積まずに画面を切り替える(選手カルテの前後移動など)
+  const replace = (l) => { const k = JSON.stringify(l); if (k === key) return; skipKey.current = k; restore(l); };
+  return { goBack, replace };
+}
+
 function useIsPC() {
   const [isPC, setIsPC] = useState(() => window.innerWidth >= 768);
   useEffect(() => {
@@ -647,11 +682,22 @@ function OppLogo({ o, size = 36 }) {
 /* ============ 府中選抜チーム 専用ビュー ============ */
 /* 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking)を、
    六小のdataではなく選抜用のdataを渡すことでそのまま再利用する。登録系操作は isAdmin のみ許可(各コンポーネントが元々対応済み)。 */
-function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, isAdmin, theme, toggleTheme, onBack, saveState, updateGameById, initialGameId }) {
-  const [tab, setTab] = useState("games");
-  const [nav, setNav] = useState(initialGameId ? { gameId: initialGameId } : {});
+function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, isAdmin, theme, toggleTheme, onBack, saveState, updateGameById, initialGameId, initialPlayerId }) {
+  const [tab, setTab] = useState(initialPlayerId ? "players" : "games");
+  const [nav, setNav] = useState(initialPlayerId ? { playerId: initialPlayerId } : initialGameId ? { gameId: initialGameId } : {});
   const C = useC();
-  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, isSelectTeam: true, updateGameById };
+  const dataLatest = useRef(data);
+  dataLatest.current = data;
+  const selHist = useNavHistory({ tab, nav }, (l) => { setTab(l.tab); setNav(l.nav || {}); }, (l) => {
+    const d = dataLatest.current; const n = l.nav || {};
+    if (n.playerId && !d.players.some((p) => p.id === n.playerId)) return false;
+    if (n.gameId && !d.games.some((g) => g.id === n.gameId)) return false;
+    return true;
+  });
+  // 選抜画面内の履歴が尽きたら、選抜画面に入る前の画面(六小側)に戻る
+  const goBack = () => { if (!selHist.goBack()) onBack(); return true; };
+  const props = { data, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, isSelectTeam: true, updateGameById,
+    goBack, replaceNav: (n) => selHist.replace({ tab, nav: n }) };
 
   const NAV_ITEMS = [
     { t: "games", icon: ClipboardList, label: "試合" },
@@ -745,6 +791,16 @@ export default function App() {
   const retried = useRef(false);
   const inFlight = useRef(false); // Firestoreへ送信中か
   const lastSaved = useRef(null); // 最後に保存できた内容(差分判定用)
+  const appHist = useNavHistory({ tab, nav, sel: selectMode },
+    (l) => { setTab(l.tab); setNav(l.nav || {}); setSelectMode(l.sel || null); },
+    (l) => {
+      const d = dataRef.current; const n = l.nav || {};
+      if (!d) return true;
+      if (n.playerId && !d.players.some((p) => p.id === n.playerId)) return false;
+      if (n.gameId && !d.games.some((g) => g.id === n.gameId)) return false;
+      if (n.tourId && !String(n.tourId).startsWith("auto_") && !(d.tournaments || []).some((t) => t.id === n.tourId)) return false;
+      return true;
+    });
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem("minibasket_theme") || "dark"; } catch { return "dark"; }
   });
@@ -946,7 +1002,8 @@ export default function App() {
     const tournaments = exists ? list.map((x) => (x.id === tourId ? fn(x) : x)) : list;
     save({ ...latest, tournaments });
   };
-  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId, gameId) => setSelectMode({ fromPlayerId, gameId }), updateGameById: (gameId, fn) => updateGameById("main", gameId, fn), updateTournamentById };
+  const props = { data: visibleData, save, nav, setNav, setTab, oppName, getOpp, isPC, isAdmin, theme, toggleTheme, setGamePublished, onOpenSelectTeam: (fromPlayerId, gameId, playerId) => setSelectMode({ fromPlayerId, gameId, playerId }), updateGameById: (gameId, fn) => updateGameById("main", gameId, fn), updateTournamentById,
+    goBack: appHist.goBack, replaceNav: (n) => appHist.replace({ tab, nav: n, sel: selectMode }) };
 
   // ===== 府中選抜チーム用のデータ・保存関数 =====
   // 既存の試合管理コンポーネント(GameList/GameDetail/PlayByPlay/PlayerList/PlayerKarte/Ranking等)を
@@ -1023,9 +1080,10 @@ export default function App() {
           data={selVisibleData} save={selSave} oppName={selOppName} getOpp={selGetOpp}
           setGamePublished={setSelGamePublished}
           isPC={isPC} isAdmin={isAdmin} theme={theme} toggleTheme={toggleTheme}
-          onBack={() => setSelectMode(null)} saveState={saveState}
+          onBack={() => { if (!appHist.goBack()) setSelectMode(null); }} saveState={saveState}
           updateGameById={(gameId, fn) => updateGameById("select", gameId, fn)}
           initialGameId={selectMode.gameId}
+          initialPlayerId={selectMode.playerId}
         />
       </ThemeCtx.Provider>
     );
@@ -1409,7 +1467,7 @@ function PlayerList({ data, save, setNav, isPC, isAdmin, isSelectTeam }) {
   );
 }
 
-function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSelectTeam }) {
+function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSelectTeam, goBack, replaceNav }) {
   const C = useC();
   const p = data.players.find((x) => x.id === nav.playerId);
   const [editing, setEditing] = useState(false);
@@ -1448,8 +1506,8 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <button className="flex items-center gap-1 text-sm font-bold" style={{ color: C.sub }} onClick={() => setNav({})}>
-          <ChevronLeft size={16} /> 選手一覧
+        <button className="flex items-center gap-1 text-sm font-bold" style={{ color: C.sub }} onClick={() => { if (!goBack?.()) setNav({}); }}>
+          <ChevronLeft size={16} /> 戻る
         </button>
         <div className="flex gap-3">
           {isAdmin && <button style={{ color: C.sub }} onClick={() => setEditing(true)}><Pencil size={18} /></button>}
@@ -1462,14 +1520,14 @@ function PlayerKarte({ data, save, nav, setNav, isAdmin, onOpenSelectTeam, isSel
         <button className="flex-1 flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold truncate"
           style={{ background: C.card2, color: prevPlayer ? C.text : C.border }}
           disabled={!prevPlayer}
-          onClick={() => prevPlayer && setNav({ playerId: prevPlayer.id })}>
+          onClick={() => prevPlayer && (replaceNav || setNav)({ playerId: prevPlayer.id })}>
           <ChevronLeft size={14} className="shrink-0" />
           <span className="truncate">{prevPlayer ? `#${prevPlayer.number} ${prevPlayer.codename || prevPlayer.name}` : "–"}</span>
         </button>
         <button className="flex-1 flex items-center justify-end gap-1 px-3 py-2 rounded-xl text-xs font-bold truncate"
           style={{ background: C.card2, color: nextPlayer ? C.text : C.border }}
           disabled={!nextPlayer}
-          onClick={() => nextPlayer && setNav({ playerId: nextPlayer.id })}>
+          onClick={() => nextPlayer && (replaceNav || setNav)({ playerId: nextPlayer.id })}>
           <span className="truncate">{nextPlayer ? `#${nextPlayer.number} ${nextPlayer.codename || nextPlayer.name}` : "–"}</span>
           <ChevronDown size={14} className="shrink-0" style={{ transform: "rotate(-90deg)" }} />
         </button>
@@ -2335,7 +2393,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin, isSelect
   );
 }
 
-function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGamePublished, isSelectTeam, updateGameById }) {
+function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGamePublished, isSelectTeam, updateGameById, goBack }) {
   const C = useC();
   const g = data.games.find((x) => x.id === nav.gameId);
   const [sub, setSub] = useState(isAdmin ? "entry" : "analysis");
@@ -2363,8 +2421,8 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <button className="flex items-center gap-1 text-sm font-bold" style={{ color: C.sub }} onClick={() => setNav({})}>
-          <ChevronLeft size={16} /> 試合一覧
+        <button className="flex items-center gap-1 text-sm font-bold" style={{ color: C.sub }} onClick={() => { if (!goBack?.()) setNav({}); }}>
+          <ChevronLeft size={16} /> 戻る
         </button>
         <div className="flex items-center gap-3">
           {copied && <span className="text-xs" style={{ color: C.win }}>コピーしました</span>}
@@ -3717,9 +3775,304 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
   );
 }
 
-function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSelectTeam, updateTournamentById }) {
+// ===== 大会スタッツ(大会詳細ページに表示) =====
+// チーム: 大会内の試合(紅白戦を除く)の単純合計・単純平均。シーズン平均(チームスタッツと同じ基準)と比較。
+// 個人: careerStatsを大会の試合だけに絞って再利用(六小は×3Q換算、選抜は単純平均)。
+//       大会で1試合以上出場した選手は全員ランキング対象。
+function TournamentStats({ data, mainGames, selectGames, selectSeasonGames, setTab, setNav, onOpenSelectTeam }) {
   const C = useC();
-  const [selId, setSelId] = useState(null);
+  const isLight = C.bg === LIGHT.bg;
+  const hasMain = mainGames.length > 0;
+  const hasSel = selectGames.length > 0;
+  const [scope, setScope] = useState(hasMain ? "main" : "select");
+  const [view, setView] = useState("team");
+  const [rkStat, setRkStat] = useState("pts");
+  const [rkMode, setRkMode] = useState("avg");
+  const isSel = scope === "select" && hasSel;
+  const players = isSel ? (data.selectTeam?.players || []) : data.players;
+  const scored = (g) => { const p = gamePts(g); return (p.own + p.opp) > 0; };
+  const games = (isSel ? selectGames : mainGames).filter(scored);
+  const teamGames = games.filter((g) => !gameCatOf(g.category)?.isIntramural);
+  const seasonGames = (isSel
+    ? (selectSeasonGames || []).filter((g) => !gameCatOf(g.category)?.isIntramural)
+    : data.games.filter((g) => (g.category || "practice") !== "ref" && regQOf(g) === 4)
+  ).filter(scored);
+
+  // ---- チーム集計 ----
+  const teamAgg = (gs) => {
+    const per = gs.map((g) => {
+      const p = gamePts(g);
+      const t = sideTotals(g.events, "own", "all");
+      const p3m = (g.events || []).filter((e) => e.side === "own" && e.action === "P3_M").length;
+      return { g, own: p.own, opp: p.opp, ...t, p3m };
+    });
+    const n = per.length;
+    const sum = (k) => per.reduce((a, x) => a + (x[k] || 0), 0);
+    const avg = (k) => (n > 0 ? sum(k) / n : 0);
+    return { per, n, sum, avg };
+  };
+  const T = teamAgg(teamGames);
+  const S = teamAgg(seasonGames);
+  let w = 0, l = 0;
+  teamGames.forEach((g) => {
+    if (!gameCatOf(g.category)?.countWL) return;
+    const p = gamePts(g);
+    if (p.own > p.opp) w++; else if (p.own < p.opp) l++;
+  });
+  const pctNum = (m, a) => (a > 0 ? (m / a) * 100 : null);
+  const tFg = pctNum(T.sum("fgm"), T.sum("fga")), sFg = pctNum(S.sum("fgm"), S.sum("fga"));
+  const tFt = pctNum(T.sum("ftm"), T.sum("fta")), sFt = pctNum(S.sum("ftm"), S.sum("fta"));
+  const diff = T.sum("own") - T.sum("opp");
+
+  const Delta = ({ v, lowerIsBetter, unit = "" }) => {
+    if (v === null || !Number.isFinite(v) || S.n === 0) return <div className="text-[10px] mt-0.5" style={{ color: C.sub }}>–</div>;
+    const good = lowerIsBetter ? v < 0 : v > 0;
+    const col = Math.abs(v) < 0.05 ? C.sub : good ? C.win : C.loss;
+    return <div className="text-[10px] font-bold mt-0.5" style={{ color: col }}>{v >= 0 ? "▲" : "▼"} {fmt1(Math.abs(v))}{unit}</div>;
+  };
+
+  const TEAM_ROWS = [
+    { l: "得点", k: "own" },
+    { l: "リバウンド", k: "reb" },
+    { l: "アシスト", k: "ast" },
+    { l: "スティール", k: "stl" },
+    { l: "ブロック", k: "blk" },
+    { l: "3P成功", k: "p3m" },
+    { l: "FT%", pct: true },
+    { l: "TO", k: "to", inv: true },
+  ];
+
+  // ---- 個人集計 ----
+  const indiv = players.map((p) => {
+    const c = careerStats(games, p.id, isSel);
+    if (c.gamesPlayed === 0) return null;
+    const tsDen = 2 * ((c.tot.fga || 0) + 0.44 * (c.tot.fta || 0));
+    return { p, c, ts: tsDen > 0 ? (c.tot.pts / tsDen) * 100 : null };
+  }).filter(Boolean);
+
+  const LEADER_DEFS = [["PTS", "pts"], ["REB", "reb"], ["AST", "ast"], ["STL", "stl"], ["EFF", "eff"]];
+  const leaders = LEADER_DEFS.map(([en, k]) => {
+    const best = [...indiv].filter((x) => (x.c.totAdj[k] || 0) > 0)
+      .sort((a, b) => (b.c.totAdj[k] - a.c.totAdj[k]) || (b.c.tot[k] - a.c.tot[k]))[0];
+    return best ? { en, k, x: best } : null;
+  }).filter(Boolean);
+
+  const rkOptions = [];
+  for (const d of STAT_DEFS) {
+    rkOptions.push([d.k, d.label]);
+    if (d.k === "pts") { rkOptions.push(["fgp", "FG%"]); rkOptions.push(["ftp", "FT%"]); rkOptions.push(["tsp", "TS%"]); }
+  }
+  const isPct = rkStat === "fgp" || rkStat === "ftp" || rkStat === "tsp";
+  const isAsc = rkStat === "to" || rkStat === "pf";
+  const rkRows = indiv
+    .filter((x) => !isAsc || isSel || (+x.p.grade || 0) >= 5)
+    .map((x) => {
+      const t = x.c.tot;
+      if (rkStat === "fgp") return t.fga > 0 ? { x, v: (t.fgm / t.fga) * 100, sub: `${t.fgm}/${t.fga}本` } : null;
+      if (rkStat === "ftp") return t.fta > 0 ? { x, v: (t.ftm / t.fta) * 100, sub: `${t.ftm}/${t.fta}本` } : null;
+      if (rkStat === "tsp") return x.ts !== null ? { x, v: x.ts, sub: `${x.c.n}試合` } : null;
+      const v = rkMode === "total" ? t[rkStat] : x.c.totAdj[rkStat];
+      if (!isAsc && !(v > 0)) return null;
+      return { x, v, sub: `${x.c.n}試合` };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (isAsc ? a.v - b.v : b.v - a.v));
+
+  const openPlayer = (p) => {
+    if (isSel) onOpenSelectTeam?.(undefined, undefined, p.id);
+    else { setTab("players"); setNav({ playerId: p.id }); }
+  };
+
+  const TBL_COLS = [["G", (x) => x.c.gamesPlayed], ["MIN", (x) => x.c.tot.min], ["PTS", (x) => x.c.tot.pts], ["REB", (x) => x.c.tot.reb],
+    ["AST", (x) => x.c.tot.ast], ["STL", (x) => x.c.tot.stl], ["BLK", (x) => x.c.tot.blk], ["TO", (x) => x.c.tot.to],
+    ["EFF", (x) => x.c.tot.eff], ["TS%", (x) => x.ts]];
+  const NO_HI = new Set(["G", "MIN", "TO"]);
+  const tblRows = [...indiv].sort((a, b) => (b.c.tot.pts - a.c.tot.pts) || ((+a.p.number || 0) - (+b.p.number || 0)));
+  const colMax = TBL_COLS.map(([h, f]) => (NO_HI.has(h) ? null : Math.max(...tblRows.map((x) => f(x) ?? -Infinity))));
+  const sumCol = (f) => tblRows.reduce((a, x) => a + (f(x) || 0), 0);
+  const teamTs = (() => { const pts = sumCol((x) => x.c.tot.pts), fga = sumCol((x) => x.c.tot.fga), fta = sumCol((x) => x.c.tot.fta); const d = 2 * (fga + 0.44 * fta); return d > 0 ? (pts / d) * 100 : null; })();
+  const bebas = { fontFamily: "'Bebas Neue',sans-serif" };
+  const line = { borderBottom: `1px solid ${C.border}66` };
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-1 h-4 rounded-sm" style={{ background: C.orange }} />
+        <div className="text-sm font-black tracking-wide">大会スタッツ</div>
+        <div className="ml-auto text-xs tracking-[.15em]" style={{ ...bebas, color: C.sub }}>TOURNAMENT STATS</div>
+      </div>
+      <Seg items={[["team", "チーム"], ["ind", "個人"]]} value={view} onChange={setView} />
+      {hasMain && hasSel && (
+        <div className="flex gap-1.5 mt-2">
+          {[["main", "六小"], ["select", "🎗️ 選抜"]].map(([k, lb]) => (
+            <button key={k} className="text-[11px] font-bold px-3 py-1 rounded-full"
+              style={scope === k ? { border: `1px solid ${C.orange}`, color: C.orange, background: `${C.orange}18` } : { border: `1px solid ${C.border}`, color: C.sub }}
+              onClick={() => setScope(k)}>{lb}</button>
+          ))}
+        </div>
+      )}
+      {!hasMain && hasSel && <div className="text-[10px] mt-2" style={{ color: C.sub }}>🎗️ 府中選抜の成績</div>}
+
+      {games.length === 0 ? (
+        <div className="text-sm text-center py-6" style={{ color: C.sub }}>スコアが入力された試合がまだありません。</div>
+      ) : view === "team" ? (
+        T.n === 0 ? <div className="text-sm text-center py-6" style={{ color: C.sub }}>集計できる試合がありません(紅白戦は対象外)。</div> : (
+        <div className="mt-3">
+          <div className="flex items-end gap-3 rounded-xl px-3 py-3 mb-2" style={{ background: C.card2 }}>
+            <div>
+              <div className="text-[10px]" style={{ color: C.sub }}>大会成績({T.n}試合)</div>
+              <div className="leading-none mt-1" style={bebas}>
+                <span className="text-5xl" style={{ color: C.win }}>{w}</span><span className="text-xl mx-0.5" style={{ color: C.sub }}>勝</span>
+                <span className="text-5xl ml-1" style={{ color: C.loss }}>{l}</span><span className="text-xl ml-0.5" style={{ color: C.sub }}>敗</span>
+              </div>
+            </div>
+            <div className="ml-auto text-right">
+              <div className="text-[10px]" style={{ color: C.sub }}>得失点差</div>
+              <div className="text-3xl leading-none mt-1" style={{ ...bebas, color: diff >= 0 ? C.win : C.loss }}>{diff >= 0 ? "+" : ""}{diff}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {[
+              ["平均得点", fmt1(T.avg("own")), T.avg("own") - S.avg("own"), false, ""],
+              ["平均失点", fmt1(T.avg("opp")), T.avg("opp") - S.avg("opp"), true, ""],
+              ["FG%", tFg !== null ? `${fmt1(tFg)}%` : "–", tFg !== null && sFg !== null ? tFg - sFg : null, false, "%"],
+            ].map(([lb, v, d, inv, u]) => (
+              <div key={lb} className="rounded-xl py-2.5 text-center" style={{ background: C.card2 }}>
+                <div className="text-3xl leading-none" style={bebas}>{v}</div>
+                <div className="text-[10px] mt-1" style={{ color: C.sub }}>{lb}</div>
+                <Delta v={d} lowerIsBetter={inv} unit={u} />
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] font-bold mb-1" style={{ color: C.sub }}>大会合計 ／ 1試合平均</div>
+          {TEAM_ROWS.map((r) => {
+            const tv = r.pct ? tFt : T.avg(r.k);
+            const sv = r.pct ? sFt : S.avg(r.k);
+            const max = Math.max(tv || 0, sv || 0) * 1.25 || 1;
+            const better = tv === null || sv === null || S.n === 0 ? true : r.inv ? tv <= sv : tv >= sv;
+            return (
+              <div key={r.l} className="grid items-center gap-2 py-1.5" style={{ gridTemplateColumns: "72px 1fr 52px 48px", ...line }}>
+                <div className="text-xs font-bold">{r.l}</div>
+                <div className="relative h-1.5 rounded-full" style={{ background: C.card2 }}>
+                  <div className="absolute left-0 top-0 bottom-0 rounded-full" style={{ width: `${Math.min(((tv || 0) / max) * 100, 100)}%`, background: better ? C.orange : C.sub }} />
+                  {S.n > 0 && sv !== null && <div className="absolute" style={{ left: `${Math.min((sv / max) * 100, 100)}%`, top: -3, width: 2, height: 12, background: C.text, opacity: 0.55 }} />}
+                </div>
+                <div className="text-lg text-right" style={bebas}>{r.pct ? (T.sum("fta") > 0 ? `${T.sum("ftm")}/${T.sum("fta")}` : "") : T.sum(r.k)}</div>
+                <div className="text-[11px] text-right" style={{ color: C.sub }}>{r.pct ? (tFt !== null ? `${fmt1(tFt)}%` : "–") : fmt1(tv)}</div>
+              </div>
+            );
+          })}
+          <div className="flex gap-3 items-center text-[10px] mt-2" style={{ color: C.sub }}>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-1.5 rounded-full" style={{ background: C.orange }} />この大会の平均</span>
+            <span className="flex items-center gap-1"><span className="inline-block" style={{ width: 2, height: 10, background: C.text, opacity: 0.55 }} />シーズン平均</span>
+          </div>
+          <div className="text-[9px] mt-1" style={{ color: C.sub }}>
+            ※大会の試合(紅白戦を除く)の単純合計・単純平均。▲▼とシーズン平均は{isSel ? "選抜の全試合(紅白戦を除く)" : "参考試合を除く4ピリオド制の全試合"}との比較。
+          </div>
+        </div>
+        )
+      ) : (
+        <div className="mt-3">
+          {leaders.length > 0 && (
+            <>
+              <div className="text-[11px] font-bold mb-1.5" style={{ color: C.sub }}>大会リーダー(1試合平均)</div>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: "none" }}>
+                {leaders.map(({ en, k, x }, i) => {
+                  const from = i % 2 === 0 ? C.panelOrange1 : C.panelBlue1;
+                  const to = i % 2 === 0 ? C.panelOrange2 : C.panelBlue2;
+                  const fg = isLight ? C.text : "#fff";
+                  return (
+                    <button key={en} className="relative shrink-0 overflow-hidden rounded-xl text-left" onClick={() => openPlayer(x.p)}
+                      style={{ width: 118, height: 168, background: `linear-gradient(160deg, ${from}, ${to})`, color: fg }}>
+                      <div className="absolute select-none pointer-events-none" style={{ ...bebas, right: -6, bottom: 34, fontSize: 92, lineHeight: 1, color: isLight ? "#ffffff66" : "#ffffff22" }}>{x.p.number}</div>
+                      <div className="absolute" style={{ right: 6, bottom: 34 }}><Avatar p={x.p} size={58} /></div>
+                      <div className="absolute left-2.5 top-2 text-[13px] tracking-[.18em]" style={{ ...bebas, opacity: 0.9 }}>{en}</div>
+                      <div className="absolute left-2.5 top-6 leading-none" style={{ ...bebas, fontSize: 44, textShadow: isLight ? "none" : "0 2px 10px rgba(0,0,0,.25)" }}>{fmt1(x.c.totAdj[k])}</div>
+                      <div className="absolute left-0 right-0 bottom-0 px-2.5 py-1.5" style={{ background: isLight ? "#ffffff88" : "#00000038" }}>
+                        <div className="text-[10px] leading-none" style={{ ...bebas, opacity: 0.75 }}>#{x.p.number}</div>
+                        <div className="text-[13px] font-black truncate leading-tight">{x.p.codename || x.p.name}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          <div className="text-[11px] font-bold mt-4 mb-1.5" style={{ color: C.sub }}>大会ランキング</div>
+          <div className="flex gap-2 mb-1.5">
+            <select className="flex-1 rounded-xl px-3 py-2 text-sm" style={getInputStyle(C)} value={rkStat} onChange={(e) => setRkStat(e.target.value)}>
+              {rkOptions.map(([k, lb]) => <option key={k} value={k}>{lb}</option>)}
+            </select>
+            {!isPct && (
+              <div className="flex rounded-xl overflow-hidden shrink-0 text-xs font-bold" style={{ border: `1px solid ${C.border}` }}>
+                {[["total", "合計"], ["avg", "平均"]].map(([k, lb]) => (
+                  <button key={k} className="px-3" onClick={() => setRkMode(k)}
+                    style={rkMode === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{lb}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="text-[10px] mb-1" style={{ color: C.sub }}>
+            ※この大会に1試合以上出場した選手が対象。{isAsc ? "少ない方が上位。" : ""}{isAsc && !isSel ? "5年生以上のみ。" : ""}{!isPct && rkMode === "avg" ? (isSel ? "平均は単純平均。" : "平均は通常の個人平均と同じく3Q換算。") : ""}
+          </div>
+          {rkRows.length === 0 ? <div className="text-sm text-center py-4" style={{ color: C.sub }}>対象の選手がいません。</div> : rkRows.map((r, i) => (
+            <button key={r.x.p.id} className="w-full flex items-center gap-3 py-2 text-left" style={line} onClick={() => openPlayer(r.x.p)}>
+              <div className="w-7 text-center text-2xl" style={{ ...bebas, color: i < 3 ? C.led : C.sub }}>{i + 1}</div>
+              <Avatar p={r.x.p} size={34} />
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-sm truncate">{r.x.p.codename || r.x.p.name}</div>
+                <div className="text-[10px]" style={{ color: C.sub }}>#{r.x.p.number}・{r.sub}</div>
+              </div>
+              <div className="text-2xl" style={bebas}>{isPct ? `${fmt1(r.v)}%` : rkMode === "total" ? fmtSmart(r.v) : fmt1(r.v)}</div>
+            </button>
+          ))}
+
+          <div className="text-[11px] font-bold mt-4 mb-1.5" style={{ color: C.sub }}>個人スタッツ(大会合計)</div>
+          <div className="overflow-x-auto -mx-4 px-4">
+            <table className="text-[11px] whitespace-nowrap w-full" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th className="text-left py-1.5 pr-2 sticky left-0 font-normal" style={{ background: C.card, color: C.sub, borderBottom: `1px solid ${C.border}` }}>選手</th>
+                  {TBL_COLS.map(([h]) => <th key={h} className="text-right py-1.5 px-1.5 font-normal" style={{ ...bebas, fontSize: 12, color: C.sub, borderBottom: `1px solid ${C.border}` }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {tblRows.map((x) => (
+                  <tr key={x.p.id} onClick={() => openPlayer(x.p)} style={{ cursor: "pointer" }}>
+                    <td className="text-left py-1.5 pr-2 sticky left-0 font-bold" style={{ background: C.card, ...line }}>{x.p.codename || x.p.name}</td>
+                    {TBL_COLS.map(([h, f], ci) => {
+                      const v = f(x);
+                      const hi = colMax[ci] !== null && v !== null && v === colMax[ci] && v > 0;
+                      return <td key={h} className="text-right py-1.5 px-1.5" style={{ ...line, color: hi ? C.orange : C.text, fontWeight: hi ? 900 : 400 }}>
+                        {v === null ? "–" : h === "TS%" ? fmt1(v) : fmtSmart(v)}</td>;
+                    })}
+                  </tr>
+                ))}
+                <tr style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td className="text-left py-1.5 pr-2 sticky left-0 font-black" style={{ background: C.card }}>チーム計</td>
+                  <td className="text-right py-1.5 px-1.5 font-black">{games.length}</td>
+                  <td className="text-right py-1.5 px-1.5">–</td>
+                  {[(x) => x.c.tot.pts, (x) => x.c.tot.reb, (x) => x.c.tot.ast, (x) => x.c.tot.stl, (x) => x.c.tot.blk, (x) => x.c.tot.to, (x) => x.c.tot.eff].map((f, i) => (
+                    <td key={i} className="text-right py-1.5 px-1.5 font-black">{fmtSmart(sumCol(f))}</td>
+                  ))}
+                  <td className="text-right py-1.5 px-1.5 font-black">{teamTs !== null ? fmt1(teamTs) : "–"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div className="text-[9px] mt-1" style={{ color: C.sub }}>※各項目の大会トップをオレンジで表示。行をタップすると選手カルテを開きます。</div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function TournamentPage({ data, save, nav, setNav, setTab, oppName, isAdmin, onOpenSelectTeam, updateTournamentById, goBack }) {
+  const C = useC();
+  // 開いている大会は画面履歴(nav.tourId)で管理する。試合詳細などから「戻る」で大会詳細に戻れるようにするため。
+  const selId = nav?.tourId || null;
+  const setSelId = (id) => setNav(id ? { tourId: id } : {});
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({
@@ -4048,8 +4401,8 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSe
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <button className="flex items-center gap-1 text-sm font-bold" style={{ color: C.sub }} onClick={() => setSelId(null)}>
-            <ChevronLeft size={16} /> 大会一覧
+          <button className="flex items-center gap-1 text-sm font-bold" style={{ color: C.sub }} onClick={() => { if (!goBack?.()) setSelId(null); }}>
+            <ChevronLeft size={16} /> 戻る
           </button>
           {isAdmin && !selT.auto && (
             <div className="flex gap-3">
@@ -4335,6 +4688,12 @@ function TournamentPage({ data, save, setNav, setTab, oppName, isAdmin, onOpenSe
               </button>
             </div>
           </div>
+        )}
+        {relGames.length > 0 && (
+          <TournamentStats key={selT.id} data={data}
+            mainGames={relGamesMain.map((x) => x.g)} selectGames={relGamesSelect.map((x) => x.g)}
+            selectSeasonGames={visibleSelectGames}
+            setTab={setTab} setNav={setNav} onOpenSelectTeam={onOpenSelectTeam} />
         )}
         {relGames.length > 0 && (
           <Card>
