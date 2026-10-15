@@ -11,23 +11,30 @@ import {
 } from "lucide-react";
 
 /* ============ デザイントークン ============ */
+// カラー: ダーク=ゴールド×ブラック / ライト=ゴールド×ホワイト(ユニフォームの金・白とビブスの黒)
+// orange = メインカラー(ゴールド)。キー名は互換のためそのまま。onOrange = メインカラーの上に載せる文字色。
+// panelOrange* = メインのパネル(ゴールド) / panelBlue* = サブのパネル(ダーク=黒・ライト=白)
 const DARK = {
-  bg: "#0C1220", card: "#161F33", card2: "#1E2A45", border: "#2A3856",
-  text: "#E9EEF8", sub: "#8FA0C0",
-  orange: "#FF7A3D", led: "#FFB23E", win: "#3DBE7B", loss: "#E25C5C",
-  board: "#070C16", nav: "#0A101E", oppBlue: "#5B74A8", oppText: "#7E94BC",
-  sidebar: "#0E1828", inputBg: "#0F1830",
-  panelOrange1: "#FF7A3D", panelOrange2: "#7A3010",
-  panelBlue1: "#5B74A8", panelBlue2: "#0F1E3A",
+  bg: "#0A0A0A", card: "#151515", card2: "#1F1F1F", border: "#302B20",
+  text: "#F5F1E6", sub: "#A39C8A",
+  orange: "#CFA33A", onOrange: "#16120A", led: "#F2CC6B", win: "#3DBE7B", loss: "#E25C5C",
+  board: "#050505", nav: "#070707", oppBlue: "#5E6675", oppText: "#B3BAC6",
+  sidebar: "#0E0E0E", inputBg: "#121212",
+  panelOrange1: "#E0B64C", panelOrange2: "#6B4E10",
+  panelBlue1: "#3A3A3A", panelBlue2: "#050505",
+  panelText1: "#FFFFFF", panelText2: "#F5F1E6", panelWm: "rgba(255,255,255,0.14)",
+  skel: "#1A1A1A", skel2: "#2A2620",
 };
 const LIGHT = {
-  bg: "#F0F4F8", card: "#FFFFFF", card2: "#EAF0F8", border: "#C8D8EC",
-  text: "#1A2A44", sub: "#5A7A9F",
-  orange: "#E8602A", led: "#C87A00", win: "#1E8A50", loss: "#C03030",
-  board: "#EDF2FA", nav: "#FFFFFF", oppBlue: "#3A60A0", oppText: "#2A508A",
-  sidebar: "#F8FAFE", inputBg: "#F0F4F8",
-  panelOrange1: "#F5B99A", panelOrange2: "#D89670",
-  panelBlue1: "#9DB8E0", panelBlue2: "#7291C4",
+  bg: "#F7F5EF", card: "#FFFFFF", card2: "#F1ECDF", border: "#E3DAC4",
+  text: "#1F1C14", sub: "#7D7563",
+  orange: "#B08020", onOrange: "#FFFFFF", led: "#A97A14", win: "#1E8A50", loss: "#C03030",
+  board: "#FBF9F3", nav: "#FFFFFF", oppBlue: "#5B6270", oppText: "#4B5262",
+  sidebar: "#FBFAF6", inputBg: "#F7F5EF",
+  panelOrange1: "#F3DC9B", panelOrange2: "#D9B65E",
+  panelBlue1: "#FFFFFF", panelBlue2: "#E1E3E8",
+  panelText1: "#2A2210", panelText2: "#1F1C14", panelWm: "rgba(255,255,255,0.5)",
+  skel: "#ECE7DA", skel2: "#F8F5EE",
 };
 const ThemeCtx = React.createContext(DARK);
 const useC = () => React.useContext(ThemeCtx);
@@ -576,7 +583,7 @@ const PrimaryBtn = ({ children, ...props }) => {
   const C = useC();
   return (
     <button {...props} className="w-full text-white font-bold py-3 rounded-xl active:opacity-80 disabled:opacity-40"
-      style={{ background: C.orange }}>{children}</button>
+      style={{ background: C.orange, color: C.onOrange }}>{children}</button>
   );
 };
 const Seg = ({ items, value, onChange }) => {
@@ -585,7 +592,7 @@ const Seg = ({ items, value, onChange }) => {
     <div className="flex rounded-xl overflow-hidden text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
       {items.map(([k, l]) => (
         <button key={k} className="flex-1 py-2.5" onClick={() => onChange(k)}
-          style={value === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
+          style={value === k ? { background: C.orange, color: C.onOrange } : { background: C.card, color: C.sub }}>{l}</button>
       ))}
     </div>
   );
@@ -736,7 +743,7 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
               {NAV_ITEMS.map(({ t, icon: I, label }) => (
                 <button key={t} onClick={() => { setTab(t); setNav({}); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors"
-                  style={tab === t ? { background: C.orange, color: "#fff" } : { color: C.sub }}>
+                  style={tab === t ? { background: C.orange, color: C.onOrange } : { color: C.sub }}>
                   <I size={18} />
                   {label}
                 </button>
@@ -912,9 +919,10 @@ export default function App() {
     timer.current = setTimeout(persist, 1200);
   };
 
+  if (!showSplash && !data) return <LoadingSkeleton C={CT} isPC={isPC} />;
   if (!data || showSplash) return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
-      style={{ background: theme === "dark" ? "linear-gradient(155deg,#0A0E14 0%,#111824 100%)" : "linear-gradient(155deg,#EDF2FA 0%,#F8FAFE 100%)", color: CT.text }}>
+      style={{ background: theme === "dark" ? "linear-gradient(155deg,#0A0A0A 0%,#17140C 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         @keyframes splashIn   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
@@ -926,7 +934,7 @@ export default function App() {
         style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: "clamp(160px,45vw,220px)",
           lineHeight: .85, letterSpacing: "-.02em",
           color: "transparent",
-          WebkitTextStroke: theme === "dark" ? "1.5px rgba(200,169,110,0.22)" : "1.5px rgba(26,39,64,0.1)",
+          WebkitTextStroke: theme === "dark" ? "1.5px rgba(207,163,58,0.24)" : "1.5px rgba(31,28,20,0.1)",
           top: "38%", right: "-5%", transform: "translateY(-50%) rotate(-8deg)",
           userSelect: "none" }}>
         U12
@@ -937,23 +945,23 @@ export default function App() {
       <div className="absolute pointer-events-none"
         style={{ bottom: -30, left: "50%", transform: "translateX(-50%)",
           width: 220, height: 110, borderRadius: "50%",
-          background: `rgba(232,96,42,${theme === "dark" ? "0.16" : "0.08"})`,
+          background: `rgba(207,163,58,${theme === "dark" ? "0.16" : "0.1"})`,
           filter: "blur(28px)", animation: "splashGlow 3s ease-in-out infinite" }} />
       <div className="relative flex flex-col items-center px-8 w-full"
         style={{ animation: "splashIn .7s ease-out" }}>
-        <div className="mb-4 px-4 py-1 rounded text-white font-bold"
-          style={{ background: CT.orange, fontFamily: "'Bebas Neue',sans-serif",
+        <div className="mb-4 px-4 py-1 rounded font-bold"
+          style={{ background: CT.orange, color: CT.onOrange, fontFamily: "'Bebas Neue',sans-serif",
             fontSize: 11, letterSpacing: "0.28em" }}>
           FUCHUROKU MINIBASKET
         </div>
         <div className="font-black text-center" style={{
           fontSize: "clamp(20px,5.5vw,28px)", letterSpacing: "0.02em", lineHeight: 1.3,
-          color: theme === "dark" ? "#fff" : "#1A2740",
-          textShadow: theme === "dark" ? "0 0 40px rgba(232,96,42,0.45), 0 2px 14px rgba(0,0,0,0.9)" : "none" }}>
+          color: CT.text,
+          textShadow: theme === "dark" ? "0 0 40px rgba(207,163,58,0.45), 0 2px 14px rgba(0,0,0,0.9)" : "none" }}>
           府中六小<br />ミニバスケットボールクラブ
         </div>
         <div className="mt-2" style={{ fontSize: 10, letterSpacing: "0.18em",
-          color: theme === "dark" ? "#4A6080" : "#8FA0C0" }}>
+          color: CT.sub }}>
           TOKYO &nbsp;·&nbsp; MINIBASKETBALL TEAM
         </div>
         <div className="rounded-full my-4"
@@ -961,12 +969,12 @@ export default function App() {
             background: `linear-gradient(90deg,transparent,${CT.orange},transparent)`,
             animation: "splashLine 1s ease-out .3s both" }} />
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17,
-          color: "#8FA0C0", letterSpacing: "0.3em", paddingLeft: "0.3em" }}>
+          color: CT.sub, letterSpacing: "0.3em", paddingLeft: "0.3em" }}>
           GAME MANAGEMENT
         </div>
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 12,
           color: CT.orange, letterSpacing: "0.38em", paddingLeft: "0.38em", marginTop: 3,
-          textShadow: theme === "dark" ? "0 0 10px rgba(232,96,42,0.6)" : "none" }}>
+          textShadow: theme === "dark" ? "0 0 10px rgba(207,163,58,0.6)" : "none" }}>
           APP
         </div>
       </div>
@@ -1050,7 +1058,7 @@ export default function App() {
         <div className="flex gap-2">
           <button className="flex-1 py-2.5 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }}
             onClick={() => { setShowLogin(false); setLoginInput(""); setLoginErr(false); }}>キャンセル</button>
-          <button className="flex-1 py-2.5 rounded-xl font-bold text-white" style={{ background: C.orange }}
+          <button className="flex-1 py-2.5 rounded-xl font-bold text-white" style={{ background: C.orange, color: C.onOrange }}
             onClick={() => { if (!login(loginInput)) setLoginErr(true); else { setShowLogin(false); setLoginInput(""); } }}>ログイン</button>
         </div>
       </div>
@@ -1129,7 +1137,7 @@ export default function App() {
               {NAV_ITEMS.map(({ t, icon: I, label }) => (
                 <button key={t} onClick={() => { setTab(t); setNav({}); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors"
-                  style={tab === t ? { background: C.orange, color: "#fff" } : { color: C.sub }}>
+                  style={tab === t ? { background: C.orange, color: C.onOrange } : { color: C.sub }}>
                   <I size={18} />
                   {label}
                 </button>
@@ -1175,6 +1183,309 @@ export default function App() {
       )}
     </div>
     </ThemeCtx.Provider>
+  );
+}
+
+// ===== 大会結果の表示ラベル(ホームの「次の大会」カード等で使用) =====
+const TOURNAMENT_RANK_LABELS = { "1": "優勝", "2": "準優勝", "3": "3位", best4: "ベスト4", best8: "ベスト8", best16: "ベスト16", group_loss: "予選G敗退" };
+const rankLabelOf = (res) => {
+  if (res?.type === "tournament") return TOURNAMENT_RANK_LABELS[res.data?.myRank] || null;
+  if (res?.type === "league" && res.data?.myRank) return `リーグ${res.data.myRank}位`;
+  return null;
+};
+const localDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// 「第12回」「2025」「令和7年度」などを取り除いて、毎年の同じ大会かどうかを判定するための名前
+const tourBaseName = (s) => String(s || "")
+  .replace(/[\s　]/g, "")
+  .replace(/令和[0-9０-９元]+年度?|R[0-9]+年度?/g, "")
+  .replace(/(19|20)[0-9]{2}(年度?)?/g, "")
+  .replace(/第[0-9０-９一二三四五六七八九十百]+回/g, "")
+  .replace(/[（(][^）)]*[）)]/g, "");
+
+// ===== 試合詳細ヘッダー(中継グラフィック風) =====
+function GameHero({ g, own, opp, oppName, oppLogo, ownName, mips, isIntramural, isSelectTeam }) {
+  const C = useC();
+  const isLight = C.bg === LIGHT.bg;
+  const cat = gameCatOf(g.category);
+  const periods = periodsOf(g);
+  const result = isIntramural ? null : own > opp ? "WIN" : own < opp ? "LOSE" : "DRAW";
+  const resBg = result === "WIN" ? C.win : result === "LOSE" ? C.loss : C.sub;
+  const bebas = { fontFamily: "'Bebas Neue',sans-serif" };
+  const chip = isLight ? { background: "rgba(255,255,255,.8)", color: C.text } : { background: "rgba(0,0,0,.45)", color: "#fff" };
+  const metaItems = [
+    cat.badge,
+    g.tournament || null,
+    g.date ? g.date.replace(/^\d{4}-/, "").replace("-", "/") : null,
+    `${g.qLen}分×${regQOf(g)}Q${g.ot ? `+OT${g.ot}` : ""}`,
+  ].filter(Boolean);
+  return (
+    <div>
+      <div className="relative rounded-2xl overflow-hidden" style={{ height: 212, background: C.card, border: `1px solid ${C.border}` }}>
+        {/* 自チーム(左・メインカラー) */}
+        <div className="absolute top-0 bottom-0 left-0" style={{ width: "58%", color: C.panelText1,
+          background: `linear-gradient(160deg, ${C.panelOrange1}, ${C.panelOrange2})`, clipPath: "polygon(0 0,100% 0,78% 100%,0 100%)" }}>
+          <div className="absolute select-none pointer-events-none" style={{ ...bebas, left: 6, top: -8, fontSize: 124, lineHeight: 1, color: C.panelWm }}>{isSelectTeam ? "S" : "6"}</div>
+          <div className="absolute text-xs font-black truncate" style={{ left: 16, top: 50, maxWidth: "70%" }}>{ownName || "府中六小"}</div>
+          <div className="absolute" style={{ ...bebas, left: 16, top: 64, fontSize: 80, lineHeight: 1 }}>{own}</div>
+        </div>
+        {/* 相手(右・サブカラー) */}
+        <div className="absolute top-0 bottom-0 right-0" style={{ width: "58%", color: C.panelText2,
+          background: `linear-gradient(200deg, ${C.panelBlue1}, ${C.panelBlue2})`, clipPath: "polygon(22% 0,100% 0,100% 100%,0 100%)" }}>
+          <div className="absolute select-none pointer-events-none" style={{ ...bebas, right: 6, top: -8, fontSize: 124, lineHeight: 1, color: C.panelWm }}>VS</div>
+          <div className="absolute flex items-center justify-end gap-1 text-xs font-black" style={{ right: 16, top: 50, maxWidth: "70%" }}>
+            {oppLogo && <img src={oppLogo} alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />}
+            <span className="truncate">{oppName}</span>
+          </div>
+          <div className="absolute text-right" style={{ ...bebas, right: 16, top: 64, fontSize: 80, lineHeight: 1, opacity: 0.85 }}>{opp}</div>
+        </div>
+        {/* 試合情報 */}
+        <div className="absolute left-0 right-0 flex flex-wrap justify-center gap-1 px-3" style={{ top: 10, zIndex: 3 }}>
+          {metaItems.map((m, i) => (
+            <span key={i} className="text-[10px] font-bold px-2 py-0.5 rounded-full truncate" style={{ ...chip, maxWidth: 170 }}>{m}</span>
+          ))}
+        </div>
+        {/* 勝敗バッジ */}
+        {result && (
+          <div className="absolute" style={{ left: "50%", top: 96, transform: "translateX(-50%)", zIndex: 3, ...bebas, fontSize: 22,
+            letterSpacing: ".2em", background: resBg, color: "#fff", padding: "3px 10px 1px 14px", borderRadius: 6, boxShadow: "0 4px 14px rgba(0,0,0,.3)" }}>
+            {result}
+          </div>
+        )}
+        {/* Q別スコア */}
+        {periods > 0 && (
+          <div className="absolute left-0 right-0 bottom-0 flex justify-center gap-1 px-2 py-2" style={{ zIndex: 3,
+            background: isLight ? "linear-gradient(0deg, rgba(255,255,255,.92), transparent)" : "linear-gradient(0deg, rgba(0,0,0,.6), transparent)" }}>
+            {Array.from({ length: periods }, (_, i) => (
+              <div key={i} className="text-center" style={{ width: 46, color: isLight ? C.text : "#fff" }}>
+                <div className="text-[9px]" style={{ opacity: 0.75 }}>{periodLabel2(g, i + 1)}</div>
+                <div style={{ ...bebas, fontSize: 16, lineHeight: 1.1 }}>
+                  {g.qScores?.own?.[i] || 0}<span style={{ opacity: 0.55 }}>-</span>{g.qScores?.opp?.[i] || 0}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {(mips || []).map(({ p, s }) => (
+        <div key={p.id} className="flex items-center gap-3 mt-2 px-3 py-2 rounded-xl" style={{ background: C.card, border: `1px solid ${C.led}55` }}>
+          <Avatar p={p} size={42} />
+          <div className="min-w-0">
+            <div style={{ ...bebas, color: C.led, letterSpacing: ".18em", fontSize: 15, lineHeight: 1 }}>MIP</div>
+            <div className="text-sm font-black truncate">#{p.number} {p.codename || p.name}</div>
+          </div>
+          <div className="ml-auto flex gap-3 shrink-0 text-center">
+            {[[s.pts, "PTS"], [s.reb, "REB"], [s.ast, "AST"], [s.eff, "EFF"]].map(([v, l]) => (
+              <div key={l}>
+                <div style={{ ...bebas, fontSize: 20, lineHeight: 1, color: l === "EFF" ? C.led : C.text }}>{v}</div>
+                <div className="text-[8px]" style={{ color: C.sub }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ===== ホーム: 次の大会カード =====
+function NextTournamentCard({ data, setTab, setNav }) {
+  const C = useC();
+  const bebas = { fontFamily: "'Bebas Neue',sans-serif" };
+  const todayStr = localDateStr();
+  const all = data.tournaments || [];
+  const dated = all.filter((t) => t.participating !== false && (t.dateFrom || t.dateTo));
+  const startOf = (t) => t.dateFrom || t.dateTo;
+  const endOf = (t) => t.dateTo || t.dateFrom;
+  const ongoing = dated.find((t) => startOf(t) <= todayStr && endOf(t) >= todayStr);
+  const upcoming = dated.filter((t) => startOf(t) > todayStr).sort((a, b) => startOf(a).localeCompare(startOf(b)))[0];
+  const next = ongoing || upcoming;
+  if (!next) return null;
+  const dayMs = 86400000;
+  const days = Math.round((Date.parse(startOf(next)) - Date.parse(todayStr)) / dayMs);
+  const lastEnded = dated.filter((t) => endOf(t) < todayStr).sort((a, b) => endOf(b).localeCompare(endOf(a)))[0];
+  const progress = !ongoing && lastEnded
+    ? Math.min(1, Math.max(0, (Date.parse(todayStr) - Date.parse(endOf(lastEnded))) / Math.max(dayMs, Date.parse(startOf(next)) - Date.parse(endOf(lastEnded)))))
+    : null;
+  const fmtD = (s) => (s ? s.replace(/^\d{4}-/, "").replace("-", "/") : "");
+  const wd = (s) => (s ? "日月火水木金土"[new Date(s + "T00:00:00").getDay()] : "");
+  const dateLabel = next.dateTo && next.dateTo !== next.dateFrom && next.dateFrom
+    ? `${fmtD(next.dateFrom)}(${wd(next.dateFrom)}) 〜 ${fmtD(next.dateTo)}(${wd(next.dateTo)})`
+    : `${fmtD(startOf(next))}(${wd(startOf(next))})`;
+
+  // 前回大会(同じ大会の過去の回)
+  const base = tourBaseName(next.name);
+  const prev = all.filter((t) => t.id !== next.id && base && tourBaseName(t.name) === base && (startOf(t) || "") < startOf(next))
+    .sort((a, b) => (startOf(b) || "").localeCompare(startOf(a) || ""))[0];
+  let prevWL = null, prevVideos = [];
+  if (prev) {
+    const pg = data.games.filter((g) => g.tournament === prev.name);
+    let w = 0, l = 0;
+    pg.forEach((g) => { if (!gameCatOf(g.category).countWL) return; const p = gamePts(g); if (p.own > p.opp) w++; else if (p.own < p.opp) l++; });
+    if (w + l > 0) prevWL = `${w}勝${l}敗`;
+    pg.sort(gameOrderAsc).forEach((g) => {
+      const urls = Object.values(g.videos || {}).flatMap((v) => (Array.isArray(v) ? v : v ? [v] : []));
+      const u = urls.find((x) => ytId(x));
+      if (u) { const p = gamePts(g); prevVideos.push({ url: u, title: `vs ${data.opponents.find((o) => o.id === g.opponentId)?.name || "相手"} ${p.own}-${p.opp}` }); }
+    });
+    (prev.videoRecords || []).forEach((r) => {
+      if (ytId(r.url)) prevVideos.push({ url: r.url, title: `${r.category ? r.category + " " : ""}vs ${r.opponent || "相手"}${r.ownScore !== "" && r.ownScore != null ? ` ${r.ownScore}-${r.oppScore}` : ""}` });
+    });
+    prevVideos = prevVideos.slice(0, 6);
+  }
+  const prevRank = prev ? rankLabelOf(prev.result) : null;
+  const prevYear = prev ? (startOf(prev) || "").slice(0, 4) : "";
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+      <button className="w-full text-left relative px-4 pt-3.5 pb-3" onClick={() => { setTab("tournaments"); setNav({ tourId: next.id }); }}
+        style={{ background: `linear-gradient(135deg, ${C.orange}2E, transparent 70%)` }}>
+        <div className="text-[13px] tracking-[.22em]" style={{ ...bebas, color: C.orange }}>{ongoing ? "NOW ON" : "NEXT TOURNAMENT"}</div>
+        <div className="text-base font-black leading-snug mt-0.5" style={{ paddingRight: 92 }}>{next.name}</div>
+        <div className="text-[11px] mt-1" style={{ color: C.sub }}>📅 {dateLabel}</div>
+        <div className="absolute text-center" style={{ right: 14, top: 10 }}>
+          {ongoing ? (
+            <>
+              <div className="text-[10px] font-bold" style={{ color: C.sub }}>ただいま</div>
+              <div style={{ ...bebas, fontSize: 40, lineHeight: 1, color: C.orange }}>開催中</div>
+            </>
+          ) : days === 0 ? (
+            <div style={{ ...bebas, fontSize: 48, lineHeight: 1.1, color: C.orange }}>TODAY</div>
+          ) : (
+            <>
+              <div className="text-[10px] font-bold" style={{ color: C.sub }}>開幕まで</div>
+              <div style={{ ...bebas, fontSize: 60, lineHeight: 0.9, color: C.orange }}>{days}</div>
+              <div className="text-[11px] font-black" style={{ color: C.orange }}>DAYS</div>
+            </>
+          )}
+        </div>
+      </button>
+      {progress !== null && (
+        <div className="px-4">
+          <div className="h-1 rounded-full overflow-hidden" style={{ background: C.card2 }}>
+            <div className="h-full rounded-full" style={{ width: `${progress * 100}%`, background: `linear-gradient(90deg, ${C.orange}, ${C.led})` }} />
+          </div>
+          <div className="flex justify-between text-[9px] mt-1" style={{ color: C.sub }}>
+            <span>前の大会 {fmtD(endOf(lastEnded))} 終了</span><span>{fmtD(startOf(next))} 開幕</span>
+          </div>
+        </div>
+      )}
+      {prev && (prevRank || prevWL || prevVideos.length > 0) && (
+        <div className="px-4 pt-3 pb-3.5">
+          <button className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left" style={{ background: C.card2 }}
+            onClick={() => { setTab("tournaments"); setNav({ tourId: prev.id }); }}>
+            <div>
+              <div className="text-[10px]" style={{ color: C.sub }}>前回大会{prevYear ? `(${prevYear})` : ""}</div>
+              <div className="text-sm font-black">{prevWL || "成績"}</div>
+            </div>
+            {prevRank && <div className="ml-auto text-2xl" style={{ ...bebas, color: C.led }}>{prevRank}</div>}
+          </button>
+          {prevVideos.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto mt-2.5 -mx-4 px-4" style={{ scrollbarWidth: "none" }}>
+              {prevVideos.map((v, i) => (
+                <a key={i} href={v.url} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-lg overflow-hidden"
+                  style={{ width: 140, background: C.card2, border: `1px solid ${C.border}` }}>
+                  <div className="relative" style={{ height: 78, background: "#000" }}>
+                    <img src={`https://img.youtube.com/vi/${ytId(v.url)}/mqdefault.jpg`} alt="" className="w-full h-full object-cover" style={{ opacity: 0.85 }} />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="rounded-full flex items-center justify-center" style={{ width: 28, height: 28, background: "rgba(0,0,0,.55)" }}>
+                        <div style={{ width: 0, height: 0, marginLeft: 3, borderLeft: "10px solid #fff", borderTop: "6px solid transparent", borderBottom: "6px solid transparent" }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-[10px] font-bold px-2 py-1.5 truncate" style={{ color: C.text }}>{v.title}</div>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== 選手一覧: カード表示 =====
+function PlayerCardGrid({ players, data, isSelectTeam, setNav, isPC }) {
+  const C = useC();
+  const bebas = { fontFamily: "'Bebas Neue',sans-serif" };
+  const rows = players.map((p) => ({ p, c: careerStats(data.games, p.id, isSelectTeam) }));
+  const KEYS = [["pts", "PTS"], ["reb", "REB"], ["ast", "AST"]];
+  const teamAvg = {};
+  KEYS.forEach(([k]) => {
+    const vals = rows.filter((r) => r.c.n > 0).map((r) => r.c.totAdj[k] || 0);
+    teamAvg[k] = vals.length ? vals.reduce((a, v) => a + v, 0) / vals.length : 0;
+  });
+  // その選手が一番得意な項目 = チーム平均に対して一番上回っている項目
+  const bestKey = (c) => {
+    if (!c.n) return null;
+    let best = null, bestR = 0;
+    KEYS.forEach(([k]) => { const v = c.totAdj[k] || 0; if (teamAvg[k] > 0 && v > 0) { const r = v / teamAvg[k]; if (r > bestR) { bestR = r; best = k; } } });
+    return best;
+  };
+  return (
+    <div className={`grid gap-2 ${isPC ? "grid-cols-4" : "grid-cols-2"}`}>
+      {rows.map(({ p, c }, i) => {
+        const isA = i % 2 === 0;
+        const bk = bestKey(c);
+        return (
+          <button key={p.id} className="text-left rounded-xl overflow-hidden" onClick={() => setNav({ playerId: p.id })}
+            style={{ background: C.card, border: `1px solid ${C.border}` }}>
+            <div className="relative" style={{ height: 112, color: isA ? C.panelText1 : C.panelText2,
+              background: `linear-gradient(160deg, ${isA ? C.panelOrange1 : C.panelBlue1}, ${isA ? C.panelOrange2 : C.panelBlue2})` }}>
+              <div className="absolute select-none pointer-events-none" style={{ ...bebas, left: 8, top: -6, fontSize: 86, lineHeight: 1, color: C.panelWm }}>{p.number}</div>
+              {p.grade && <div className="absolute text-[9px] font-black px-2 py-0.5 rounded-full" style={{ right: 8, top: 8, background: "rgba(0,0,0,.3)", color: "#fff" }}>{p.grade}年</div>}
+              <div className="absolute" style={{ right: 10, bottom: 8 }}><Avatar p={p} size={66} /></div>
+              <div className="absolute left-0 right-0 bottom-0" style={{ height: 22, background: C.card, clipPath: "polygon(0 100%,100% 30%,100% 100%)" }} />
+            </div>
+            <div className="px-2.5 pb-2.5">
+              <div className="text-[10px] tracking-wider" style={{ ...bebas, color: C.sub }}>#{p.number}{isSelectTeam && p.team ? ` ・ ${p.team}` : ""}</div>
+              <div className="text-sm font-black truncate">{p.codename || p.name}</div>
+              <div className="flex mt-1.5 pt-1.5" style={{ borderTop: `1px solid ${C.border}` }}>
+                {KEYS.map(([k, l]) => (
+                  <div key={k} className="flex-1 text-center">
+                    <div style={{ ...bebas, fontSize: 19, lineHeight: 1, color: bk === k ? C.orange : C.text }}>{c.n ? fmt1(c.totAdj[k]) : "–"}</div>
+                    <div className="text-[8px]" style={{ color: C.sub }}>{l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ===== 読み込み中のスケルトン表示 =====
+function LoadingSkeleton({ C, isPC }) {
+  const sk = (w, h, extra = {}) => <div className="sk-shimmer" style={{ width: w, height: h, borderRadius: 8, ...extra }} />;
+  const card = (children) => <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>{children}</div>;
+  return (
+    <div className="min-h-screen" style={{ background: C.bg }}>
+      <style>{`
+        @keyframes skShimmer { 0% { background-position: -320px 0; } 100% { background-position: 320px 0; } }
+        .sk-shimmer { background: linear-gradient(90deg, ${C.skel} 0%, ${C.skel2} 50%, ${C.skel} 100%); background-size: 640px 100%; animation: skShimmer 1.3s linear infinite; }
+      `}</style>
+      <div className="px-4 py-3 flex items-center gap-2.5" style={{ background: C.nav, borderBottom: `1px solid ${C.border}` }}>
+        {sk(32, 32, { borderRadius: "50%" })}{sk(140, 14)}
+      </div>
+      <div className={isPC ? "max-w-4xl mx-auto p-6 space-y-3" : "max-w-md mx-auto px-3 pt-3 space-y-3"}>
+        {card(<>
+          {sk("45%", 10)}
+          <div className="flex justify-center gap-8 my-4">{sk(52, 64)}{sk(52, 64)}</div>
+          <div className="flex justify-around pt-3" style={{ borderTop: `1px solid ${C.border}` }}>{sk(40, 22)}{sk(40, 22)}{sk(40, 22)}</div>
+        </>)}
+        {card(<>
+          {sk("55%", 10, { marginBottom: 12 })}
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex gap-3 items-center mb-2.5">
+              {sk(92, 70, { borderRadius: "10px 0 0 10px" })}
+              <div className="flex-1 space-y-2">{sk("60%", 12)}{sk("90%", 10)}</div>
+            </div>
+          ))}
+        </>)}
+        {card(<>{sk("40%", 10, { marginBottom: 12 })}{sk("100%", 54)}</>)}
+      </div>
+    </div>
   );
 }
 
@@ -1232,6 +1543,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
 
   return (
     <div className={isPC ? "grid grid-cols-2 gap-5" : "space-y-3"}>
+      <div className={isPC ? "col-span-2" : ""}><NextTournamentCard data={data} setTab={setTab} setNav={setNav} /></div>
       <Card className={isPC ? "col-span-2" : ""}>
         <SectionTitle>シーズン成績{refCount > 0 ? `(参考試合${refCount}試合を除く)` : ""}</SectionTitle>
         <div className="flex items-end justify-center gap-8 py-1" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
@@ -1273,7 +1585,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
                       clipPath: "polygon(0 0, 100% 0, 82% 100%, 0 100%)",
                     }}>
                     <div className="absolute select-none pointer-events-none"
-                      style={{ left: 4, top: -14, fontSize: 100, fontFamily: "'Bebas Neue',sans-serif", color: "#ffffff33", lineHeight: 1 }}>
+                      style={{ left: 4, top: -14, fontSize: 100, fontFamily: "'Bebas Neue',sans-serif", color: C.panelWm, lineHeight: 1 }}>
                       {st.p.number}
                     </div>
                     <div className="absolute left-1/2" style={{ bottom: 0, transform: "translateX(-50%)" }}>
@@ -1414,7 +1726,7 @@ function PlayerForm({ initial, onSave, onCancel, isSelectTeam }) {
       )}
       <div className="flex gap-2 mt-1">
         <button className="flex-1 py-3 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }} onClick={onCancel}>キャンセル</button>
-        <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange }}
+        <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange, color: C.onOrange }}
           disabled={!f.name || !f.number} onClick={() => onSave({ ...f, targets: targets.filter((t) => t.value !== "") })}>保存する</button>
       </div>
     </Card>
@@ -1425,6 +1737,8 @@ function PlayerList({ data, save, setNav, isPC, isAdmin, isSelectTeam }) {
   const C = useC();
   const [adding, setAdding] = useState(false);
   const players = [...data.players].sort((a, b) => (+a.number || 0) - (+b.number || 0));
+  const [view, setView] = useState(() => { try { return localStorage.getItem("minibasket_playerView") || "list"; } catch { return "list"; } });
+  const changeView = (v) => { setView(v); try { localStorage.setItem("minibasket_playerView", v); } catch {} };
   if (adding) return (
     <PlayerForm isSelectTeam={isSelectTeam} onCancel={() => setAdding(false)}
       onSave={(f) => { save({ ...data, players: [...data.players, { ...f, id: uid() }] }); setAdding(false); }} />
@@ -1432,13 +1746,25 @@ function PlayerList({ data, save, setNav, isPC, isAdmin, isSelectTeam }) {
   return (
     <div className="space-y-3">
       {isAdmin && <button onClick={() => setAdding(true)}
-        className="w-full flex items-center justify-center gap-1 py-3 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.orange }}
+        className="w-full flex items-center justify-center gap-1 py-3 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.orange, color: C.onOrange }}
         disabled={players.length >= MAX_PLAYERS}>
         <Plus size={18} /> 選手を追加 {players.length >= MAX_PLAYERS ? `(上限${MAX_PLAYERS}人)` : ""}
       </button>}
       {players.length === 0 && (
         <Card className="text-center text-sm py-8" style={{ color: C.sub }}>選手を登録すると、ここに一覧が表示されます。</Card>
       )}
+      {players.length > 0 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-black">選手({players.length}人)</div>
+          <div className="flex rounded-lg overflow-hidden text-[11px] font-bold" style={{ border: `1px solid ${C.border}` }}>
+            {[["list", "リスト"], ["card", "カード"]].map(([k, l]) => (
+              <button key={k} className="px-3 py-1" onClick={() => changeView(k)}
+                style={view === k ? { background: C.orange, color: C.onOrange } : { background: C.card, color: C.sub }}>{l}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {view === "card" ? <PlayerCardGrid players={players} data={data} isSelectTeam={isSelectTeam} setNav={setNav} isPC={isPC} /> : (
       <div className={isPC ? "grid grid-cols-2 gap-3" : "space-y-2"}>
         {players.map((p) => {
           const c = careerStats(data.games, p.id, isSelectTeam);
@@ -1463,6 +1789,7 @@ function PlayerList({ data, save, setNav, isPC, isAdmin, isSelectTeam }) {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
@@ -1969,7 +2296,7 @@ function GameForm({ data, initial, onSave, onCancel, isSelectTeam }) {
       </div>
       <div className="flex gap-2">
         <button className="flex-1 py-3 rounded-xl font-bold" style={{ border: `1px solid ${C.border}`, color: C.sub }} onClick={onCancel}>キャンセル</button>
-        <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange }}
+        <button className="flex-1 py-3 rounded-xl text-white font-bold disabled:opacity-40" style={{ background: C.orange, color: C.onOrange }}
           disabled={!f.date || (!isIntramural && !f.opponentId && (!f.newOpp || oppFull))} onClick={handleSave}>保存する</button>
       </div>
     </Card>
@@ -2223,7 +2550,7 @@ function GameList({ data, save, setNav, oppName, getOpp, isPC, isAdmin, isSelect
   return (
     <div className="space-y-3">
       {isAdmin && <button onClick={() => setAdding(true)}
-        className="w-full flex items-center justify-center gap-1 py-3 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.orange }}
+        className="w-full flex items-center justify-center gap-1 py-3 rounded-2xl font-bold text-white disabled:opacity-40" style={{ background: C.orange, color: C.onOrange }}
         disabled={games.length >= MAX_GAMES}>
         <Plus size={18} /> 試合を登録 {games.length >= MAX_GAMES ? `(上限${MAX_GAMES}試合)` : ""}
       </button>}
@@ -2459,44 +2786,13 @@ function GameDetail({ data, save, nav, setNav, oppName, getOpp, isAdmin, setGame
           </button>
         </div>
       )}
-      <div className="px-1 text-xs" style={{ color: C.sub }}>{g.tournament || "練習試合"}{g.ot ? `・OT${g.ot}(${g.otLen}分)` : ""}・Q{g.qLen}分</div>
-      <ScoreBoard own={own} opp={opp} oppName={isSelectTeam && cat.isIntramural ? "白組" : oppName(g.opponentId)}
-        oppLogo={getOpp(g.opponentId)?.logo} date={g.date} qScores={g.qScores} periods={periodsOf(g)} game={g}
+      <GameHero g={g} own={own} opp={opp} mips={mips} isIntramural={cat.isIntramural} isSelectTeam={isSelectTeam}
+        oppName={isSelectTeam && cat.isIntramural ? "白組" : oppName(g.opponentId)} oppLogo={getOpp(g.opponentId)?.logo}
         ownName={isSelectTeam ? (cat.isIntramural ? "紅組" : "府中選抜") : undefined} />
-      {mips.length > 0 && (
-        <div className="rounded-2xl p-4 relative overflow-hidden"
-          style={{ background: `linear-gradient(160deg, #3A2A0E, ${C.card} 55%)`, border: `1px solid ${C.led}55` }}>
-          <div className="absolute rounded-full pointer-events-none" style={{ top: -30, right: -30, width: 100, height: 100, background: `${C.led}1A` }} />
-          <div className="flex items-center gap-1.5 mb-3 relative">
-            <Award size={15} style={{ color: C.led }} />
-            <span className="text-[10px] font-black tracking-widest" style={{ color: C.led }}>
-              MIP
-            </span>
-          </div>
-          <div className="relative space-y-2.5">
-            {mips.map(({ p, s }, i) => (
-              <div key={p.id} className="flex items-center gap-3"
-                style={i < mips.length - 1 ? { paddingBottom: 10, borderBottom: `1px solid ${C.led}33` } : {}}>
-                <Avatar p={p} size={52} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[15px] font-black truncate">{p.codename || p.name}</div>
-                  <div className="text-[10px] mt-0.5" style={{ color: C.sub }}>
-                    {s.pts}得点・{s.reb}REB・{s.ast}AST・{s.stl}STL・{s.blk}BLK
-                  </div>
-                </div>
-                <div className="text-center shrink-0">
-                  <div className="text-2xl font-black leading-none" style={{ color: C.led, fontFamily: "'Bebas Neue',sans-serif" }}>{s.eff}</div>
-                  <div className="text-[8px] mt-0.5" style={{ color: C.sub }}>EFF</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       <div className="flex rounded-xl overflow-hidden text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
         {[...(isAdmin ? [["entry", "入力"]] : []), ["analysis", "概要"], ["media", "メディア"]].map(([k, l]) => (
           <button key={k} className="flex-1 py-2.5" onClick={() => setSub(k)}
-            style={sub === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
+            style={sub === k ? { background: C.orange, color: C.onOrange } : { background: C.card, color: C.sub }}>{l}</button>
         ))}
       </div>
       {sub === "entry" && isAdmin && <PlayByPlay data={data} save={save} game={g} oppName={oppName} isAdmin={isAdmin} isSelectTeam={isSelectTeam} updateGameById={updateGameById} />}
@@ -2696,7 +2992,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam, updateGa
             {Array.from({ length: periods }, (_, i) => i + 1).map((n) => (
               <button key={n} className="flex-1 min-w-14 py-2.5 rounded-lg font-bold"
                 style={q === n
-                  ? { background: C.orange, color: "#fff" }
+                  ? { background: C.orange, color: C.onOrange }
                   : qLocked
                     ? { background: C.card2, color: C.border, cursor: "not-allowed" }
                     : { background: C.card2, color: C.sub }}
@@ -2841,7 +3137,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam, updateGa
                     <button key={p.id} onClick={() => setSel(p.id)}
                       className="px-3 py-2 rounded-full text-sm font-bold"
                       style={sel === p.id
-                        ? { background: isDanger ? C.loss : isWarn ? "#D4A017" : chipActiveColor, color: "#fff" }
+                        ? { background: isDanger ? C.loss : isWarn ? "#D4A017" : chipActiveColor, color: (!isDanger && !isWarn && chipActiveColor === C.orange) ? C.onOrange : "#fff" }
                         : isDanger
                           ? { background: `${C.loss}30`, color: C.loss, border: `1px solid ${C.loss}` }
                           : isWarn
@@ -2957,7 +3253,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam, updateGa
             </div>
             <div className="flex gap-2">
               <button className="flex-1 py-2 rounded-xl text-sm font-bold"
-                style={editEvent.side === "own" ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
+                style={editEvent.side === "own" ? { background: C.orange, color: C.onOrange } : { border: `1px solid ${C.border}`, color: C.sub }}
                 onClick={() => setEditEvent({ ...editEvent, side: "own", oppNum: undefined })}>{isIntramural ? "紅組" : "自チーム"}</button>
               <button className="flex-1 py-2 rounded-xl text-sm font-bold"
                 style={editEvent.side === "opp" ? { background: C.oppBlue, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.sub }}
@@ -2972,7 +3268,7 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam, updateGa
                     onClick={() => setEditEvent(editEvent.side === "own" ? { ...editEvent, playerId: TEAM_KEY } : { ...editEvent, oppNum: TEAM_KEY })}>チーム</button>
                   {players.map((p) => (
                     <button key={p.id} className="px-3 py-1.5 rounded-full text-xs font-bold"
-                      style={(editEvent.side === "own" ? editEvent.playerId : editEvent.oppNum) === p.id ? { background: C.orange, color: "#fff" } : { border: `1px solid ${C.border}`, color: C.text }}
+                      style={(editEvent.side === "own" ? editEvent.playerId : editEvent.oppNum) === p.id ? { background: C.orange, color: C.onOrange } : { border: `1px solid ${C.border}`, color: C.text }}
                       onClick={() => setEditEvent(editEvent.side === "own" ? { ...editEvent, playerId: p.id } : { ...editEvent, oppNum: p.id })}>
                       #{p.number} {p.codename || p.name}
                     </button>
@@ -2985,14 +3281,14 @@ function PlayByPlay({ data, save, game, oppName, isAdmin, isSelectTeam, updateGa
               <div className="grid grid-cols-4 gap-1.5">
                 {ACTIONS.filter((a) => !a.sub).map((a) => (
                   <button key={a.k} className="py-2 rounded-xl text-xs font-bold"
-                    style={editEvent.action === a.k ? { background: a.good ? C.win : a.bad ? C.loss : C.orange, color: "#fff" }
+                    style={editEvent.action === a.k ? { background: a.good ? C.win : a.bad ? C.loss : C.orange, color: (a.good || a.bad) ? "#fff" : C.onOrange }
                       : { border: `1px solid ${C.border}`, color: C.sub }}
                     onClick={() => setEditEvent({ ...editEvent, action: a.k })}>{a.label}</button>
                 ))}
               </div>
             </div>
             <button className="w-full py-3 rounded-xl font-bold text-white mt-2"
-              style={{ background: C.orange }} onClick={() => saveEditEvent(editEvent)}>
+              style={{ background: C.orange, color: C.onOrange }} onClick={() => saveEditEvent(editEvent)}>
               保存する
             </button>
           </div>
@@ -3288,7 +3584,7 @@ function ReportView({ data, game, mode, oppName, onClose }) {
   const rootRef = useRef(null);
   const downloadHTML = () => {
     const inner = rootRef.current?.innerHTML || "";
-    const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>${title} ${game.date || ""}</title><style>body{font-family:sans-serif;margin:24px;color:#111;max-width:760px}h1{font-size:20px}h2{font-size:15px;border-left:4px solid #E8632C;padding-left:8px;margin-top:24px;font-weight:700}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 6px;font-size:12px;text-align:left}th{background:#f3f4f6}ul{font-size:13px;padding-left:20px}p{font-size:13px}</style></head><body>${inner}</body></html>`;
+    const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>${title} ${game.date || ""}</title><style>body{font-family:sans-serif;margin:24px;color:#111;max-width:760px}h1{font-size:20px}h2{font-size:15px;border-left:4px solid #B08020;padding-left:8px;margin-top:24px;font-weight:700}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 6px;font-size:12px;text-align:left}th{background:#f3f4f6}ul{font-size:13px;padding-left:20px}p{font-size:13px}</style></head><body>${inner}</body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const el = document.createElement("a");
@@ -3297,7 +3593,7 @@ function ReportView({ data, game, mode, oppName, onClose }) {
   };
   const th = { border: "1px solid #ccc", padding: "4px 6px", fontSize: 12, textAlign: "left", background: "#f3f4f6" };
   const td = { border: "1px solid #ccc", padding: "4px 6px", fontSize: 12 };
-  const T = ({ children }) => <h2 style={{ fontSize: 15, borderLeft: "4px solid #E8632C", paddingLeft: 8, marginTop: 24, marginBottom: 8, fontWeight: 700 }}>{children}</h2>;
+  const T = ({ children }) => <h2 style={{ fontSize: 15, borderLeft: "4px solid #B08020", paddingLeft: 8, marginTop: 24, marginBottom: 8, fontWeight: 700 }}>{children}</h2>;
   const BoxTable = ({ rows }) => (
     <table style={{ borderCollapse: "collapse", width: "100%" }}>
       <thead><tr>{["選手","得点","FG","FT","OR","DR","AST","STL","BLK","TO","PF","分","+/-","EFF"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
@@ -3311,7 +3607,7 @@ function ReportView({ data, game, mode, oppName, onClose }) {
   return (
     <div className="report-root fixed inset-0 z-50 overflow-y-auto" style={{ background: "#fff", color: "#111" }}>
       <div className="no-print sticky top-0 flex items-center gap-2 px-4 py-3 shadow" style={{ background: "#fff", borderBottom: "1px solid #ddd" }}>
-        <button className="flex items-center gap-1 text-sm font-bold px-3 py-2 rounded-xl text-white" style={{ background: C.orange }} onClick={() => window.print()}><Printer size={16} /> 印刷 / PDF保存</button>
+        <button className="flex items-center gap-1 text-sm font-bold px-3 py-2 rounded-xl text-white" style={{ background: C.orange, color: C.onOrange }} onClick={() => window.print()}><Printer size={16} /> 印刷 / PDF保存</button>
         <button className="flex items-center gap-1 text-sm font-bold px-3 py-2 rounded-xl" style={{ border: "1px solid #ccc", color: "#333" }} onClick={downloadHTML}><Download size={16} /> HTML</button>
         <button className="ml-auto p-2" style={{ color: "#555" }} onClick={onClose}><X size={20} /></button>
       </div>
@@ -3341,7 +3637,7 @@ function ReportView({ data, game, mode, oppName, onClose }) {
           <>
             <p style={{ fontWeight: 700, marginBottom: 4, fontSize: 13, color: "#1B8A52" }}>【良かった点】</p>
             <ul style={{ fontSize: 13, paddingLeft: 20, margin: "4px 0" }}>{a.goodPoints.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}</ul>
-            <p style={{ fontWeight: 700, marginBottom: 4, fontSize: 13, color: "#E8632C" }}>【改善点】</p>
+            <p style={{ fontWeight: 700, marginBottom: 4, fontSize: 13, color: "#B08020" }}>【改善点】</p>
             <ul style={{ fontSize: 13, paddingLeft: 20, margin: "4px 0" }}>{a.improvePoints.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}</ul>
           </>
         )}
@@ -3429,7 +3725,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin, updateGame
       <div className="flex gap-1.5 overflow-x-auto">
         {[["all", "全体"], ...Array.from({ length: a.periods }, (_, i) => [i + 1, periodLabel2(game, i + 1)])].map(([k, l]) => (
           <button key={k} className="flex-1 min-w-12 py-2 rounded-lg font-bold text-sm"
-            style={scope === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub, border: `1px solid ${C.border}` }}
+            style={scope === k ? { background: C.orange, color: C.onOrange } : { background: C.card, color: C.sub, border: `1px solid ${C.border}` }}
             onClick={() => setScope(k)}>{l}</button>
         ))}
       </div>
@@ -3476,7 +3772,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin, updateGame
         </Card>
       )}
       {scope === "all" && (() => {
-        const PLAYER_COLORS = ["#E8602A","#5B74A8","#3DBE7B","#FFB23E","#A855F7","#EC4899","#14B8A6","#F59E0B","#6366F1","#84CC16","#F87171","#67E8F9"];
+        const PLAYER_COLORS = ["#CFA33A","#5B74A8","#3DBE7B","#FFB23E","#A855F7","#EC4899","#14B8A6","#F59E0B","#6366F1","#84CC16","#F87171","#67E8F9"];
         const ptRows = data.players.map((p, i) => {
           const { map } = courtIntervals(game.events, "own", p.id, game);
           let mins = 0;
@@ -3596,7 +3892,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin, updateGame
           </div>
           <div className="pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
             <div className="text-sm font-bold mb-2 flex items-center gap-1.5" style={{ color: C.orange }}>
-              <span className="px-2 py-0.5 rounded text-white text-xs" style={{ background: C.orange }}>NEXT</span> 改善点
+              <span className="px-2 py-0.5 rounded text-white text-xs" style={{ background: C.orange, color: C.onOrange }}>NEXT</span> 改善点
             </div>
             <ul className="text-sm space-y-2">
               {a.improvePoints.map((s, i) => (
@@ -3633,7 +3929,7 @@ function GameAnalysis({ data, save, game, oppName, onReport, isAdmin, updateGame
           </div>
           <div className="pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
             <div className="text-sm font-bold mb-2 flex items-center gap-1.5" style={{ color: C.orange }}>
-              <span className="px-2 py-0.5 rounded text-white text-xs" style={{ background: C.orange }}>NEXT</span> 改善点
+              <span className="px-2 py-0.5 rounded text-white text-xs" style={{ background: C.orange, color: C.onOrange }}>NEXT</span> 改善点
             </div>
             <ul className="text-sm space-y-2">
               {a.oppImprovePoints.map((s, i) => (
@@ -3745,7 +4041,7 @@ function Ranking({ data, setTab, setNav, isSelectTeam }) {
           <div className="flex rounded-xl overflow-hidden shrink-0 text-sm font-bold" style={{ border: `1px solid ${C.border}` }}>
             {[["total", "合計"], ["avg", "平均"]].map(([k, l]) => (
               <button key={k} className="px-4" onClick={() => setMode(k)}
-                style={mode === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{l}</button>
+                style={mode === k ? { background: C.orange, color: C.onOrange } : { background: C.card, color: C.sub }}>{l}</button>
             ))}
           </div>
         )}
@@ -3897,7 +4193,7 @@ function TournamentStats({ data, mainGames, selectGames, selectSeasonGames, setT
   return (
     <Card>
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-1 h-4 rounded-sm" style={{ background: C.orange }} />
+        <div className="w-1 h-4 rounded-sm" style={{ background: C.orange, color: C.onOrange }} />
         <div className="text-sm font-black tracking-wide">大会スタッツ</div>
         <div className="ml-auto text-xs tracking-[.15em]" style={{ ...bebas, color: C.sub }}>TOURNAMENT STATS</div>
       </div>
@@ -3963,7 +4259,7 @@ function TournamentStats({ data, mainGames, selectGames, selectSeasonGames, setT
             );
           })}
           <div className="flex gap-3 items-center text-[10px] mt-2" style={{ color: C.sub }}>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-1.5 rounded-full" style={{ background: C.orange }} />この大会の平均</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-1.5 rounded-full" style={{ background: C.orange, color: C.onOrange }} />この大会の平均</span>
             <span className="flex items-center gap-1"><span className="inline-block" style={{ width: 2, height: 10, background: C.text, opacity: 0.55 }} />シーズン平均</span>
           </div>
           <div className="text-[9px] mt-1" style={{ color: C.sub }}>
@@ -3980,11 +4276,11 @@ function TournamentStats({ data, mainGames, selectGames, selectSeasonGames, setT
                 {leaders.map(({ en, k, x }, i) => {
                   const from = i % 2 === 0 ? C.panelOrange1 : C.panelBlue1;
                   const to = i % 2 === 0 ? C.panelOrange2 : C.panelBlue2;
-                  const fg = isLight ? C.text : "#fff";
+                  const fg = i % 2 === 0 ? C.panelText1 : C.panelText2;
                   return (
                     <button key={en} className="relative shrink-0 overflow-hidden rounded-xl text-left" onClick={() => openPlayer(x.p)}
                       style={{ width: 118, height: 168, background: `linear-gradient(160deg, ${from}, ${to})`, color: fg }}>
-                      <div className="absolute select-none pointer-events-none" style={{ ...bebas, right: -6, bottom: 34, fontSize: 92, lineHeight: 1, color: isLight ? "#ffffff66" : "#ffffff22" }}>{x.p.number}</div>
+                      <div className="absolute select-none pointer-events-none" style={{ ...bebas, right: -6, bottom: 34, fontSize: 92, lineHeight: 1, color: C.panelWm }}>{x.p.number}</div>
                       <div className="absolute" style={{ right: 6, bottom: 34 }}><Avatar p={x.p} size={58} /></div>
                       <div className="absolute left-2.5 top-2 text-[13px] tracking-[.18em]" style={{ ...bebas, opacity: 0.9 }}>{en}</div>
                       <div className="absolute left-2.5 top-6 leading-none" style={{ ...bebas, fontSize: 44, textShadow: isLight ? "none" : "0 2px 10px rgba(0,0,0,.25)" }}>{fmt1(x.c.totAdj[k])}</div>
@@ -4008,7 +4304,7 @@ function TournamentStats({ data, mainGames, selectGames, selectSeasonGames, setT
               <div className="flex rounded-xl overflow-hidden shrink-0 text-xs font-bold" style={{ border: `1px solid ${C.border}` }}>
                 {[["total", "合計"], ["avg", "平均"]].map(([k, lb]) => (
                   <button key={k} className="px-3" onClick={() => setRkMode(k)}
-                    style={rkMode === k ? { background: C.orange, color: "#fff" } : { background: C.card, color: C.sub }}>{lb}</button>
+                    style={rkMode === k ? { background: C.orange, color: C.onOrange } : { background: C.card, color: C.sub }}>{lb}</button>
                 ))}
               </div>
             )}
@@ -4294,7 +4590,7 @@ function TournamentPage({ data, save, nav, setNav, setTab, oppName, isAdmin, onO
                           setLeagueTeams([...leagueData.teams, leagueTeam.trim()]); setLeagueTeam("");
                         }}} />
                       <button className="px-3 py-2 rounded-xl text-xs font-bold text-white"
-                        style={{ background: C.orange }}
+                        style={{ background: C.orange, color: C.onOrange }}
                         onClick={() => { if (leagueTeam.trim()) { setLeagueTeams([...leagueData.teams, leagueTeam.trim()]); setLeagueTeam(""); } }}>
                         追加
                       </button>
@@ -4549,7 +4845,7 @@ function TournamentPage({ data, save, nav, setNav, setTab, oppName, isAdmin, onO
               </div>
               <a href={selT.url} target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-center gap-1 mt-2 text-sm font-bold py-2.5 rounded-xl text-white"
-                style={{ background: C.orange }}>
+                style={{ background: C.orange, color: C.onOrange }}>
                 <Link2 size={14} /> ブラウザで開く ↗
               </a>
               {!isGdrive && (
@@ -4565,7 +4861,7 @@ function TournamentPage({ data, save, nav, setNav, setTab, oppName, isAdmin, onO
           <div className="flex items-center justify-between mb-2">
             <SectionTitle>動画記録</SectionTitle>
             {isAdmin && (
-              <button className="text-xs font-bold px-2.5 py-1 rounded-lg" style={{ background: C.orange, color: "#fff" }}
+              <button className="text-xs font-bold px-2.5 py-1 rounded-lg" style={{ background: C.orange, color: C.onOrange }}
                 onClick={() => { setVideoForm(emptyVideoForm); setEditVideoId(null); setAddingVideo(true); }}>
                 <span className="inline-flex items-center gap-1"><Plus size={12} /> 動画を追加</span>
               </button>
@@ -4674,7 +4970,7 @@ function TournamentPage({ data, save, nav, setNav, setTab, oppName, isAdmin, onO
                   value={videoForm.url} onChange={(e) => setVideoForm({ ...videoForm, url: e.target.value })} />
               </div>
               <button className="w-full py-3 rounded-xl font-bold text-white mt-2 disabled:opacity-40"
-                style={{ background: C.orange }}
+                style={{ background: C.orange, color: C.onOrange }}
                 disabled={!videoForm.category || !videoForm.opponent}
                 onClick={() => {
                   saveVideoRecord(selT.id, {
@@ -4715,7 +5011,7 @@ function TournamentPage({ data, save, nav, setNav, setTab, oppName, isAdmin, onO
                     }}>
                     <div className="mb-1 px-1 text-xs flex items-center gap-1.5" style={{ color: C.sub }}>
                       {isSel && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: C.orange }}>🎗️選抜</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: C.orange, color: C.onOrange }}>🎗️選抜</span>
                       )}
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: cat2.color }}>{cat2.badge}</span>
                       <span>{g.date}{g.ot ? `・OT${g.ot}` : ""}</span>
@@ -4791,7 +5087,7 @@ function TournamentPage({ data, save, nav, setNav, setTab, oppName, isAdmin, onO
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                             {dateStr && <span className="text-[9px]" style={{ color: isOngoing ? C.orange : C.sub }}>{dateStr}</span>}
-                            {isOngoing && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: C.orange, color: "#fff" }}>開催中</span>}
+                            {isOngoing && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: C.orange, color: C.onOrange }}>開催中</span>}
                             {t.auto && <span className="text-[8px] px-1.5 py-0.5 rounded" style={{ background: C.card, color: C.sub, border: `1px dashed ${C.border}` }}>自動</span>}
                           </div>
                           <div className="font-bold text-sm truncate">{t.name}</div>
