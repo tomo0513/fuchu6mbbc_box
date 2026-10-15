@@ -786,6 +786,66 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
   );
 }
 
+// ===== 季節の飾り: ハロウィン(10月のみ起動画面に表示) =====
+const isHalloweenSeason = (d = new Date()) => d.getMonth() === 9; // 10月
+function HalloweenDecor({ theme }) {
+  const dark = theme === "dark";
+  const batFill = dark ? "#050302" : "#2A2420";
+  const Bat = ({ w, style, delay }) => (
+    <div className="absolute pointer-events-none" style={{ ...style, zIndex: 2, animation: `hwFly 6s ease-in-out ${delay}s infinite` }}>
+      <svg width={w} height={w * 0.5} viewBox="0 0 100 50"
+        style={{ display: "block", transformOrigin: "center", animation: "hwFlap .35s ease-in-out infinite alternate",
+          filter: dark ? "drop-shadow(0 0 3px rgba(232,118,42,.75))" : "none" }}>
+        <path fill={batFill} d="M50 14c-3 0-5 3-6 6-4-6-12-12-22-12 3 4 4 8 3 12-6-3-14-3-20 0 7 3 12 9 14 16 5-4 11-5 16-3 1-4 4-7 8-7h14c4 0 7 3 8 7 5-2 11-1 16 3 2-7 7-13 14-16-6-3-14-3-20 0-1-4 0-8 3-12-10 0-18 6-22 12-1-3-3-6-6-6z" />
+      </svg>
+    </div>
+  );
+  return (
+    <>
+      <style>{`
+        @keyframes hwFlap { from { transform: scaleY(1); } to { transform: scaleY(.45); } }
+        @keyframes hwFly { 0%,100% { transform: translate(0,0); } 50% { transform: translate(14px,-10px); } }
+        @keyframes hwBounce { 0%,100% { transform: translate(-50%,0); } 50% { transform: translate(-50%,-14px); } }
+        @keyframes hwShadow { 0%,100% { width: 58px; opacity: .8; } 50% { width: 40px; opacity: .4; } }
+      `}</style>
+      {/* 紫とオレンジの光 */}
+      <div className="absolute pointer-events-none" style={{ top: -60, left: -60, width: 260, height: 260, borderRadius: "50%",
+        background: dark ? "rgba(126,74,170,.25)" : "rgba(126,74,170,.12)", filter: "blur(44px)" }} />
+      <div className="absolute pointer-events-none" style={{ bottom: -50, left: "50%", transform: "translateX(-50%)", width: 340, height: 170, borderRadius: "50%",
+        background: dark ? "rgba(232,118,42,.22)" : "rgba(232,118,42,.15)", filter: "blur(34px)", animation: "splashGlow 3s ease-in-out infinite" }} />
+      {/* クモの巣 */}
+      <svg className="absolute pointer-events-none" width="140" height="140" viewBox="0 0 120 120" style={{ top: 0, left: 0, zIndex: 2, opacity: dark ? 0.35 : 0.25 }}>
+        <path fill="none" stroke={dark ? "#F5EFE3" : "#1F1C14"} strokeWidth="1"
+          d="M0 0L120 60M0 0L90 120M0 0L40 120M0 0L120 20M30 15Q22 22 13 30M60 30Q45 45 26 60M90 45Q68 70 40 90M115 58Q85 95 55 115" />
+      </svg>
+      {/* 満月 */}
+      <div className="absolute pointer-events-none" style={{ top: "9%", right: "9%", width: 64, height: 64, borderRadius: "50%",
+        background: dark ? "#F6E7B0" : "#F3D88A", boxShadow: dark ? "0 0 46px 12px rgba(246,231,176,.35)" : "0 0 40px 10px rgba(243,216,138,.5)" }} />
+      {/* コウモリ */}
+      <Bat w={34} delay={-1} style={{ top: "12%", right: "26%" }} />
+      <Bat w={44} delay={-3} style={{ top: "20%", left: "10%" }} />
+      <Bat w={22} delay={-2} style={{ top: "8%", left: "48%" }} />
+      {/* かぼちゃ顔のバスケットボール */}
+      <div className="absolute pointer-events-none" style={{ bottom: 78, left: "50%", transform: "translateX(-50%)", height: 9, borderRadius: "50%",
+        background: dark ? "rgba(0,0,0,.4)" : "rgba(0,0,0,.15)", filter: "blur(2px)", animation: "hwShadow 1.6s ease-in-out infinite" }} />
+      <div className="absolute pointer-events-none" style={{ bottom: 86, left: "50%", zIndex: 2, animation: "hwBounce 1.6s ease-in-out infinite" }}>
+        <svg width="86" height="86" viewBox="0 0 100 100">
+          <defs>
+            <radialGradient id="hwPumpkin" cx="38%" cy="32%" r="70%">
+              <stop offset="0" stopColor="#FFA552" /><stop offset=".6" stopColor="#E8762A" /><stop offset="1" stopColor="#A9461A" />
+            </radialGradient>
+          </defs>
+          <rect x="46" y="2" width="8" height="12" rx="3" fill="#4C7A2A" />
+          <circle cx="50" cy="54" r="42" fill="url(#hwPumpkin)" />
+          <path d="M8 54h84M50 12v84M20 24c14 14 14 46 0 60M80 24c-14 14-14 46 0 60" stroke="#5A2A0E" strokeWidth="2.4" fill="none" opacity=".55" />
+          <path d="M28 44l10-10 10 10z M52 44l10-10 10 10z" fill="#FFD84A" />
+          <path d="M26 62q24 18 48 0l-6 4-4-5-5 6-5-6-5 6-5-6-4 5z" fill="#FFD84A" />
+        </svg>
+      </div>
+    </>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState(null);
   const dataRef = useRef(null); // save呼び出し元が常に最新のdataを参照できるようにするためのミラー
@@ -920,6 +980,7 @@ export default function App() {
   };
 
   if (!showSplash && !data) return <LoadingSkeleton C={CT} isPC={isPC} />;
+  const halloween = isHalloweenSeason();
   if (!data || showSplash) return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
       style={{ background: theme === "dark" ? "linear-gradient(155deg,#0E0B07 0%,#1C150D 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
@@ -947,6 +1008,7 @@ export default function App() {
           width: 220, height: 110, borderRadius: "50%",
           background: `rgba(207,163,58,${theme === "dark" ? "0.16" : "0.1"})`,
           filter: "blur(28px)", animation: "splashGlow 3s ease-in-out infinite" }} />
+      {halloween && <HalloweenDecor theme={theme} />}
       <div className="relative flex flex-col items-center px-8 w-full"
         style={{ animation: "splashIn .7s ease-out" }}>
         <div className="mb-4 px-4 py-1 rounded font-bold"
@@ -966,7 +1028,7 @@ export default function App() {
         </div>
         <div className="rounded-full my-4"
           style={{ height: 1.5,
-            background: `linear-gradient(90deg,transparent,${CT.orange},transparent)`,
+            background: halloween ? `linear-gradient(90deg,transparent,#E8762A,${CT.orange},transparent)` : `linear-gradient(90deg,transparent,${CT.orange},transparent)`,
             animation: "splashLine 1s ease-out .3s both" }} />
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17,
           color: CT.sub, letterSpacing: "0.3em", paddingLeft: "0.3em" }}>
@@ -977,8 +1039,14 @@ export default function App() {
           textShadow: theme === "dark" ? "0 0 10px rgba(207,163,58,0.6)" : "none" }}>
           APP
         </div>
+        {halloween && (
+          <div className="mt-4" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, letterSpacing: "0.32em", paddingLeft: "0.32em",
+            color: theme === "dark" ? "#E8762A" : "#C85A14" }}>
+            🎃 HAPPY HALLOWEEN 🎃
+          </div>
+        )}
       </div>
-      {!data && <div className="absolute bottom-12 text-xs" style={{ color: CT.sub }}>読み込み中…</div>}
+      {!data && <div className="absolute bottom-6 text-xs" style={{ color: CT.sub, zIndex: 3 }}>読み込み中…</div>}
     </div>
   );
 
