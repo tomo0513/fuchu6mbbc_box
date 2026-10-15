@@ -11,19 +11,19 @@ import {
 } from "lucide-react";
 
 /* ============ デザイントークン ============ */
-// カラー: ダーク=紺背景に金×白のパネル / ライト=白背景に淡い金×淡い黒(チャコール)のパネル
+// カラー: ダーク=茶色みのある黒の背景に金×白のパネル / ライト=白背景に淡い金×淡い黒(チャコール)のパネル
 // orange = メインカラー(ゴールド)。キー名は互換のためそのまま。onOrange = メインカラーの上に載せる文字色。
 // panelOrange* = メインのパネル(ゴールド) / panelBlue* = サブのパネル(ダーク=白・ライト=チャコール)
 const DARK = {
-  bg: "#0C1220", card: "#161F33", card2: "#1E2A45", border: "#2A3856",
-  text: "#E9EEF8", sub: "#8FA0C0",
+  bg: "#0E0B07", card: "#1E1912", card2: "#2A231A", border: "#3E3426",
+  text: "#F5EFE3", sub: "#ADA28C",
   orange: "#D8AE45", onOrange: "#14100A", led: "#F2CC6B", win: "#3DBE7B", loss: "#E25C5C",
-  board: "#070C16", nav: "#0A101E", oppBlue: "#5B74A8", oppText: "#7E94BC",
-  sidebar: "#0E1828", inputBg: "#0F1830",
+  board: "#070503", nav: "#0A0805", oppBlue: "#6E7684", oppText: "#AEB4BE",
+  sidebar: "#120E0A", inputBg: "#16120C",
   panelOrange1: "#E2B84A", panelOrange2: "#7A5A12",
   panelBlue1: "#F4F5F7", panelBlue2: "#AEB4C0",
-  panelText1: "#FFFFFF", panelText2: "#16203A", panelWm: "rgba(255,255,255,0.14)",
-  skel: "#1A2540", skel2: "#26345A",
+  panelText1: "#FFFFFF", panelText2: "#1E1912", panelWm: "rgba(255,255,255,0.16)", panelWm2: "rgba(30,25,18,0.16)",
+  skel: "#1F1A13", skel2: "#30281D",
 };
 const LIGHT = {
   bg: "#F7F5EF", card: "#FFFFFF", card2: "#F1ECDF", border: "#E3DAC4",
@@ -33,7 +33,7 @@ const LIGHT = {
   sidebar: "#FBFAF6", inputBg: "#F7F5EF",
   panelOrange1: "#F3DC9B", panelOrange2: "#D9B65E",
   panelBlue1: "#8C8C92", panelBlue2: "#55555C",
-  panelText1: "#2A2210", panelText2: "#FFFFFF", panelWm: "rgba(255,255,255,0.5)",
+  panelText1: "#2A2210", panelText2: "#FFFFFF", panelWm: "rgba(255,255,255,0.5)", panelWm2: "rgba(255,255,255,0.16)",
   skel: "#ECE7DA", skel2: "#F8F5EE",
 };
 const ThemeCtx = React.createContext(DARK);
@@ -922,7 +922,7 @@ export default function App() {
   if (!showSplash && !data) return <LoadingSkeleton C={CT} isPC={isPC} />;
   if (!data || showSplash) return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
-      style={{ background: theme === "dark" ? "linear-gradient(155deg,#0A0E14 0%,#111824 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
+      style={{ background: theme === "dark" ? "linear-gradient(155deg,#0E0B07 0%,#1C150D 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         @keyframes splashIn   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
@@ -1231,7 +1231,7 @@ function GameHero({ g, own, opp, oppName, oppLogo, ownName, mips, isIntramural, 
         {/* 相手(右・サブカラー) */}
         <div className="absolute top-0 bottom-0 right-0" style={{ width: "58%", color: C.panelText2,
           background: `linear-gradient(200deg, ${C.panelBlue1}, ${C.panelBlue2})`, clipPath: "polygon(22% 0,100% 0,100% 100%,0 100%)" }}>
-          <div className="absolute select-none pointer-events-none" style={{ ...bebas, right: 6, top: -8, fontSize: 124, lineHeight: 1, color: C.panelWm }}>VS</div>
+          <div className="absolute select-none pointer-events-none" style={{ ...bebas, right: 6, top: -8, fontSize: 124, lineHeight: 1, color: C.panelWm2 }}>VS</div>
           <div className="absolute flex items-center justify-end gap-1 text-xs font-black" style={{ right: 16, top: 50, maxWidth: "70%" }}>
             {oppLogo && <img src={oppLogo} alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />}
             <span className="truncate">{oppName}</span>
@@ -1475,7 +1475,7 @@ function PlayerCardGrid({ players, data, isSelectTeam, setNav, isPC }) {
             style={{ background: C.card, border: `1px solid ${C.border}` }}>
             <div className="relative" style={{ height: 112, color: isA ? C.panelText1 : C.panelText2,
               background: `linear-gradient(160deg, ${isA ? C.panelOrange1 : C.panelBlue1}, ${isA ? C.panelOrange2 : C.panelBlue2})` }}>
-              <div className="absolute select-none pointer-events-none" style={{ ...bebas, left: 8, top: -6, fontSize: 86, lineHeight: 1, color: C.panelWm }}>{p.number}</div>
+              <div className="absolute select-none pointer-events-none" style={{ ...bebas, left: 8, top: -6, fontSize: 86, lineHeight: 1, color: isA ? C.panelWm : C.panelWm2 }}>{p.number}</div>
               {p.grade && <div className="absolute text-[9px] font-black px-2 py-0.5 rounded-full" style={{ right: 8, top: 8, background: "rgba(0,0,0,.3)", color: "#fff" }}>{p.grade}年</div>}
               <div className="absolute" style={{ right: 10, bottom: 8 }}><Avatar p={p} size={66} /></div>
               <div className="absolute left-0 right-0 bottom-0" style={{ height: 22, background: C.card, clipPath: "polygon(0 100%,100% 30%,100% 100%)" }} />
@@ -1629,7 +1629,7 @@ function Dashboard({ data, setTab, setNav, oppName, getOpp, isPC, isAdmin }) {
                       clipPath: "polygon(0 0, 100% 0, 82% 100%, 0 100%)",
                     }}>
                     <div className="absolute select-none pointer-events-none"
-                      style={{ left: 4, top: -14, fontSize: 100, fontFamily: "'Bebas Neue',sans-serif", color: C.panelWm, lineHeight: 1 }}>
+                      style={{ left: 4, top: -14, fontSize: 100, fontFamily: "'Bebas Neue',sans-serif", color: i % 2 === 0 ? C.panelWm : C.panelWm2, lineHeight: 1 }}>
                       {st.p.number}
                     </div>
                     <div className="absolute left-1/2" style={{ bottom: 0, transform: "translateX(-50%)" }}>
@@ -4324,7 +4324,7 @@ function TournamentStats({ data, mainGames, selectGames, selectSeasonGames, setT
                   return (
                     <button key={en} className="relative shrink-0 overflow-hidden rounded-xl text-left" onClick={() => openPlayer(x.p)}
                       style={{ width: 118, height: 168, background: `linear-gradient(160deg, ${from}, ${to})`, color: fg }}>
-                      <div className="absolute select-none pointer-events-none" style={{ ...bebas, right: -6, bottom: 34, fontSize: 92, lineHeight: 1, color: C.panelWm }}>{x.p.number}</div>
+                      <div className="absolute select-none pointer-events-none" style={{ ...bebas, right: -6, bottom: 34, fontSize: 92, lineHeight: 1, color: i % 2 === 0 ? C.panelWm : C.panelWm2 }}>{x.p.number}</div>
                       <div className="absolute" style={{ right: 6, bottom: 34 }}><Avatar p={x.p} size={58} /></div>
                       <div className="absolute left-2.5 top-2 text-[13px] tracking-[.18em]" style={{ ...bebas, opacity: 0.9 }}>{en}</div>
                       <div className="absolute left-2.5 top-6 leading-none" style={{ ...bebas, fontSize: 44, textShadow: isLight ? "none" : "0 2px 10px rgba(0,0,0,.25)" }}>{fmt1(x.c.totAdj[k])}</div>
