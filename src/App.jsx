@@ -11,19 +11,19 @@ import {
 } from "lucide-react";
 
 /* ============ デザイントークン ============ */
-// カラー: ダーク=ゴールド×ブラック / ライト=ゴールド×ホワイト(ユニフォームの金・白とビブスの黒)
+// カラー: ダーク=ネイビー背景×ゴールド / ライト=ゴールド×ホワイト(ユニフォームの金・白)
 // orange = メインカラー(ゴールド)。キー名は互換のためそのまま。onOrange = メインカラーの上に載せる文字色。
-// panelOrange* = メインのパネル(ゴールド) / panelBlue* = サブのパネル(ダーク=黒・ライト=白)
+// panelOrange* = メインのパネル(ゴールド) / panelBlue* = サブのパネル(ダーク=紺・ライト=白)
 const DARK = {
-  bg: "#0A0A0A", card: "#151515", card2: "#1F1F1F", border: "#302B20",
-  text: "#F5F1E6", sub: "#A39C8A",
-  orange: "#CFA33A", onOrange: "#16120A", led: "#F2CC6B", win: "#3DBE7B", loss: "#E25C5C",
-  board: "#050505", nav: "#070707", oppBlue: "#5E6675", oppText: "#B3BAC6",
-  sidebar: "#0E0E0E", inputBg: "#121212",
-  panelOrange1: "#E0B64C", panelOrange2: "#6B4E10",
-  panelBlue1: "#3A3A3A", panelBlue2: "#050505",
-  panelText1: "#FFFFFF", panelText2: "#F5F1E6", panelWm: "rgba(255,255,255,0.14)",
-  skel: "#1A1A1A", skel2: "#2A2620",
+  bg: "#0C1220", card: "#161F33", card2: "#1E2A45", border: "#2A3856",
+  text: "#E9EEF8", sub: "#8FA0C0",
+  orange: "#D8AE45", onOrange: "#14100A", led: "#F2CC6B", win: "#3DBE7B", loss: "#E25C5C",
+  board: "#070C16", nav: "#0A101E", oppBlue: "#5B74A8", oppText: "#7E94BC",
+  sidebar: "#0E1828", inputBg: "#0F1830",
+  panelOrange1: "#E2B84A", panelOrange2: "#7A5A12",
+  panelBlue1: "#2B4C8C", panelBlue2: "#0B1834",
+  panelText1: "#FFFFFF", panelText2: "#FFFFFF", panelWm: "rgba(255,255,255,0.14)",
+  skel: "#1A2540", skel2: "#26345A",
 };
 const LIGHT = {
   bg: "#F7F5EF", card: "#FFFFFF", card2: "#F1ECDF", border: "#E3DAC4",
@@ -922,7 +922,7 @@ export default function App() {
   if (!showSplash && !data) return <LoadingSkeleton C={CT} isPC={isPC} />;
   if (!data || showSplash) return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
-      style={{ background: theme === "dark" ? "linear-gradient(155deg,#0A0A0A 0%,#17140C 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
+      style={{ background: theme === "dark" ? "linear-gradient(155deg,#0A0E14 0%,#111824 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         @keyframes splashIn   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
@@ -1343,13 +1343,16 @@ function NextTournamentCard({ data, setTab, setNav }) {
         <div className="text-base font-black leading-snug mt-0.5" style={{ paddingRight: 92 }}>{next.name}</div>
         <div className="text-[11px] mt-1" style={{ color: C.sub }}>📅 {dateLabel}</div>
         <div className="absolute text-center" style={{ right: 14, top: 10 }}>
-          {ongoing ? (
-            <>
-              <div className="text-[10px] font-bold" style={{ color: C.sub }}>ただいま</div>
-              <div style={{ ...bebas, fontSize: 40, lineHeight: 1, color: C.orange }}>開催中</div>
-            </>
-          ) : days === 0 ? (
-            <div style={{ ...bebas, fontSize: 48, lineHeight: 1.1, color: C.orange }}>TODAY</div>
+          {ongoing || days === 0 ? (
+            <div className="flex flex-col items-end gap-1 pt-1">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-black px-2.5 py-1 rounded-full"
+                style={{ background: `${C.orange}22`, color: C.orange, border: `1px solid ${C.orange}66` }}>
+                <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: C.orange, animation: "livePulse 1.4s ease-in-out infinite" }} />
+                {ongoing ? "開催中" : "本日開幕"}
+              </span>
+              {ongoing && endOf(next) !== startOf(next) && <span className="text-[10px]" style={{ color: C.sub }}>〜{fmtD(endOf(next))}まで</span>}
+              <style>{`@keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }`}</style>
+            </div>
           ) : (
             <>
               <div className="text-[10px] font-bold" style={{ color: C.sub }}>開幕まで</div>
