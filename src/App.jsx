@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 
 /* ============ デザイントークン ============ */
-// カラー: ダーク=ネイビー背景×ゴールド / ライト=ゴールド×ホワイト(ユニフォームの金・白)
+// カラー: ダーク=紺背景に金×白のパネル / ライト=白背景に淡い金×淡い黒(チャコール)のパネル
 // orange = メインカラー(ゴールド)。キー名は互換のためそのまま。onOrange = メインカラーの上に載せる文字色。
-// panelOrange* = メインのパネル(ゴールド) / panelBlue* = サブのパネル(ダーク=紺・ライト=白)
+// panelOrange* = メインのパネル(ゴールド) / panelBlue* = サブのパネル(ダーク=白・ライト=チャコール)
 const DARK = {
   bg: "#0C1220", card: "#161F33", card2: "#1E2A45", border: "#2A3856",
   text: "#E9EEF8", sub: "#8FA0C0",
@@ -21,8 +21,8 @@ const DARK = {
   board: "#070C16", nav: "#0A101E", oppBlue: "#5B74A8", oppText: "#7E94BC",
   sidebar: "#0E1828", inputBg: "#0F1830",
   panelOrange1: "#E2B84A", panelOrange2: "#7A5A12",
-  panelBlue1: "#2B4C8C", panelBlue2: "#0B1834",
-  panelText1: "#FFFFFF", panelText2: "#FFFFFF", panelWm: "rgba(255,255,255,0.14)",
+  panelBlue1: "#F4F5F7", panelBlue2: "#AEB4C0",
+  panelText1: "#FFFFFF", panelText2: "#16203A", panelWm: "rgba(255,255,255,0.14)",
   skel: "#1A2540", skel2: "#26345A",
 };
 const LIGHT = {
@@ -32,8 +32,8 @@ const LIGHT = {
   board: "#FBF9F3", nav: "#FFFFFF", oppBlue: "#5B6270", oppText: "#4B5262",
   sidebar: "#FBFAF6", inputBg: "#F7F5EF",
   panelOrange1: "#F3DC9B", panelOrange2: "#D9B65E",
-  panelBlue1: "#FFFFFF", panelBlue2: "#E1E3E8",
-  panelText1: "#2A2210", panelText2: "#1F1C14", panelWm: "rgba(255,255,255,0.5)",
+  panelBlue1: "#8C8C92", panelBlue2: "#55555C",
+  panelText1: "#2A2210", panelText2: "#FFFFFF", panelWm: "rgba(255,255,255,0.5)",
   skel: "#ECE7DA", skel2: "#F8F5EE",
 };
 const ThemeCtx = React.createContext(DARK);
@@ -1333,6 +1333,11 @@ function NextTournamentCard({ data, setTab, setNav }) {
     prevVideos = prevVideos.slice(0, 6);
   }
   const prevRank = prev ? rankLabelOf(prev.result) : null;
+  // メインに出している大会以外で、開催中または1か月以内に始まる大会
+  const daysUntil = (t) => Math.round((Date.parse(startOf(t)) - Date.parse(todayStr)) / dayMs);
+  const soon = dated
+    .filter((t) => t.id !== next.id && endOf(t) >= todayStr && daysUntil(t) <= 30)
+    .sort((a, b) => startOf(a).localeCompare(startOf(b)));
   const prevYear = prev ? (startOf(prev) || "").slice(0, 4) : "";
 
   return (
@@ -1350,14 +1355,16 @@ function NextTournamentCard({ data, setTab, setNav }) {
                 <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: C.orange, animation: "livePulse 1.4s ease-in-out infinite" }} />
                 {ongoing ? "開催中" : "本日開幕"}
               </span>
-              {ongoing && endOf(next) !== startOf(next) && <span className="text-[10px]" style={{ color: C.sub }}>〜{fmtD(endOf(next))}まで</span>}
               <style>{`@keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }`}</style>
             </div>
           ) : (
             <>
               <div className="text-[10px] font-bold" style={{ color: C.sub }}>開幕まで</div>
-              <div style={{ ...bebas, fontSize: 60, lineHeight: 0.9, color: C.orange }}>{days}</div>
-              <div className="text-[11px] font-black" style={{ color: C.orange }}>DAYS</div>
+              <div className="flex items-baseline justify-center gap-0.5" style={{ color: C.orange }}>
+                <span className="text-xs font-black">あと</span>
+                <span style={{ ...bebas, fontSize: 54, lineHeight: 0.95 }}>{days}</span>
+                <span className="text-xs font-black">日</span>
+              </div>
             </>
           )}
         </div>
@@ -1370,6 +1377,40 @@ function NextTournamentCard({ data, setTab, setNav }) {
           <div className="flex justify-between text-[9px] mt-1" style={{ color: C.sub }}>
             <span>前の大会 {fmtD(endOf(lastEnded))} 終了</span><span>{fmtD(startOf(next))} 開幕</span>
           </div>
+        </div>
+      )}
+      {soon.length > 0 && (
+        <div className="px-4 pt-3">
+          <div className="text-[10px] font-bold mb-1.5" style={{ color: C.sub }}>1か月以内のほかの大会</div>
+          <div className="space-y-1.5">
+            {soon.map((t) => {
+              const d = daysUntil(t);
+              const isOn = startOf(t) <= todayStr;
+              return (
+                <button key={t.id} className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left" style={{ background: C.card2 }}
+                  onClick={() => { setTab("tournaments"); setNav({ tourId: t.id }); }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold truncate">{t.name}</div>
+                    <div className="text-[10px]" style={{ color: C.sub }}>📅 {fmtD(startOf(t))}({wd(startOf(t))}){endOf(t) !== startOf(t) ? ` 〜 ${fmtD(endOf(t))}(${wd(endOf(t))})` : ""}</div>
+                  </div>
+                  {isOn || d === 0 ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full shrink-0"
+                      style={{ background: `${C.orange}22`, color: C.orange, border: `1px solid ${C.orange}66` }}>
+                      <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: C.orange, animation: "livePulse 1.4s ease-in-out infinite" }} />
+                      {isOn ? "開催中" : "本日開幕"}
+                    </span>
+                  ) : (
+                    <div className="flex items-baseline gap-0.5 shrink-0" style={{ color: C.orange }}>
+                      <span className="text-[10px] font-black">あと</span>
+                      <span style={{ ...bebas, fontSize: 26, lineHeight: 1 }}>{d}</span>
+                      <span className="text-[10px] font-black">日</span>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <style>{`@keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }`}</style>
         </div>
       )}
       {prev && (prevRank || prevWL || prevVideos.length > 0) && (
