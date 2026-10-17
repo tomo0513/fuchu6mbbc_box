@@ -249,12 +249,20 @@ const avgBaseQOf = (g) => {
 const matchKey = (e, side, key) =>
   e.side === side && (side === "own" ? e.playerId === key : e.oppNum === key);
 
+// 5ファウルで退場となるファウル数
+const FOUL_OUT = 5;
 function courtIntervals(events, side, key, g) {
   const map = {}; let has = false;
   const lineups = side === "own" ? (g?.lineups || {}) : (g?.lineupsOpp || {});
   const isIntramural = gameCatOf(g?.category)?.isIntramural;
+  // 5つ目のファウル(記録順)の時点で退場扱いにする。それ以降は交代記録や出場メンバー登録があっても出場時間に数えない。
+  const fouls = (events || []).filter((e) => matchKey(e, side, key) && e.action === "PF");
+  const foulOutEv = fouls.length >= FOUL_OUT ? fouls[FOUL_OUT - 1] : null;
+  const foulOutQ = foulOutEv ? foulOutEv.q : null;
+  const foulOutT = foulOutEv ? parseClock(foulOutEv.time, periodLen(g, foulOutEv.q)) : null;
   for (let q = 1; q <= periodsOf(g); q++) {
     const len = periodLen(g, q);
+    if (foulOutQ !== null && q > foulOutQ) { map[q] = []; continue; }
     let evs = (events || [])
       .filter((e) => matchKey(e, side, key) && e.q === q && (e.action === "IN" || e.action === "OUT"))
       .map((e) => ({ a: e.action, t: parseClock(e.time, len) ?? (e.action === "IN" ? len : 0) }));
@@ -270,7 +278,10 @@ function courtIntervals(events, side, key, g) {
       if (e.a === "OUT" && start !== null) { iv.push([start, e.t]); start = null; }
     }
     if (start !== null) iv.push([start, 0]);
-    map[q] = iv;
+    // 退場したQは、5つ目のファウルの時刻で出場を打ち切る(時刻が未入力ならそのQは記録どおり)
+    map[q] = (foulOutQ === q && foulOutT !== null)
+      ? iv.filter(([a]) => a > foulOutT).map(([a, b]) => [a, Math.max(b, foulOutT)])
+      : iv;
   }
   return { map, has };
 }
