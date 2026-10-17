@@ -885,8 +885,19 @@ export default function App() {
   const [loginErr, setLoginErr] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   // 起動画面の表示時間(ミリ秒)。画面をタップすると途中で飛ばせる。
-  const SPLASH_MS = 2800;
-  useEffect(() => { const t = setTimeout(() => setShowSplash(false), SPLASH_MS); return () => clearTimeout(t); }, []);
+  const SPLASH_MS = 3000;
+  const SPLASH_FADE_MS = 400; // 起動画面が消えていくフェードの長さ
+  const [splashFading, setSplashFading] = useState(false);
+  const fadeStarted = useRef(false);
+  const endSplash = () => {
+    if (fadeStarted.current) return;
+    fadeStarted.current = true;
+    setSplashFading(true);
+    setTimeout(() => setShowSplash(false), SPLASH_FADE_MS);
+  };
+  useEffect(() => { const t = setTimeout(endSplash, SPLASH_MS); return () => clearTimeout(t); }, []);
+  // フェード中に後ろの白地が透けないよう、ページ全体の背景もテーマ色にしておく
+  useEffect(() => { try { document.body.style.background = CT.bg; } catch {} }, [theme]);
 
   useEffect(() => {
     (async () => {
@@ -985,8 +996,10 @@ export default function App() {
   const halloween = isHalloweenSeason();
   if (!data || showSplash) return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
-      onClick={() => setShowSplash(false)}
-      style={{ background: theme === "dark" ? "linear-gradient(155deg,#0E0B07 0%,#1C150D 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
+      onClick={endSplash}
+      style={{ opacity: splashFading ? 0 : 1, transform: splashFading ? "scale(1.03)" : "none",
+        transition: `opacity ${SPLASH_FADE_MS}ms ease, transform ${SPLASH_FADE_MS}ms ease`,
+        background: theme === "dark" ? "linear-gradient(155deg,#0E0B07 0%,#1C150D 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         @keyframes splashIn   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
@@ -1170,7 +1183,7 @@ export default function App() {
 
   return (
     <ThemeCtx.Provider value={CT}>
-    <div className="min-h-screen" style={{ background: CT.bg, color: CT.text }}>
+    <div className="min-h-screen" style={{ background: CT.bg, color: CT.text, animation: "appFadeIn .6s ease-out" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         input::placeholder, textarea::placeholder { color: ${CT.sub}88; }
@@ -1180,6 +1193,7 @@ export default function App() {
         .play-btn:not(:disabled):active { transform: scale(0.92); background: var(--btn-col) !important; color: #fff !important; }
         @keyframes flashPop { 0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.9); } 15% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
         .flash-toast { animation: flashPop 1.3s ease-out forwards; }
+        @keyframes appFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
         @media print {
           body * { visibility: hidden; }
           .report-root, .report-root * { visibility: visible; }
@@ -1575,8 +1589,9 @@ function LoadingSkeleton({ C, isPC }) {
   const sk = (w, h, extra = {}) => <div className="sk-shimmer" style={{ width: w, height: h, borderRadius: 8, ...extra }} />;
   const card = (children) => <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>{children}</div>;
   return (
-    <div className="min-h-screen" style={{ background: C.bg }}>
+    <div className="min-h-screen" style={{ background: C.bg, animation: "skFadeIn .5s ease-out" }}>
       <style>{`
+        @keyframes skFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes skShimmer { 0% { background-position: -320px 0; } 100% { background-position: 320px 0; } }
         .sk-shimmer { background: linear-gradient(90deg, ${C.skel} 0%, ${C.skel2} 50%, ${C.skel} 100%); background-size: 640px 100%; animation: skShimmer 1.3s linear infinite; }
       `}</style>
