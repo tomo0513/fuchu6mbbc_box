@@ -884,7 +884,9 @@ export default function App() {
   const [loginInput, setLoginInput] = useState("");
   const [loginErr, setLoginErr] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
-  useEffect(() => { const t = setTimeout(() => setShowSplash(false), 1600); return () => clearTimeout(t); }, []);
+  // 起動画面の表示時間(ミリ秒)。画面をタップすると途中で飛ばせる。
+  const SPLASH_MS = 2800;
+  useEffect(() => { const t = setTimeout(() => setShowSplash(false), SPLASH_MS); return () => clearTimeout(t); }, []);
 
   useEffect(() => {
     (async () => {
@@ -983,6 +985,7 @@ export default function App() {
   const halloween = isHalloweenSeason();
   if (!data || showSplash) return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
+      onClick={() => setShowSplash(false)}
       style={{ background: theme === "dark" ? "linear-gradient(155deg,#0E0B07 0%,#1C150D 100%)" : "linear-gradient(155deg,#F7F5EF 0%,#FFFFFF 100%)", color: CT.text }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
