@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { loadData, saveChanges, deleteGame, deleteAllGames } from "./firebase.js";
+import { inject as injectVercelAnalytics } from "@vercel/analytics";
 import {
   LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, ReferenceLine,
@@ -896,6 +897,8 @@ export default function App() {
     setTimeout(() => setShowSplash(false), SPLASH_FADE_MS);
   };
   useEffect(() => { const t = setTimeout(endSplash, SPLASH_MS); return () => clearTimeout(t); }, []);
+  // アクセス解析(Vercel Web Analytics)。訪問者数・閲覧回数を記録する(個人は特定しない)
+  useEffect(() => { try { injectVercelAnalytics(); } catch {} }, []);
   // フェード中に後ろの白地が透けないよう、ページ全体の背景もテーマ色にしておく
   useEffect(() => { try { document.body.style.background = CT.bg; } catch {} }, [theme]);
 
