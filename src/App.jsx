@@ -800,6 +800,106 @@ function SelectTeamView({ data, save, oppName, getOpp, setGamePublished, isPC, i
 
 // ===== 季節の飾り: ハロウィン(10月のみ起動画面に表示) =====
 const isHalloweenSeason = (d = new Date()) => d.getMonth() === 9; // 10月
+// 月日を 1124 のような数字にして期間を判定する
+const mdOf = (d) => (d.getMonth() + 1) * 100 + d.getDate();
+const isAutumnSeason = (d = new Date()) => { const md = mdOf(d); return md >= 1101 && md <= 1123; }; // 11/1〜11/23
+const isChristmasSeason = (d = new Date()) => { const md = mdOf(d); return md >= 1124 && md <= 1225; }; // 11/24〜12/25
+
+// ===== 季節の飾り: クリスマス(11/24〜12/25 起動画面に表示) =====
+function ChristmasDecor({ theme }) {
+  const dark = theme === "dark";
+  const flakes = useMemo(() => Array.from({ length: 16 }, () => {
+    const dur = 7 + Math.random() * 5;
+    return { left: -5 + Math.random() * 100, dur, delay: -Math.random() * dur, dx: -30 + Math.random() * 60, size: 3 + Math.random() * 3.5, opacity: 0.6 + Math.random() * 0.4 };
+  }), []);
+  const g1 = dark ? "#E2B84A" : "#D9AE48", g2 = dark ? "#7A5A12" : "#B48A2C";
+  const ornaments = [[150, 52], [128, 76], [176, 84], [112, 104], [150, 110], [190, 112], [100, 132], [138, 138], [172, 140], [204, 136]];
+  return (
+    <>
+      <style>{`
+        @keyframes snowFall { 0% { transform: translate(0,0); } 100% { transform: translate(var(--dx), 110vh); } }
+        @keyframes snowSway { from { transform: translateX(-6px); } to { transform: translateX(6px); } }
+        @keyframes xmasTwinkle { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+        @keyframes xmasStar { 0%,100% { filter: drop-shadow(0 0 6px rgba(242,204,107,.7)); } 50% { filter: drop-shadow(0 0 14px rgba(242,204,107,1)); } }
+      `}</style>
+      {/* ツリーの後ろの金色の光 */}
+      <div className="absolute pointer-events-none" style={{ bottom: -40, left: "50%", transform: "translateX(-50%)", width: 340, height: 220, borderRadius: "50%",
+        background: dark ? "rgba(216,174,69,.25)" : "rgba(216,174,69,.18)", filter: "blur(36px)", animation: "splashGlow 3s ease-in-out infinite" }} />
+      {/* 雪(控えめ) */}
+      {flakes.map((f, i) => (
+        <div key={i} className="absolute pointer-events-none" style={{ top: -20, left: `${f.left}%`, zIndex: 2, opacity: f.opacity,
+          "--dx": `${f.dx}px`, animation: `snowFall ${f.dur}s linear ${f.delay}s infinite` }}>
+          <div style={{ width: f.size, height: f.size, borderRadius: "50%", animation: "snowSway 2.2s ease-in-out infinite alternate",
+            background: dark ? "#FFFFFF" : "#B9CCE0", boxShadow: dark ? "0 0 6px rgba(255,255,255,.8)" : "none" }} />
+        </div>
+      ))}
+      {/* ゴールドのツリー */}
+      <svg className="absolute pointer-events-none" width="300" height="200" viewBox="0 0 300 200" style={{ bottom: 0, left: "50%", transform: "translateX(-50%)", zIndex: 2 }}>
+        <defs>
+          <linearGradient id="xmasTree" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={g1} /><stop offset="1" stopColor={g2} /></linearGradient>
+        </defs>
+        <path d="M150 34 L190 82 L172 82 L208 120 L186 120 L226 158 L74 158 L114 120 L92 120 L128 82 L110 82 Z" fill="url(#xmasTree)" />
+        <rect x="140" y="158" width="20" height="18" fill={dark ? "#5A3A1A" : "#8A5A2A"} />
+        <path d="M118 96 Q150 108 184 92 M104 136 Q150 150 198 132" stroke="#fff" strokeWidth="1.5" fill="none" opacity=".6" />
+        {ornaments.map(([x, y], i) => (
+          <circle key={i} cx={x} cy={y} r="4.5" fill={["#C8323A", "#FFFFFF", "#2E8B57"][i % 3]} style={{ animation: `xmasTwinkle 1.6s ease-in-out ${i * 0.17}s infinite` }} />
+        ))}
+        <ellipse cx="150" cy="186" rx="120" ry="14" fill={dark ? "rgba(255,255,255,.12)" : "rgba(185,204,224,.45)"} />
+      </svg>
+      {/* てっぺんの星 = バスケットボール */}
+      <div className="absolute pointer-events-none" style={{ bottom: 150, left: "50%", transform: "translateX(-50%)", zIndex: 3, animation: "xmasStar 2s ease-in-out infinite" }}>
+        <svg width="36" height="36" viewBox="0 0 100 100">
+          <defs>
+            <radialGradient id="xmasBall" cx="38%" cy="32%" r="70%">
+              <stop offset="0" stopColor="#FFA552" /><stop offset=".6" stopColor="#E8762A" /><stop offset="1" stopColor="#A9461A" />
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="50" r="44" fill="url(#xmasBall)" />
+          <path d="M6 50h88M50 6v88M18 20c14 14 14 46 0 60M82 20c-14 14-14 46 0 60" stroke="#5A2A0E" strokeWidth="3" fill="none" opacity=".55" />
+        </svg>
+      </div>
+    </>
+  );
+}
+
+// ===== 季節の飾り: 秋・紅葉(11月のみ起動画面に表示) =====
+const AUTUMN_LEAF_COLORS = ["#E8762A", "#C8442A", "#D8AE45", "#B5651D"];
+function AutumnDecor({ theme }) {
+  const dark = theme === "dark";
+  // 葉の位置・速さ・色は最初に1回だけ決める(再描画のたびに飛ばないように)
+  const leaves = useMemo(() => Array.from({ length: 16 }, (_, i) => {
+    const dur = 6 + Math.random() * 5;
+    return {
+      left: -5 + Math.random() * 100, dur, delay: -Math.random() * dur,
+      dx: -40 + Math.random() * 80, rot: -360 + Math.random() * 720,
+      size: 18 + Math.random() * 10, opacity: 0.6 + Math.random() * 0.4,
+      color: AUTUMN_LEAF_COLORS[i % AUTUMN_LEAF_COLORS.length],
+    };
+  }), []);
+  return (
+    <>
+      <style>{`
+        @keyframes leafFall { 0% { transform: translate(0,0) rotate(0); } 100% { transform: translate(var(--dx), 110vh) rotate(var(--rot)); } }
+        @keyframes leafSway { from { transform: translateX(-7px); } to { transform: translateX(7px); } }
+      `}</style>
+      {/* 足元の夕焼け色の光 */}
+      <div className="absolute pointer-events-none" style={{ bottom: -50, left: "50%", transform: "translateX(-50%)", width: 360, height: 180, borderRadius: "50%",
+        background: dark ? "rgba(210,105,30,.28)" : "rgba(210,105,30,.16)", filter: "blur(36px)", animation: "splashGlow 3s ease-in-out infinite" }} />
+      {/* 舞い落ちるもみじ */}
+      {leaves.map((l, i) => (
+        <div key={i} className="absolute pointer-events-none" style={{ top: -30, left: `${l.left}%`, zIndex: 2, opacity: l.opacity,
+          "--dx": `${l.dx}px`, "--rot": `${l.rot}deg`, animation: `leafFall ${l.dur}s linear ${l.delay}s infinite` }}>
+          <div style={{ animation: "leafSway 2.2s ease-in-out infinite alternate" }}>
+            <svg width={l.size} height={l.size} viewBox="0 0 40 40">
+              <path fill={l.color} d="M20 2l3 9 7-5-2 9 9-1-6 7 7 4-9 2 3 8-8-4-1 8-3-7-3 7-1-8-8 4 3-8-9-2 7-4-6-7 9 1-2-9 7 5z" />
+              <path stroke="#6B3A10" strokeWidth="1.5" d="M20 20v18" fill="none" />
+            </svg>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
 function HalloweenDecor({ theme }) {
   const dark = theme === "dark";
   const batFill = dark ? "#050302" : "#2A2420";
@@ -1008,6 +1108,8 @@ export default function App() {
 
   if (!showSplash && !data) return <LoadingSkeleton C={CT} isPC={isPC} />;
   const halloween = isHalloweenSeason();
+  const autumn = isAutumnSeason();
+  const christmas = isChristmasSeason();
   if (!data || showSplash) return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
       onClick={endSplash}
@@ -1039,8 +1141,10 @@ export default function App() {
           background: `rgba(207,163,58,${theme === "dark" ? "0.16" : "0.1"})`,
           filter: "blur(28px)", animation: "splashGlow 3s ease-in-out infinite" }} />
       {halloween && <HalloweenDecor theme={theme} />}
+      {autumn && <AutumnDecor theme={theme} />}
+      {christmas && <ChristmasDecor theme={theme} />}
       <div className="relative flex flex-col items-center px-8 w-full"
-        style={{ animation: "splashIn .7s ease-out" }}>
+        style={{ animation: "splashIn .7s ease-out", zIndex: 3, marginTop: christmas ? -120 : 0 }}>
         <div className="mb-4 px-4 py-1 rounded font-bold"
           style={{ background: CT.orange, color: CT.onOrange, fontFamily: "'Bebas Neue',sans-serif",
             fontSize: 11, letterSpacing: "0.28em" }}>
@@ -1058,7 +1162,10 @@ export default function App() {
         </div>
         <div className="rounded-full my-4"
           style={{ height: 1.5,
-            background: halloween ? `linear-gradient(90deg,transparent,#E8762A,${CT.orange},transparent)` : `linear-gradient(90deg,transparent,${CT.orange},transparent)`,
+            background: halloween ? `linear-gradient(90deg,transparent,#E8762A,${CT.orange},transparent)`
+              : autumn ? `linear-gradient(90deg,transparent,#D2691E,${CT.orange},transparent)`
+              : christmas ? `linear-gradient(90deg,transparent,#2E8B57,${CT.orange},transparent)`
+              : `linear-gradient(90deg,transparent,${CT.orange},transparent)`,
             animation: "splashLine 1s ease-out .3s both" }} />
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17,
           color: CT.sub, letterSpacing: "0.3em", paddingLeft: "0.3em" }}>
@@ -1074,6 +1181,28 @@ export default function App() {
             color: theme === "dark" ? "#E8762A" : "#C85A14" }}>
             🎃 HAPPY HALLOWEEN 🎃
           </div>
+        )}
+        {autumn && (
+          <>
+            <div className="mt-4" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, letterSpacing: "0.32em", paddingLeft: "0.32em",
+              color: theme === "dark" ? "#E07B35" : "#C2571A" }}>
+              AUTUMN SEASON
+            </div>
+            <div className="mt-1 font-black" style={{ fontSize: 11, letterSpacing: "0.2em", color: theme === "dark" ? "#E07B35" : "#C2571A" }}>
+              🍁 秋季大会シーズン 🍁
+            </div>
+          </>
+        )}
+        {christmas && (
+          <>
+            <div className="mt-4" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, letterSpacing: "0.32em", paddingLeft: "0.32em",
+              color: theme === "dark" ? "#4CB97F" : "#2E8B57" }}>
+              MERRY CHRISTMAS
+            </div>
+            <div className="mt-1 font-black" style={{ fontSize: 11, letterSpacing: "0.2em", color: theme === "dark" ? "#4CB97F" : "#2E8B57" }}>
+              🎄 よいクリスマスを 🎄
+            </div>
+          </>
         )}
       </div>
       {!data && <div className="absolute bottom-6 text-xs" style={{ color: CT.sub, zIndex: 3 }}>読み込み中…</div>}
