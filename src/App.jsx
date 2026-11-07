@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { loadData, saveChanges, deleteGame, deleteAllGames } from "./firebase.js";
 import { inject as injectVercelAnalytics } from "@vercel/analytics";
 import {
@@ -70,19 +70,51 @@ function useAdminMode() {
 // 「戻る」を押したときに、必ず1つ前に見ていた画面へ戻すための履歴管理。
 // loc(今いる画面)が変わるたびに直前の画面を積み、goBackで1つ取り出して復元する。
 // isValidで、削除済みの選手・試合などを指す履歴は飛ばす。
+// ===== 画面のスクロール位置 =====
+// PCは<main>が、スマホはページ全体がスクロールするので、実際にスクロールしている方を読み書きする
+const getScrollY = () => {
+  const m = document.querySelector("main");
+  if (m && m.scrollHeight > m.clientHeight + 1 && m.scrollTop > 0) return m.scrollTop;
+  return window.scrollY || 0;
+};
+const setScrollY = (y) => {
+  try { window.scrollTo(0, y); } catch {}
+  document.querySelectorAll("main").forEach((m) => { if (m.scrollHeight > m.clientHeight + 1) m.scrollTop = y; });
+};
+
 function useNavHistory(loc, restore, isValid) {
   const key = JSON.stringify(loc);
   const hist = useRef([]);
   const prev = useRef(null);
   const skipKey = useRef(null);
+  const backKey = useRef(null);
+  // 画面ごとのスクロール位置を覚えておく(「戻る」で元の位置に戻すため)
+  const scrollMem = useRef({});
+  const curKey = useRef(key);
+  const suppressUntil = useRef(0);
   useEffect(() => {
+    const onScroll = () => { if (Date.now() >= suppressUntil.current) scrollMem.current[curKey.current] = getScrollY(); };
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", onScroll, { capture: true });
+  }, []);
+  useLayoutEffect(() => {
     const p = prev.current;
     if (p && p.key !== key && skipKey.current !== key) {
       hist.current.push(p.loc);
       if (hist.current.length > 50) hist.current.shift();
     }
+    const isBack = backKey.current === key;
     skipKey.current = null;
+    backKey.current = null;
     prev.current = { key, loc };
+    if (p && p.key !== key) {
+      // 画面が切り替わった: 新しい画面は一番上から、「戻る」なら前にいた位置から表示する
+      curKey.current = key;
+      suppressUntil.current = Date.now() + 400;
+      const y = isBack ? (scrollMem.current[key] || 0) : 0;
+      setScrollY(y);
+      requestAnimationFrame(() => { setScrollY(y); setTimeout(() => setScrollY(y), 60); });
+    }
   }, [key]);
   const goBack = () => {
     while (hist.current.length) {
@@ -91,6 +123,7 @@ function useNavHistory(loc, restore, isValid) {
       if (k === key) continue;
       if (isValid && !isValid(l)) continue;
       skipKey.current = k;
+      backKey.current = k;
       restore(l);
       return true;
     }
